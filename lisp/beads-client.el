@@ -129,6 +129,16 @@ Returns the data on success, signals beads-client-error on failure."
       (beads-backend-error
        (signal 'beads-client-error (cdr err))))))
 
+(defun beads-client--unwrap-single (result)
+  "Unwrap RESULT if it is a single-element list.
+Some CLI commands return a one-element array where a single object
+is expected."
+  (if (and (listp result)
+           (= (length result) 1)
+           (listp (car result)))
+      (car result)
+    result))
+
 (defun beads-client-list (&optional filters)
   "List issues with optional FILTERS.
 FILTERS is a plist with keys like :status, :priority, :issue-type, :assignee,
@@ -142,7 +152,8 @@ Returns array of issue objects."
 Returns issue object."
   (unless id
     (signal 'beads-client-error (list "Issue ID required")))
-  (beads-client-request "show" `((id . ,id))))
+  (beads-client--unwrap-single
+   (beads-client-request "show" `((id . ,id)))))
 
 (defun beads-client-ready (&optional filters)
   "Get unblocked issues with optional FILTERS.
@@ -173,7 +184,8 @@ ARGS is a plist with keys like :title, :description, :status,
     (signal 'beads-client-error (list "Issue ID required")))
   (let ((request-args (beads-client--plist-to-alist
                        (plist-put args :id id))))
-    (beads-client-request "update" request-args)))
+    (beads-client--unwrap-single
+     (beads-client-request "update" request-args))))
 
 (defun beads-client-close (id &optional reason)
   "Close issue ID with optional REASON.
@@ -183,7 +195,8 @@ Returns closed issue object."
   (let ((args `((id . ,id))))
     (when reason
       (push `(reason . ,reason) args))
-    (beads-client-request "close" args)))
+    (beads-client--unwrap-single
+     (beads-client-request "close" args))))
 
 (defun beads-client-delete (ids &rest args)
   "Delete issues by IDS (list of issue IDs) with optional ARGS.
