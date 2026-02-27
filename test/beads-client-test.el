@@ -99,6 +99,32 @@
           (should (equal (beads-client--find-database) db-path)))
       (delete-directory temp-dir t))))
 
+(ert-deftest beads-client-test-find-database-metadata-json ()
+  "Test that beads-client--find-database finds .beads/metadata.json (Dolt backend)."
+  (let ((temp-dir (make-temp-file "beads-test-" t)))
+    (unwind-protect
+        (let ((beads-dir (expand-file-name ".beads" temp-dir))
+              (default-directory temp-dir))
+          (make-directory beads-dir)
+          (write-region "{\"database\":\"dolt\"}" nil
+                        (expand-file-name "metadata.json" beads-dir))
+          (should (equal (beads-client--find-database)
+                        (expand-file-name ".beads/metadata.json" temp-dir))))
+      (delete-directory temp-dir t))))
+
+(ert-deftest beads-client-test-find-database-metadata-preferred ()
+  "Test that metadata.json is preferred over beads.db."
+  (let ((temp-dir (make-temp-file "beads-test-" t)))
+    (unwind-protect
+        (let ((beads-dir (expand-file-name ".beads" temp-dir))
+              (default-directory temp-dir))
+          (make-directory beads-dir)
+          (write-region "{}" nil (expand-file-name "metadata.json" beads-dir))
+          (write-region "" nil (expand-file-name "beads.db" beads-dir))
+          (should (equal (beads-client--find-database)
+                        (expand-file-name ".beads/metadata.json" temp-dir))))
+      (delete-directory temp-dir t))))
+
 (ert-deftest beads-client-test-find-database-custom-db-name ()
   "Test that custom .db files are found (excluding vc.db and backups)."
   (let ((temp-dir (make-temp-file "beads-test-" t)))
