@@ -35,7 +35,6 @@ Example:
 ## Test Organization
 
 - Unit tests: Test individual functions in isolation
-- Integration tests: Test component interactions
-- Socket tests: Test daemon communication (mock the socket)
+- Integration tests: Test component interactions (require bd CLI)
 
 See `example-test.el` for basic examples.

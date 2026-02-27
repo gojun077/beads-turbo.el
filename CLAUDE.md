@@ -8,7 +8,7 @@ See AGENTS.md for workflow details.
 
 ## Project Overview
 
-This is **beads.el** - an Emacs Lisp client for the Beads issue tracking system. Beads is a Git-backed, AI-native issue tracker that stores data in `.beads/` and communicates via daemon socket or CLI.
+This is **beads.el** - an Emacs Lisp client for the Beads issue tracking system. Beads is a Git-backed, AI-native issue tracker that stores data in `.beads/` and communicates via CLI.
 
 The canonical upstream is https://codeberg.org/ctietze/beads.el
 
@@ -28,25 +28,22 @@ beads-list.el ──┐
 beads-detail.el ┤
 beads-form.el  ─┼─→ beads-client.el ──→ beads-backend.el
 beads-edit.el  ─┤      (dispatch)          (CLI detection)
-  ...          ─┘         │                      │
-                     ┌────┴────┐           ┌─────┴─────┐
-                  daemon socket  CLI    beads-backend-bd.el  beads-backend-br.el
-                                        (bd: daemon+CLI)    (br: CLI only)
+  ...          ─┘                                │
+                                           ┌─────┴─────┐
+                                        beads-backend-bd.el  beads-backend-br.el
 ```
 
 Key modules:
-- **`beads-client.el`**: Entry point for all operations. Picks connection strategy (daemon socket vs CLI fallback) and dispatches requests. All consumer modules call `beads-client-request`.
+- **`beads-client.el`**: Entry point for all operations. Dispatches requests via CLI. All consumer modules call `beads-client-request`.
 - **`beads-backend.el`**: Backend abstraction. Registry, per-project auto-detection, CLI execution. `executable-find` and `call-process` for beads CLI live here only.
-- **`beads-backend-bd.el`**: bd backend — daemon support, full operation set, `--no-daemon` for duplicates.
+- **`beads-backend-bd.el`**: bd backend — full operation set.
 - **`beads-backend-br.el`**: br backend — CLI only, reduced operation set, removable.
 - **`beads-core.el`**: Shared utilities (header rendering, CLI wrappers for report views).
 
 Key concepts:
 - **Auto-discovery**: Walk up from `default-directory` looking for `.beads/beads.db`
 - **Backend detection**: Per-project, cached. `beads-cli-program` defcustom overrides (safe for `.dir-locals.el`).
-- **Connection strategy**: `beads-client-connection-strategy` — `auto` (default), `daemon`, `managed`, `cli`
-- **Wire format**: JSON + newline delimiter, request/response pattern
-- **No client-side locking**: Daemon handles all concurrency
+- **CLI communication**: All operations use `bd <command> --json` via `call-process`
 
 ## Protocol Reference
 
@@ -74,12 +71,7 @@ mise run interactive   # Launch Emacs with beads.el loaded
 ```
 This starts Emacs with `--init-directory=dev`, loading dev/init.el which sets up load-path and requires beads modules. Run `M-x beads-list` to test.
 
-**Testing the daemon connection**:
-```bash
-bd daemon --status
-```
-
-**CLI fallback** (when daemon unavailable):
+**Testing the CLI connection**:
 ```bash
 bd list --json
 bd ready --json

@@ -19,12 +19,12 @@ Once Emacs starts:
 
 1. **Open the issue list**: `M-x beads-list`
 2. **Navigate**: Use standard Emacs movement keys
-3. **Refresh**: Press `g` to reload from daemon
+3. **Refresh**: Press `g` to reload
 4. **Quit**: Press `q` to close the list
 
 ## Requirements
 
-- The beads daemon must be running: `bd daemon --status`
+- The `bd` CLI must be installed
 - A `.beads/` directory must exist in the project or a parent directory
 
 ## Customizing

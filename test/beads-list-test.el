@@ -382,13 +382,12 @@
             (should (member id2 '("bd-a1b2" "bd-c3d4" "bd-e5f6")))
             (should-not (equal id1 id2))))))))
 
-;;; Integration tests (require daemon)
+;;; Integration tests (require bd CLI)
 
-(ert-deftest beads-list-test-refresh-with-daemon ()
-  "Test that beads-list-refresh fetches issues from daemon."
+(ert-deftest beads-list-test-refresh-with-cli ()
+  "Test that beads-list-refresh fetches issues via CLI."
   :tags '(:integration)
-  (skip-unless (beads-client--socket-path))
-  (skip-unless (file-exists-p (beads-client--socket-path)))
+  (skip-unless (beads-client--find-database))
   (with-temp-buffer
     (beads-list-mode)
     (beads-list-refresh)
@@ -399,8 +398,7 @@
 (ert-deftest beads-list-test-refresh-populates-entries ()
   "Test that beads-list-refresh populates tabulated-list-entries."
   :tags '(:integration)
-  (skip-unless (beads-client--socket-path))
-  (skip-unless (file-exists-p (beads-client--socket-path)))
+  (skip-unless (beads-client--find-database))
   (with-temp-buffer
     (beads-list-mode)
     (beads-list-refresh)
@@ -421,8 +419,7 @@
 (ert-deftest beads-list-test-list-command-creates-buffer ()
   "Test that beads-list creates and switches to issue buffer."
   :tags '(:integration)
-  (skip-unless (beads-client--socket-path))
-  (skip-unless (file-exists-p (beads-client--socket-path)))
+  (skip-unless (beads-client--find-database))
   (let ((buffer-name "*Beads Issues*"))
     (when (get-buffer buffer-name)
       (kill-buffer buffer-name))
@@ -437,8 +434,7 @@
 (ert-deftest beads-list-test-list-command-refreshes ()
   "Test that beads-list fetches issues on open."
   :tags '(:integration)
-  (skip-unless (beads-client--socket-path))
-  (skip-unless (file-exists-p (beads-client--socket-path)))
+  (skip-unless (beads-client--find-database))
   (let ((buffer-name "*Beads Issues*"))
     (when (get-buffer buffer-name)
       (kill-buffer buffer-name))
@@ -453,8 +449,7 @@
 (ert-deftest beads-list-test-goto-issue-with-issue ()
   "Test that beads-list-goto-issue displays message for issue at point."
   :tags '(:integration)
-  (skip-unless (beads-client--socket-path))
-  (skip-unless (file-exists-p (beads-client--socket-path)))
+  (skip-unless (beads-client--find-database))
   (let ((buffer-name "*Beads Issues*"))
     (when (get-buffer buffer-name)
       (kill-buffer buffer-name))
@@ -483,8 +478,7 @@
 (ert-deftest beads-list-test-buffer-reuse ()
   "Test that calling beads-list twice reuses the same buffer."
   :tags '(:integration)
-  (skip-unless (beads-client--socket-path))
-  (skip-unless (file-exists-p (beads-client--socket-path)))
+  (skip-unless (beads-client--find-database))
   (let ((buffer-name "*Beads Issues*"))
     (when (get-buffer buffer-name)
       (kill-buffer buffer-name))

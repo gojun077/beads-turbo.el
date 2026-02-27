@@ -606,13 +606,12 @@
     (beads-detail-mode)
     (should (eq major-mode 'beads-detail-mode))))
 
-;;; Integration tests (require daemon)
+;;; Integration tests (require bd CLI)
 
 (ert-deftest beads-detail-test-show-creates-buffer ()
   "Test that beads-detail-show creates detail buffer."
   :tags '(:integration)
-  (skip-unless (beads-client--socket-path))
-  (skip-unless (file-exists-p (beads-client--socket-path)))
+  (skip-unless (beads-client--find-database))
   (let ((issues (beads-client-list '(:limit 1))))
     (skip-unless (> (length issues) 0))
     (let* ((issue-id (alist-get 'id (aref issues 0)))
@@ -631,8 +630,7 @@
 (ert-deftest beads-detail-test-show-displays-content ()
   "Test that beads-detail-show displays issue content."
   :tags '(:integration)
-  (skip-unless (beads-client--socket-path))
-  (skip-unless (file-exists-p (beads-client--socket-path)))
+  (skip-unless (beads-client--find-database))
   (let ((issues (beads-client-list '(:limit 1))))
     (skip-unless (> (length issues) 0))
     (let* ((issue-id (alist-get 'id (aref issues 0)))
@@ -651,8 +649,7 @@
 (ert-deftest beads-detail-test-show-sets-buffer-local-issue-id ()
   "Test that beads-detail-show sets buffer-local issue ID."
   :tags '(:integration)
-  (skip-unless (beads-client--socket-path))
-  (skip-unless (file-exists-p (beads-client--socket-path)))
+  (skip-unless (beads-client--find-database))
   (let ((issues (beads-client-list '(:limit 1))))
     (skip-unless (> (length issues) 0))
     (let* ((issue-id (alist-get 'id (aref issues 0)))
@@ -671,8 +668,7 @@
 (ert-deftest beads-detail-test-refresh-updates-content ()
   "Test that beads-detail-refresh updates buffer content."
   :tags '(:integration)
-  (skip-unless (beads-client--socket-path))
-  (skip-unless (file-exists-p (beads-client--socket-path)))
+  (skip-unless (beads-client--find-database))
   (let ((issues (beads-client-list '(:limit 1))))
     (skip-unless (> (length issues) 0))
     (let* ((issue-id (alist-get 'id (aref issues 0)))
@@ -693,8 +689,7 @@
 (ert-deftest beads-detail-test-show-error-handling ()
   "Test that beads-detail-show handles RPC errors gracefully."
   :tags '(:integration)
-  (skip-unless (beads-client--socket-path))
-  (skip-unless (file-exists-p (beads-client--socket-path)))
+  (skip-unless (beads-client--find-database))
   (let ((buffer-name "*Beads: bd-nonexistent*"))
     (when (get-buffer buffer-name)
       (kill-buffer buffer-name))
@@ -713,8 +708,7 @@
 (ert-deftest beads-detail-test-buffer-reuse ()
   "Test that calling beads-detail-show twice reuses the same buffer."
   :tags '(:integration)
-  (skip-unless (beads-client--socket-path))
-  (skip-unless (file-exists-p (beads-client--socket-path)))
+  (skip-unless (beads-client--find-database))
   (let ((issues (beads-client-list '(:limit 1))))
     (skip-unless (> (length issues) 0))
     (let* ((issue-id (alist-get 'id (aref issues 0)))

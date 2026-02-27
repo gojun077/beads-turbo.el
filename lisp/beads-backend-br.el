@@ -99,9 +99,6 @@
   (make-beads-backend
    :name "br"
    :cli-program "br"
-   :supports-daemon nil
-   :socket-name nil
-   :daemon-start-args nil
    :supported-ops '("list" "show" "ready" "create" "update" "close"
                      "delete" "stats" "count" "dep_add" "dep_remove"
                      "dep_tree" "label_add" "label_remove")

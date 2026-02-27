@@ -32,7 +32,6 @@
      (make-beads-backend
       :name "test-custom"
       :cli-program "test-cmd"
-      :supports-daemon nil
       :supported-ops '("list" "show")
       :op-to-cli-args (lambda (_op _args) '("list"))))
     (should (beads-backend--lookup "test-custom"))
@@ -40,37 +39,13 @@
                     (beads-backend--lookup "test-custom"))
                    "test-cmd"))))
 
-;;; Backend property tests
-
-(ert-deftest beads-backend-test-bd-supports-daemon ()
-  "Test that bd backend supports daemon."
-  (should (beads-backend-supports-daemon (beads-backend--lookup "bd"))))
-
-(ert-deftest beads-backend-test-br-no-daemon ()
-  "Test that br backend does not support daemon."
-  (should-not (beads-backend-supports-daemon (beads-backend--lookup "br"))))
-
-(ert-deftest beads-backend-test-bd-socket-name ()
-  "Test that bd backend has socket name."
-  (should (equal (beads-backend-socket-name (beads-backend--lookup "bd"))
-                 "bd.sock")))
-
-(ert-deftest beads-backend-test-br-no-socket ()
-  "Test that br backend has no socket name."
-  (should-not (beads-backend-socket-name (beads-backend--lookup "br"))))
-
-(ert-deftest beads-backend-test-bd-daemon-start-args ()
-  "Test bd backend daemon start args."
-  (should (equal (beads-backend-daemon-start-args (beads-backend--lookup "bd"))
-                 '("daemon" "start" "--foreground"))))
-
 ;;; Capability tests
 
 (ert-deftest beads-backend-test-bd-supports-all-ops ()
   "Test that bd backend supports standard operations."
   (let ((bd (beads-backend--lookup "bd")))
     (dolist (op '("list" "show" "ready" "create" "update" "close"
-                  "delete" "stats" "health" "types" "duplicates"
+                  "delete" "stats" "types" "duplicates"
                   "resolve-conflicts" "comments-add"))
       (should (beads-backend-supports-p bd op)))))
 
@@ -84,7 +59,7 @@
 (ert-deftest beads-backend-test-br-missing-ops ()
   "Test that br backend does not support bd-specific operations."
   (let ((br (beads-backend--lookup "br")))
-    (dolist (op '("health" "types" "duplicates" "resolve-conflicts"
+    (dolist (op '("types" "duplicates" "resolve-conflicts"
                   "comments-add" "get_mutations" "config_get"))
       (should-not (beads-backend-supports-p br op)))))
 
@@ -193,19 +168,10 @@
                   "close" '((id . "bd-001")))
                  '("close" "bd-001"))))
 
-(ert-deftest beads-backend-test-bd-health-args ()
-  "Test bd backend health operation CLI args."
-  (should (equal (beads-backend-bd--operation-to-cli-args "health" nil)
-                 '("daemon" "status"))))
-
-(ert-deftest beads-backend-test-bd-duplicates-extra-flags ()
-  "Test bd backend adds --no-daemon for duplicates."
-  (should (equal (beads-backend-bd--cli-extra-flags "duplicates")
-                 '("--no-daemon"))))
-
-(ert-deftest beads-backend-test-bd-no-extra-flags-for-list ()
-  "Test bd backend has no extra flags for list."
-  (should-not (beads-backend-bd--cli-extra-flags "list")))
+(ert-deftest beads-backend-test-bd-no-extra-flags ()
+  "Test bd backend has no extra flags."
+  (should-not (beads-backend-bd--cli-extra-flags "list"))
+  (should-not (beads-backend-bd--cli-extra-flags "duplicates")))
 
 (ert-deftest beads-backend-test-bd-unknown-op-signals ()
   "Test bd backend signals on unknown operation."

@@ -8,7 +8,6 @@ This project uses **bd (beads)** for issue tracking - a Git-backed tracker desig
 - Dependency-aware issue tracking
 - Auto-sync with Git via JSONL
 - AI-optimized CLI with JSON output
-- Built-in daemon for background operations
 - MCP server integration for Claude and other AI assistants
 
 **CRITICAL**: Use bd for ALL task tracking. Do NOT create markdown TODO lists.

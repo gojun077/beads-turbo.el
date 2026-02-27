@@ -49,7 +49,7 @@ https://github.com/steveyegge/beads/blob/main/CHANGELOG.md
 - `bd create --dry-run` flag to preview issue creation
 - `bd ready --gated` flag for gated molecules
 - Prevention of closing issues with open blockers
-- Daemon CLI refactored to subcommands
+- CLI refactored to subcommands
 
 ### v0.46.0
 - Custom issue types (project-configurable beyond built-in types)
@@ -70,4 +70,4 @@ https://github.com/steveyegge/beads/blob/main/CHANGELOG.md
 - Default to hash-based IDs
 
 ### v0.20.0
-- Per-project daemon socket (`.beads/bd.sock` instead of global)
+- Per-project daemon socket (removed in v0.50.0)

@@ -36,9 +36,6 @@
 (cl-defstruct beads-backend
   (name nil :type string)
   (cli-program nil :type string)
-  (supports-daemon nil :type boolean)
-  (socket-name nil :type (or string null))
-  (daemon-start-args nil :type list)
   (supported-ops nil :type list)
   (op-to-cli-args nil :type function)
   (cli-extra-flags nil :type function))
@@ -114,21 +111,6 @@ Uses `beads-cli-program' if set, otherwise auto-detects."
     (signal 'beads-backend-error
             (list (format "Backend %s does not support operation: %s"
                           (beads-backend-name backend) operation)))))
-
-(defun beads-backend-supports-daemon-p (&optional backend)
-  "Return non-nil if BACKEND (or current project backend) supports daemon."
-  (beads-backend-supports-daemon (or backend (beads-backend-for-project))))
-
-(defun beads-backend-socket-name-for-project ()
-  "Return the socket filename for the current project's backend."
-  (beads-backend-socket-name (beads-backend-for-project)))
-
-(defun beads-backend-daemon-start-command ()
-  "Return the full daemon start command for the current project's backend."
-  (let ((backend (beads-backend-for-project)))
-    (when (beads-backend-supports-daemon backend)
-      (let ((program (beads-backend-cli-program-path backend)))
-        (cons program (beads-backend-daemon-start-args backend))))))
 
 (defun beads-backend-cli-program-path (&optional backend)
   "Return the absolute path to the CLI program for BACKEND.

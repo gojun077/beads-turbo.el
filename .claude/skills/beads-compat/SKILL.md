@@ -25,7 +25,7 @@ When upgrading beads:
 ## Breaking Change Patterns
 
 Watch for these in the changelog:
-- RPC protocol changes (affects socket communication)
+- CLI interface changes (affects `--json` output)
 - Field renames in JSON responses
 - Command/flag deprecations
 - New required fields in requests

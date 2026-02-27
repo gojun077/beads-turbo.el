@@ -1,5 +1,9 @@
 # How to Write a Beads Client
 
+> **Note**: The daemon/socket RPC protocol described here was removed in
+> beads v0.50.0. beads.el now uses CLI-only communication (`bd <command>
+> --json`). This document is retained as a historical reference.
+
 ## Architecture
 
 ```
