@@ -319,8 +319,8 @@ Returns array of mutation objects."
     (beads-client-request "get_mutations" args)))
 
 (defun beads-client--plist-to-alist (plist)
-  "Convert PLIST with keyword keys to alist with string keys.
-Converts :kebab-case to snake_case for JSON."
+  "Convert PLIST with keyword keys to alist with symbol keys.
+Converts :kebab-case to snake_case symbols."
   (when plist
     (let ((alist '())
           (key nil))
@@ -329,10 +329,10 @@ Converts :kebab-case to snake_case for JSON."
         (unless (keywordp key)
           (signal 'beads-client-error (list "Expected keyword in plist" key)))
         (let* ((key-name (substring (symbol-name key) 1))
-               (json-key (replace-regexp-in-string "-" "_" key-name))
+               (snake-key (intern (replace-regexp-in-string "-" "_" key-name)))
                (value (pop plist)))
-          (when value
-            (push (cons json-key value) alist))))
+           (when value
+             (push (cons snake-key value) alist))))
       (nreverse alist))))
 
 (defun beads-client-clear-cache ()

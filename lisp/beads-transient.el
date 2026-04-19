@@ -95,7 +95,7 @@ Prompts for title (required), type, and priority."
         (message "Title is required")
       (condition-case err
           (let ((issue (beads-client-create title
-                                         :issue-type type
+                                         :type type
                                          :priority priority)))
             (message "Created issue %s" (alist-get 'id issue))
             (when (derived-mode-p 'beads-list-mode)

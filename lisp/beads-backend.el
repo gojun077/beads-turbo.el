@@ -136,8 +136,9 @@ Keys are converted from snake_case to --kebab-case."
     (dolist (pair alist)
       (let* ((key (car pair))
              (value (cdr pair))
+             (key-str (if (stringp key) key (symbol-name key)))
              (flag-name (concat "--" (replace-regexp-in-string
-                                      "_" "-" (symbol-name key)))))
+                                      "_" "-" key-str))))
         (cond
          ((eq value t)
           (push flag-name flags))
