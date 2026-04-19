@@ -94,8 +94,15 @@
             (message "Updated %s for %s" (substring (symbol-name field) 1) issue-id)
             (when (and source-buffer (buffer-live-p source-buffer))
               (with-current-buffer source-buffer
-                (when (fboundp 'beads-detail-refresh)
-                  (beads-detail-refresh)))))
+                (cond
+                 ((and (fboundp 'beads-detail-refresh)
+                       (or (derived-mode-p 'beads-detail-mode)
+                           (derived-mode-p 'beads-detail-vui-mode))
+                       (bound-and-true-p beads-detail--current-issue-id))
+                  (beads-detail-refresh))
+                 ((and (fboundp 'beads-list-refresh)
+                       (derived-mode-p 'beads-list-mode))
+                  (beads-list-refresh))))))
         (beads-client-error
          (message "Failed to update: %s" (error-message-string err)))))
 
