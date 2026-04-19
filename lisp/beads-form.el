@@ -186,7 +186,8 @@ Derives from `vui-mode' and adds form-specific keybindings.
   (require 'beads-vui)
   (let ((issue-id (alist-get 'id issue)))
     (with-current-buffer buffer
-      (beads-form-vui-mode))
+      (unless (derived-mode-p 'beads-form-vui-mode)
+        (beads-form-vui-mode)))
     (save-window-excursion
       (vui-mount (vui-component 'beads-vui-form-view
                                 :issue issue
@@ -368,11 +369,12 @@ Derives from `vui-mode' and adds form-specific keybindings.
          ((eq major-mode 'beads-list-mode)
           (when (fboundp 'beads-list-refresh)
             (beads-list-refresh)))
-         ((and (eq major-mode 'beads-detail-mode)
+         ((and (or (derived-mode-p 'beads-detail-mode)
+                   (derived-mode-p 'beads-detail-vui-mode))
                (boundp 'beads-detail--current-issue-id)
                (equal beads-detail--current-issue-id issue-id))
-          (when (fboundp 'beads-detail-refresh)
-            (beads-detail-refresh))))))))
+           (when (fboundp 'beads-detail-refresh)
+             (beads-detail-refresh))))))))
 
 (provide 'beads-form)
 ;;; beads-form.el ends here

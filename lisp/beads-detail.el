@@ -459,7 +459,8 @@ Uses CLI fallback since RPC does not support comment_add."
                        (when-let ((target (beads-client-show id)))
                          (beads-detail-open target)))))
     (with-current-buffer buffer
-      (beads-detail-vui-mode))
+      (unless (derived-mode-p 'beads-detail-vui-mode)
+        (beads-detail-vui-mode)))
     (save-window-excursion
       (vui-mount (vui-component 'beads-vui-detail-view
                                 :issue issue
