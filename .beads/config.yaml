@@ -1,4 +1,16 @@
 db: ""
+no-db: false
+
 sync:
     mode: dolt-native
 sync-branch: beads-sync
+sync.remote: "gojun077/beads_bdel"
+
+# JSONL backup — disabled; Dolt + DoltHub is the source of truth
+backup:
+  enabled: false
+
+# Disable auto-export of issues.jsonl
+export.auto: false
+
+dolt.port: 3310

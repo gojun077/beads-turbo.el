@@ -13,3 +13,10 @@ docs/beads.info
 # Beads daemon runtime files
 .beads/daemon-*.log*
 .beads/*.startlock
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+*.jsonl
+dolt-config.log
