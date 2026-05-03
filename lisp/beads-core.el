@@ -29,9 +29,6 @@
 
 ;;; Code:
 
-(require 'json)
-(require 'beads-backend)
-
 (declare-function beads-detail-open "beads-detail")
 (declare-function beads-client-show "beads-client")
 
@@ -61,28 +58,6 @@ PROPERTY-NAME should be a symbol like `beads-orphan-id'."
           (beads-detail-open issue))
       (beads-client-error
        (user-error "Failed to load issue: %s" (error-message-string err))))))
-
-(defun beads-core-cli-request (subcommand &rest args)
-  "Execute beads CLI with SUBCOMMAND and ARGS, returning parsed JSON.
-Delegates to the backend abstraction layer.
-Signals error if command fails or returns invalid JSON."
-  (let* ((backend (beads-backend-for-project))
-         (program (beads-backend-cli-program-path backend))
-         (extra (when-let ((fn (beads-backend-cli-extra-flags backend)))
-                  (funcall fn subcommand)))
-         (full-args (append extra (list subcommand) args (list "--json"))))
-    (with-temp-buffer
-      (let ((exit-code (apply #'call-process program nil t nil full-args)))
-        (unless (zerop exit-code)
-          (signal 'error
-                  (list (format "%s %s failed: %s"
-                                (beads-backend-name backend)
-                                subcommand (buffer-string)))))
-        (goto-char (point-min))
-        (condition-case nil
-            (let ((output (json-read)))
-              (if (vectorp output) (append output nil) output))
-          (json-error nil))))))
 
 (provide 'beads-core)
 ;;; beads-core.el ends here

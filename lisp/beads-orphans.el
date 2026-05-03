@@ -26,8 +26,7 @@
 ;;; Code:
 
 (require 'beads-core)
-
-(declare-function beads-client-close "beads-client")
+(require 'beads-client)
 
 (defvar-local beads-orphans--data nil
   "List of orphan data in current buffer.")
@@ -51,7 +50,7 @@ Orphans are issues referenced in commits but not marked as closed.
 
 (defun beads-orphans--fetch ()
   "Fetch orphaned issues via CLI."
-  (beads-core-cli-request "orphans"))
+  (beads-client-orphans))
 
 (defun beads-orphans--render (orphans)
   "Render ORPHANS list into current buffer."

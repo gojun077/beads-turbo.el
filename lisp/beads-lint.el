@@ -27,6 +27,7 @@
 ;;; Code:
 
 (require 'beads-core)
+(require 'beads-client)
 
 (defgroup beads-lint nil
   "Issue quality linting for Beads."
@@ -76,9 +77,7 @@ Checks issues for missing recommended template sections.
 (defun beads-lint--fetch (&optional type-filter)
   "Fetch lint results via CLI.
 Optional TYPE-FILTER limits to specific issue type."
-  (if type-filter
-      (beads-core-cli-request "lint" "--type" type-filter)
-    (beads-core-cli-request "lint")))
+  (beads-client-lint type-filter))
 
 (defun beads-lint--group-by-type (results)
   "Group RESULTS by issue type.

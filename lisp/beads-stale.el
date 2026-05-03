@@ -26,8 +26,7 @@
 ;;; Code:
 
 (require 'beads-core)
-
-(declare-function beads-client-update "beads-client")
+(require 'beads-client)
 
 (defgroup beads-stale nil
   "Stale issue detection for Beads."
@@ -78,10 +77,7 @@ Stale issues are those not updated within a configurable number of days.
 (defun beads-stale--fetch (days &optional status)
   "Fetch stale issues via CLI with DAYS threshold.
 Optional STATUS filters by issue status."
-  (let ((args (list "--days" (number-to-string days))))
-    (when status
-      (setq args (append args (list "--status" status))))
-    (apply #'beads-core-cli-request "stale" args)))
+  (beads-client-stale days status))
 
 (defun beads-stale--days-ago (updated-at)
   "Calculate days since UPDATED-AT timestamp."

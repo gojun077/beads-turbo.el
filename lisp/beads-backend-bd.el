@@ -122,6 +122,15 @@
      (let ((id (alist-get 'id args))
            (text (alist-get 'text args)))
        (list "comments" "add" id text)))
+    ("activity"
+     (beads-backend--build-cli-args "activity" args
+                                    '(limit mol type)))
+    ("lint"
+     (beads-backend--build-cli-args "lint" args '(type)))
+    ("orphans"
+     '("orphans"))
+    ("stale"
+     (beads-backend--build-cli-args "stale" args '(days status)))
     (_
      (signal 'beads-backend-error
              (list (format "Unknown operation for bd backend: %s" operation))))))
@@ -139,7 +148,7 @@
                      "label_add" "label_remove" "get_mutations" "types"
                      "config_get" "config_set" "config_unset"
                      "resolve-conflicts" "duplicates" "duplicate"
-                     "comments-add")
+                     "comments-add" "activity" "lint" "orphans" "stale")
    :op-to-cli-args #'beads-backend-bd--operation-to-cli-args
    :cli-extra-flags #'beads-backend-bd--cli-extra-flags))
 

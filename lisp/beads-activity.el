@@ -26,6 +26,7 @@
 ;;; Code:
 
 (require 'beads-core)
+(require 'beads-client)
 
 (defgroup beads-activity nil
   "Activity feed for Beads."
@@ -141,13 +142,12 @@ Shows issue creates, updates, deletes, and comments in real-time.
 LIMIT is the max number of events (default `beads-activity-limit').
 PREFIX filters to issues starting with this string.
 TYPE filters to this event type."
-  (let* ((limit (or limit beads-activity-limit))
-         (args (list "--limit" (number-to-string limit))))
+  (let ((filters (list :limit (or limit beads-activity-limit))))
     (when prefix
-      (setq args (append args (list "--mol" prefix))))
+      (setq filters (append filters (list :mol prefix))))
     (when type
-      (setq args (append args (list "--type" type))))
-    (apply #'beads-core-cli-request "activity" args)))
+      (setq filters (append filters (list :type type))))
+    (beads-client-activity filters)))
 
 (defun beads-activity--glyph-for-event (event)
   "Get display glyph for EVENT based on type and status."

@@ -318,6 +318,36 @@ Returns array of mutation objects."
                 `((since_id . ,since-id)))))
     (beads-client-request "get_mutations" args)))
 
+(defun beads-client-activity (&optional filters)
+  "Fetch activity events with optional FILTERS plist.
+Supported keys: :limit, :mol (issue prefix), :type.
+Returns array of activity event objects."
+  (let ((args (beads-client--plist-to-alist filters)))
+    (beads-client-request "activity" args)))
+
+(defun beads-client-lint (&optional type-filter)
+  "Fetch lint results.
+Optional TYPE-FILTER restricts to a specific issue type.
+Returns alist with `results' and `total' keys."
+  (let ((args (when type-filter
+                `((type . ,type-filter)))))
+    (beads-client-request "lint" args)))
+
+(defun beads-client-orphans ()
+  "Fetch orphaned issues (referenced in commits but not closed).
+Returns list of orphan objects."
+  (beads-client-request "orphans" nil))
+
+(defun beads-client-stale (&optional days status)
+  "Fetch stale issues with optional DAYS threshold and STATUS filter.
+Returns list of stale issue objects."
+  (let (args)
+    (when days
+      (push `(days . ,days) args))
+    (when status
+      (push `(status . ,status) args))
+    (beads-client-request "stale" args)))
+
 (defun beads-client--plist-to-alist (plist)
   "Convert PLIST with keyword keys to alist with symbol keys.
 Converts :kebab-case to snake_case symbols."
