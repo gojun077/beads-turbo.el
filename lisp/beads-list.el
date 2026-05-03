@@ -441,9 +441,9 @@ and background updates where the user isn't waiting for the result."
        (unless (buffer-live-p buffer)
          (cl-return-from nil))
        (with-current-buffer buffer
-         (if err
-             (message "Auto-refresh failed: %s" err)
-           (let* ((issues (if beads-list--filter
+          (if err
+              (message "Auto-refresh failed: %s" (if (> (length err) 200) (concat (substring err 0 197) "...") err))
+            (let* ((issues (if beads-list--filter
                               (beads-filter-apply beads-list--filter all-issues)
                             all-issues))
                   (display-issues (if beads-list--show-only-marked

@@ -231,8 +231,9 @@ where the caller needs the result immediately."
                     (format "CLI failed with exit code %d: stdout=%s stderr=%s"
                             exit-code (string-trim output) (string-trim err-output))
                     nil))))
-     :stderr err-buffer
-     :noquery t)))
+      :stderr err-buffer
+      :noquery t
+      :connection-type 'pipe)))
 
 (defun beads-backend-cli-call-raw (args &optional project-root)
   "Execute CLI with ARGS without --json, returning exit code.

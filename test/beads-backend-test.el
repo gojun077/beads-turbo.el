@@ -253,5 +253,15 @@
                   "list" '((status . "open") (bogus . "x")) '(status))
                  '("list" "--status" "open"))))
 
+(ert-deftest beads-backend-test-async-no-pty-chars ()
+  "Async CLI must use pipe and never leak raw ANSI/pty chars like ]11;? or ^G."
+  (unless (executable-find "bd") (ert-skip "no bd"))
+  (let ((done nil) (err nil))
+    (beads-backend-cli-execute-async "list" nil
+      (lambda (e _d) (setq err e done t)))
+    (while (not done) (accept-process-output nil 0.1))
+    (should-not err)
+    (when err (should-not (string-match-p "[\x07\x1b]]11;\\|\\[c" err)))))
+
 (provide 'beads-backend-test)
 ;;; beads-backend-test.el ends here
