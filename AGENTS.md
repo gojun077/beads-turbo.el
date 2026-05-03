@@ -36,6 +36,8 @@ Run before every commit when code has changed:
 | `make interactive` | Launch Emacs with beads.el loaded for manual testing |
 | `make new-test FEATURE=<name>` | Scaffold a new test file |
 
+**Testing requirement**: All new functionality must include corresponding ERT tests in the `test/` directory (not `tests/`).
+
 ## Session Completion
 
 Work is NOT complete until `git push` succeeds:
