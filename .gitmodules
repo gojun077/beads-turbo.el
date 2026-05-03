@@ -1,0 +1,3 @@
+[submodule "vendor/vui.el"]
+	path = vendor/vui.el
+	url = https://github.com/d12frosted/vui.el

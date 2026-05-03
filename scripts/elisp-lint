@@ -45,7 +45,7 @@ for f in $el_files; do
     fi
 
     compile_out=$(emacs -Q --batch \
-        -L "$ROOT" -L "$ROOT/lisp" \
+        -L "$ROOT" -L "$ROOT/lisp" -L "$ROOT/vendor/vui.el" \
         -f batch-byte-compile "$f" 2>&1) || true
 
     rm -f "${f}c"

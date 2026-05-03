@@ -33,6 +33,7 @@ elisp_code="$elisp_code
 emacs -Q --batch \
     -L "$ROOT" \
     -L "$ROOT/lisp" \
+    -L "$ROOT/vendor/vui.el" \
     --eval "$elisp_code" 2>&1
 
 exit_code=$?
