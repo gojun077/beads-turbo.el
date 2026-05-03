@@ -125,14 +125,11 @@
            (target-id (alist-get 'target_id args)))
        (list "duplicate" source-id "--of" target-id)))
     ("comments-add"
-     (let ((id (alist-get 'id args))
-           (text (alist-get 'text args)))
-       (list "comments" "add" id text)))
-    ("activity"
-     (beads-backend--build-cli-args "activity" args
-                                    '(limit mol type)))
+      (let ((id (alist-get 'id args))
+            (text (alist-get 'text args)))
+        (list "comments" "add" id text)))
     ("lint"
-     (beads-backend--build-cli-args "lint" args '(type)))
+      (beads-backend--build-cli-args "lint" args '(type)))
     ("orphans"
      '("orphans"))
     ("stale"
@@ -155,7 +152,7 @@
                       "label_add" "label_remove" "types"
                      "config_get" "config_set" "config_unset"
                       "duplicates" "duplicate"
-                     "comments-add" "activity" "lint" "orphans" "stale")
+                      "comments-add" "lint" "orphans" "stale")
    :op-to-cli-args #'beads-backend-bd--operation-to-cli-args
    :cli-extra-flags #'beads-backend-bd--cli-extra-flags))
 

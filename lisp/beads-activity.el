@@ -224,8 +224,12 @@ TYPE filters to this event type."
 ;;;###autoload
 (defun beads-activity (&optional limit)
   "Display activity feed with interactive actions.
-LIMIT is the max number of events to show."
+LIMIT is the max number of events to show.
+
+NOTE: The `bd activity` command was removed in bd 1.0+.
+This feature is not available with the current beads version."
   (interactive "P")
+  (user-error "Activity feed is not available: `bd activity` was removed in bd 1.0+")
   (let ((limit (or limit beads-activity-limit)))
     (condition-case err
         (let ((events (beads-activity--fetch limit

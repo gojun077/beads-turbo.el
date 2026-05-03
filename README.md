@@ -89,7 +89,7 @@ With the built-in `:vc` keyword:
 
 - `M-x beads` or `M-x beads-list` - Open the issue list
 - `M-x beads-project-list` - Open issue list for current project
-- `M-x beads-activity` - Open the activity feed
+- `M-x beads-activity` - Open the activity feed (unavailable in bd 1.0+)
 - `M-x beads-stale` - Show stale issues (not updated recently)
 - `M-x beads-orphans` - Show orphaned issues (referenced in commits but not closed)
 - `M-x beads-duplicates` - Find and merge duplicate issues
@@ -194,18 +194,8 @@ then confirm to actually create it.
 
 ### Activity Feed (`beads-activity-mode`)
 
-<!-- TODO: Add screenshot for activity feed (see bdel-4hp) -->
-
-The activity feed shows real-time issue mutations (creates, updates, deletes, comments).
-
-| Key | Command | Description |
-|-----|---------|-------------|
-| `RET` | `beads-activity-goto-issue` | Open issue in detail view |
-| `f` | `beads-activity-toggle-follow` | Toggle live updates (polling) |
-| `F` | `beads-activity-set-filter` | Filter by prefix or event type |
-| `g` | `beads-activity-refresh` | Refresh feed |
-| `l` | `beads-activity-set-limit` | Set number of events to show |
-| `q` | `beads-activity-quit` | Quit (stops follow mode) |
+The `bd activity` command was removed in bd 1.0+. This feature
+is not available with the current beads version.
 
 ### Stale Issues (`beads-stale-mode`)
 
@@ -337,34 +327,8 @@ Acceptance Criteria, epics need Success Criteria.
 
 ### Activity Feed (`beads-activity`)
 
-```elisp
-;; Change default number of events shown
-(setq beads-activity-limit 100)
-
-;; Change polling interval for follow mode (seconds)
-(setq beads-activity-poll-interval 10)
-
-;; Use ASCII-only glyphs (for terminals without Unicode)
-(setq beads-activity-glyphs beads-activity-glyphs-ascii)
-
-;; Customize individual glyphs
-(setq beads-activity-glyphs
-      '((create . "+")
-        (update . "→")
-        (status-in_progress . "▶")
-        (status-closed . "✓")
-        (status-blocked . "✗")
-        (status-open . "○")
-        (delete . "⊘")
-        (comment . "#")))
-```
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `beads-activity-limit` | `50` | Default number of events to show |
-| `beads-activity-poll-interval` | `5` | Seconds between polls in follow mode |
-| `beads-activity-glyphs` | Unicode alist | Event type → glyph mapping |
-| `beads-activity-glyphs-ascii` | ASCII alist | Alternative ASCII-only glyphs |
+The `bd activity` command was removed in bd 1.0+. The activity feed
+is not available with the current beads version.
 
 ### Stale Issues (`beads-stale`)
 
