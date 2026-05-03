@@ -4,7 +4,7 @@
 ;; Tests for the Beads client module.
 ;;
 ;; Test categories:
-;; 1. Discovery tests - auto-discovery of .beads/beads.db
+;; 1. Discovery tests - auto-discovery of .beads/ metadata.json (Dolt) with legacy beads.db fallback
 ;; 2. Request dispatch tests - CLI dispatch (mocked)
 ;; 3. Integration tests - actual CLI communication (tagged :integration)
 ;;
@@ -12,7 +12,7 @@
 ;; Integration tests connect to the actual beads CLI in this repo.
 ;; Tests that create issues are tagged :destructive and MUST delete
 ;; their test data via beads-client-delete to avoid polluting the
-;; production database.  Read-only integration tests are safe to run.
+;; project issue data.  Read-only integration tests are safe to run.
 
 ;;; Code:
 
@@ -23,15 +23,15 @@
 ;;; Discovery tests
 
 (ert-deftest beads-client-test-find-database-current-dir ()
-  "Test that beads-client--find-database finds .beads/beads.db in current directory."
+  "Test that beads-client--find-database finds .beads/metadata.json in current directory."
   (let ((temp-dir (make-temp-file "beads-test-" t)))
     (unwind-protect
         (let ((beads-dir (expand-file-name ".beads" temp-dir))
               (default-directory temp-dir))
           (make-directory beads-dir)
-          (write-region "" nil (expand-file-name "beads.db" beads-dir))
+          (write-region "{}" nil (expand-file-name "metadata.json" beads-dir))
           (should (equal (beads-client--find-database)
-                        (expand-file-name ".beads/beads.db" temp-dir))))
+                        (expand-file-name ".beads/metadata.json" temp-dir))))
       (delete-directory temp-dir t))))
 
 (ert-deftest beads-client-test-find-database-parent-dir ()
@@ -43,9 +43,9 @@
                (default-directory sub-dir))
           (make-directory beads-dir)
           (make-directory sub-dir t)
-          (write-region "" nil (expand-file-name "beads.db" beads-dir))
+          (write-region "{}" nil (expand-file-name "metadata.json" beads-dir))
           (should (equal (beads-client--find-database)
-                        (expand-file-name ".beads/beads.db" temp-root))))
+                        (expand-file-name ".beads/metadata.json" temp-root))))
       (delete-directory temp-root t))))
 
 (ert-deftest beads-client-test-find-database-not-found ()
@@ -69,18 +69,30 @@
           (should (equal (beads-client--find-database) db-path)))
       (delete-directory temp-dir t))))
 
+(ert-deftest beads-client-test-find-database-legacy-db-fallback ()
+  "Test that beads.db is found as a legacy fallback when metadata.json is absent."
+  (let ((temp-dir (make-temp-file "beads-test-" t)))
+    (unwind-protect
+        (let ((beads-dir (expand-file-name ".beads" temp-dir))
+              (default-directory temp-dir))
+          (make-directory beads-dir)
+          (write-region "" nil (expand-file-name "beads.db" beads-dir))
+          (should (equal (beads-client--find-database)
+                        (expand-file-name ".beads/beads.db" temp-dir))))
+      (delete-directory temp-dir t))))
+
 (ert-deftest beads-client-test-find-database-beads-dir-env ()
   "Test that BEADS_DIR environment variable is used for discovery."
   (let ((temp-dir (make-temp-file "beads-test-" t)))
     (unwind-protect
         (let* ((beads-dir (expand-file-name "custom-beads" temp-dir))
-               (db-path (expand-file-name "beads.db" beads-dir))
+               (metadata-path (expand-file-name "metadata.json" beads-dir))
                (process-environment (cons (concat "BEADS_DIR=" beads-dir)
                                          process-environment))
                (default-directory temp-dir))
           (make-directory beads-dir t)
-          (write-region "" nil db-path)
-          (should (equal (beads-client--find-database) db-path)))
+          (write-region "{}" nil metadata-path)
+          (should (equal (beads-client--find-database) metadata-path)))
       (delete-directory temp-dir t))))
 
 (ert-deftest beads-client-test-find-database-redirect ()
@@ -90,13 +102,13 @@
         (let* ((real-beads-dir (expand-file-name "real-beads" temp-dir))
                (fake-beads-dir (expand-file-name ".beads" temp-dir))
                (redirect-file (expand-file-name "redirect" fake-beads-dir))
-               (db-path (expand-file-name "beads.db" real-beads-dir))
+               (metadata-path (expand-file-name "metadata.json" real-beads-dir))
                (default-directory temp-dir))
           (make-directory fake-beads-dir t)
           (make-directory real-beads-dir t)
           (write-region real-beads-dir nil redirect-file)
-          (write-region "" nil db-path)
-          (should (equal (beads-client--find-database) db-path)))
+          (write-region "{}" nil metadata-path)
+          (should (equal (beads-client--find-database) metadata-path)))
       (delete-directory temp-dir t))))
 
 (ert-deftest beads-client-test-find-database-metadata-json ()
@@ -125,18 +137,34 @@
                         (expand-file-name ".beads/metadata.json" temp-dir))))
       (delete-directory temp-dir t))))
 
-(ert-deftest beads-client-test-find-database-custom-db-name ()
-  "Test that custom .db files are found (excluding vc.db and backups)."
+(ert-deftest beads-client-test-find-database-redirect-trailing-whitespace ()
+  "Test that .beads/redirect content is trimmed of whitespace."
   (let ((temp-dir (make-temp-file "beads-test-" t)))
     (unwind-protect
-        (let* ((beads-dir (expand-file-name ".beads" temp-dir))
-               (custom-db (expand-file-name "custom.db" beads-dir))
+        (let* ((real-beads-dir (expand-file-name "real-beads" temp-dir))
+               (fake-beads-dir (expand-file-name ".beads" temp-dir))
+               (redirect-file (expand-file-name "redirect" fake-beads-dir))
+               (metadata-path (expand-file-name "metadata.json" real-beads-dir))
                (default-directory temp-dir))
-          (make-directory beads-dir t)
-          (write-region "" nil custom-db)
-          (write-region "" nil (expand-file-name "vc.db" beads-dir))
-          (write-region "" nil (expand-file-name "backup.db" beads-dir))
-          (should (equal (beads-client--find-database) custom-db)))
+          (make-directory fake-beads-dir t)
+          (make-directory real-beads-dir t)
+          (write-region (concat real-beads-dir "  \n") nil redirect-file)
+          (write-region "{}" nil metadata-path)
+          (should (equal (beads-client--find-database) metadata-path)))
+      (delete-directory temp-dir t))))
+
+(ert-deftest beads-client-test-find-database-redirect-absent-sentinel ()
+  "Test that redirect to a directory without metadata.json or beads.db returns nil."
+  (let ((temp-dir (make-temp-file "beads-test-" t)))
+    (unwind-protect
+        (let* ((empty-dir (expand-file-name "empty-beads" temp-dir))
+               (fake-beads-dir (expand-file-name ".beads" temp-dir))
+               (redirect-file (expand-file-name "redirect" fake-beads-dir))
+               (default-directory temp-dir))
+          (make-directory fake-beads-dir t)
+          (make-directory empty-dir t)
+          (write-region empty-dir nil redirect-file)
+          (should (null (beads-client--find-database))))
       (delete-directory temp-dir t))))
 
 ;;; Request dispatch tests (mock the CLI)

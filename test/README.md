@@ -38,3 +38,33 @@ Example:
 - Integration tests: Test component interactions (require bd CLI)
 
 See `example-test.el` for basic examples.
+
+## Supported Beads Versions
+
+This package is tested with **bd 0.49.1**. Tests may not reflect
+behavior of older or newer beads CLI versions.
+
+| beads.el | beads CLI | Storage Backend           |
+|----------|-----------|---------------------------|
+| current  | 0.49.x    | Dolt (metadata.json)      |
+| legacy   | pre-1.0   | JSONL files + SQLite (.db)|
+
+## Storage Backend Discovery Priority
+
+The `beads-client--find-database` function discovers a beads project
+by checking for these sentinels in order:
+
+1. `metadata.json` — primary sentinel (Dolt backend, also present in some SQLite setups)
+2. `beads.db` — legacy SQLite fallback
+3. Any `.db` file (excluding `vc.db` and `*.backup`) — last-resort fallback
+
+## Test Compatibility Notes
+
+- **Discovery tests** (`beads-client-test.el`): Reflect the Dolt-first priority.
+  Legacy `beads.db` fallback is tested separately. The legacy `.db` extension
+  scanning test was removed.
+- **Activity tests** (`beads-activity-test.el`): Preserved but documented as
+  testing only the Emacs Lisp rendering layer. The `bd activity` subcommand
+  does not exist in bd 0.49.x (see bdel-a6p).
+- **All other test files**: Storage-backend agnostic. Test Emacs Lisp logic
+  only (modes, keybindings, rendering, state management).
