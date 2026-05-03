@@ -187,6 +187,22 @@ ARGS is a plist with keys like :title, :description, :status,
     (beads-client--unwrap-single
      (beads-client-request "update" request-args))))
 
+(defun beads-client-update-bulk (ids &rest args)
+  "Update multiple issue IDS in a single CLI call with ARGS (plist).
+ARGS uses the same plist format as `beads-client-update' — the same
+fields are applied to every ID in IDS.  Implemented via
+`bd update [id...] --flag value ...' which applies all flags to each
+listed ID in one subprocess.  Requires backend support for the
+\"update_bulk\" operation; callers that want transparent fallback to
+per-ID calls should use the helper in beads-list.el rather than
+handling `beads-client-error' themselves.  Returns the parsed CLI
+response (typically the array of updated issues)."
+  (unless (and ids (listp ids) (> (length ids) 0))
+    (signal 'beads-client-error (list "Issue IDs (non-empty list) required")))
+  (let ((request-args (beads-client--plist-to-alist
+                       (plist-put args :ids ids))))
+    (beads-client-request "update_bulk" request-args)))
+
 (defun beads-client-close (id &optional reason)
   "Close issue ID with optional REASON.
 Returns closed issue object."
@@ -197,6 +213,18 @@ Returns closed issue object."
       (push `(reason . ,reason) args))
     (beads-client--unwrap-single
      (beads-client-request "close" args))))
+
+(defun beads-client-close-bulk (ids &optional reason)
+  "Close multiple issue IDS in a single CLI call with optional REASON.
+Implemented via `bd close [id...] [--reason TEXT]' which closes every
+listed ID in one subprocess.  Requires backend support for the
+\"close_bulk\" operation.  Returns the parsed CLI response."
+  (unless (and ids (listp ids) (> (length ids) 0))
+    (signal 'beads-client-error (list "Issue IDs (non-empty list) required")))
+  (let ((args `((ids . ,ids))))
+    (when reason
+      (push `(reason . ,reason) args))
+    (beads-client-request "close_bulk" args)))
 
 (defun beads-client-delete (ids &rest args)
   "Delete issues by IDS (list of issue IDs) with optional ARGS.

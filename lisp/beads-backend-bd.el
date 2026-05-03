@@ -49,12 +49,28 @@
            (other-args (assq-delete-all 'id (copy-alist args))))
        (append (list "update" id)
                (beads-backend--alist-to-cli-flags other-args))))
+    ("update_bulk"
+     ;; bd 1.0+: `bd update [id...] --flag value ...` applies the same flags
+     ;; to every listed ID in a single subprocess. See bdel-iin.4.
+     (let ((ids (alist-get 'ids args))
+           (other-args (assq-delete-all 'ids (copy-alist args))))
+       (append (list "update")
+               (if (listp ids) ids (list ids))
+               (beads-backend--alist-to-cli-flags other-args))))
     ("close"
      (let ((id (alist-get 'id args))
            (reason (alist-get 'reason args)))
        (if reason
            (list "close" id "--reason" reason)
          (list "close" id))))
+    ("close_bulk"
+     ;; bd 1.0+: `bd close [id...] [--reason TEXT]` closes every listed ID
+     ;; in a single subprocess. See bdel-iin.4.
+     (let ((ids (alist-get 'ids args))
+           (reason (alist-get 'reason args)))
+       (append (list "close")
+               (if (listp ids) ids (list ids))
+               (when reason (list "--reason" reason)))))
     ("delete"
      (let ((ids (alist-get 'ids args))
            (force (alist-get 'force args)))
@@ -143,7 +159,8 @@
   (make-beads-backend
    :name "bd"
    :cli-program "bd"
-   :supported-ops '("list" "show" "ready" "create" "update" "close"
+   :supported-ops '("list" "show" "ready" "create" "update" "update_bulk"
+                     "close" "close_bulk"
                      "delete" "stats" "count" "dep_add" "dep_remove" "dep_tree"
                      "label_add" "label_remove" "get_mutations" "types"
                      "config_get" "config_set" "config_unset"

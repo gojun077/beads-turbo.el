@@ -33,6 +33,7 @@
 (require 'beads-faces)
 (require 'tabulated-list)
 (require 'seq)
+(require 'cl-lib)
 
 (declare-function beads-menu "beads-transient")
 (declare-function beads-show-hint "beads")
@@ -746,6 +747,52 @@ If in sectioned mode, first switches to column mode."
     (when-let ((id (tabulated-list-get-id)))
       (list id))))
 
+(cl-defun beads-list--bulk-try-then-loop (ids bulk-fn per-id-fn
+                                              &key on-error-match)
+  "Run BULK-FN on IDS as one CLI call; fall back to PER-ID-FN loop on error.
+
+BULK-FN is called as (funcall BULK-FN IDS) — a single multi-ID CLI
+invocation.  On success, returns a plist
+  (:success N :errors 0 :matched-ids nil)
+where N is (length IDS).
+
+On `beads-client-error' from BULK-FN — including when the active
+backend does not support the bulk operation (bdel-iin.4) — falls
+back to calling (funcall PER-ID-FN ID) for each ID, accumulating
+per-ID success and error counts so the user-visible messaging (e.g.
+blocked-issue detection) matches the pre-batching behaviour.
+
+When ON-ERROR-MATCH is a regexp, per-ID errors whose message matches
+are collected into :matched-ids (used by `beads-list-bulk-close' to
+list blocked issues).
+
+Note: bd 1.0 multi-ID writes are not documented as transactional.
+In practice, when some IDs fail bd exits 0 but writes an error to
+stderr, which the backend's `call-process' call merges into stdout
+and corrupts the JSON — so the helper sees `beads-client-error' and
+falls back to the per-ID loop, yielding accurate per-issue counts.
+For a full-success bulk call, the fast path is taken and all IDs
+are reported as successful in a single subprocess.  close/delete
+may surface `already closed' errors in the fallback for IDs that
+succeeded before the partial bulk failure — these are counted as
+errors."
+  (condition-case nil
+      (progn
+        (funcall bulk-fn ids)
+        (list :success (length ids) :errors 0 :matched-ids nil))
+    (beads-client-error
+     (let ((success 0) (errors 0) (matched nil))
+       (dolist (id ids)
+         (condition-case err
+             (progn (funcall per-id-fn id) (cl-incf success))
+           (beads-client-error
+            (cl-incf errors)
+            (when (and on-error-match
+                       (string-match-p on-error-match
+                                       (error-message-string err)))
+              (push id matched)))))
+       (list :success success :errors errors :matched-ids matched)))))
+
 (defun beads-list-bulk-status (status)
   "Set STATUS for all marked issues (or issue at point if none marked)."
   (interactive
@@ -753,15 +800,12 @@ If in sectioned mode, first switches to column mode."
   (let ((ids (beads-list--get-marked-or-at-point)))
     (unless ids
       (user-error "No issues marked or at point"))
-    (let ((count 0)
-          (errors 0))
-      (dolist (id ids)
-        (condition-case nil
-            (progn
-              (beads-client-update id :status status)
-              (setq count (1+ count)))
-          (beads-client-error
-           (setq errors (1+ errors)))))
+    (let* ((result (beads-list--bulk-try-then-loop
+                    ids
+                    (lambda (ids) (beads-client-update-bulk ids :status status))
+                    (lambda (id)  (beads-client-update id :status status))))
+           (count (plist-get result :success))
+           (errors (plist-get result :errors)))
       (beads-list-refresh t)
       (if (> errors 0)
           (message "Updated %d issue(s), %d error(s)" count errors)
@@ -775,15 +819,12 @@ If in sectioned mode, first switches to column mode."
   (let ((ids (beads-list--get-marked-or-at-point)))
     (unless ids
       (user-error "No issues marked or at point"))
-    (let ((count 0)
-          (errors 0))
-      (dolist (id ids)
-        (condition-case nil
-            (progn
-              (beads-client-update id :priority priority)
-              (setq count (1+ count)))
-          (beads-client-error
-           (setq errors (1+ errors)))))
+    (let* ((result (beads-list--bulk-try-then-loop
+                    ids
+                    (lambda (ids) (beads-client-update-bulk ids :priority priority))
+                    (lambda (id)  (beads-client-update id :priority priority))))
+           (count (plist-get result :success))
+           (errors (plist-get result :errors)))
       (beads-list-refresh t)
       (if (> errors 0)
           (message "Updated %d issue(s), %d error(s)" count errors)
@@ -797,19 +838,14 @@ If in sectioned mode, first switches to column mode."
       (user-error "No issues marked or at point"))
     (when (or (= (length ids) 1)
               (yes-or-no-p (format "Close %d issues? " (length ids))))
-      (let ((count 0)
-            (errors 0)
-            (blocked-ids nil))
-        (dolist (id ids)
-          (condition-case err
-              (progn
-                (beads-client-close id)
-                (setq count (1+ count)))
-            (beads-client-error
-             (setq errors (1+ errors))
-             (when (string-match-p "\\(blocker\\|blocked\\|open depend\\)"
-                                   (error-message-string err))
-               (push id blocked-ids)))))
+      (let* ((result (beads-list--bulk-try-then-loop
+                      ids
+                      (lambda (ids) (beads-client-close-bulk ids))
+                      (lambda (id)  (beads-client-close id))
+                      :on-error-match "\\(blocker\\|blocked\\|open depend\\)"))
+             (count (plist-get result :success))
+             (errors (plist-get result :errors))
+             (blocked-ids (plist-get result :matched-ids)))
         (setq beads-list--marked nil)
         (beads-list-refresh t)
         (cond
@@ -829,15 +865,16 @@ Prompts for confirmation."
     (unless ids
       (user-error "No issues marked or at point"))
     (when (yes-or-no-p (format "DELETE %d issue(s)? This cannot be undone! " (length ids)))
-      (let ((count 0)
-            (errors 0))
-        (dolist (id ids)
-          (condition-case nil
-              (progn
-                (beads-client-delete id)
-                (setq count (1+ count)))
-            (beads-client-error
-             (setq errors (1+ errors)))))
+      ;; `beads-client-delete' already takes a list of IDs and passes them
+      ;; positionally to `bd delete [id...]' in a single subprocess, so the
+      ;; fast path is just one call.  We still fall back on error so the
+      ;; count reflects per-ID successes when bd rejects some IDs.
+      (let* ((result (beads-list--bulk-try-then-loop
+                      ids
+                      (lambda (ids) (beads-client-delete ids))
+                      (lambda (id)  (beads-client-delete (list id)))))
+             (count (plist-get result :success))
+             (errors (plist-get result :errors)))
         (setq beads-list--marked nil)
         (beads-list-refresh t)
         (if (> errors 0)
@@ -882,15 +919,12 @@ With completion for known assignees from current issues."
   (let ((ids (beads-list--get-marked-or-at-point)))
     (unless ids
       (user-error "No issues marked or at point"))
-    (let ((count 0)
-          (errors 0))
-      (dolist (id ids)
-        (condition-case nil
-            (progn
-              (beads-client-update id :assignee assignee)
-              (setq count (1+ count)))
-          (beads-client-error
-           (setq errors (1+ errors)))))
+    (let* ((result (beads-list--bulk-try-then-loop
+                    ids
+                    (lambda (ids) (beads-client-update-bulk ids :assignee assignee))
+                    (lambda (id)  (beads-client-update id :assignee assignee))))
+           (count (plist-get result :success))
+           (errors (plist-get result :errors)))
       (setq beads-list--marked nil)
       (beads-list-refresh t)
       (if (> errors 0)

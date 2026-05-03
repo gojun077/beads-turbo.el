@@ -168,6 +168,52 @@
                   "close" '((id . "bd-001")))
                  '("close" "bd-001"))))
 
+(ert-deftest beads-backend-test-bd-update-bulk ()
+  "Test bd backend update_bulk produces a single multi-ID CLI call (bdel-iin.4)."
+  (let ((args (beads-backend-bd--operation-to-cli-args
+               "update_bulk" '((ids . ("bd-1" "bd-2" "bd-3"))
+                               (status . "open")))))
+    (should (equal (car args) "update"))
+    ;; All three IDs are positional and appear before the flags
+    (should (equal (seq-subseq args 0 4) '("update" "bd-1" "bd-2" "bd-3")))
+    (should (member "--status" args))
+    (should (member "open" args))))
+
+(ert-deftest beads-backend-test-bd-update-bulk-multiple-flags ()
+  "Test bd backend update_bulk with priority + assignee flags."
+  (let ((args (beads-backend-bd--operation-to-cli-args
+               "update_bulk" '((ids . ("bd-1" "bd-2"))
+                               (priority . 1)
+                               (assignee . "alice")))))
+    (should (equal (seq-subseq args 0 3) '("update" "bd-1" "bd-2")))
+    (should (member "--priority" args))
+    (should (member "1" args))
+    (should (member "--assignee" args))
+    (should (member "alice" args))))
+
+(ert-deftest beads-backend-test-bd-update-bulk-registered ()
+  "Test bd backend advertises update_bulk support."
+  (should (beads-backend-supports-p
+           (beads-backend--lookup "bd") "update_bulk")))
+
+(ert-deftest beads-backend-test-bd-close-bulk-with-reason ()
+  "Test bd backend close_bulk produces a single multi-ID CLI call (bdel-iin.4)."
+  (should (equal (beads-backend-bd--operation-to-cli-args
+                  "close_bulk" '((ids . ("bd-1" "bd-2"))
+                                 (reason . "done")))
+                 '("close" "bd-1" "bd-2" "--reason" "done"))))
+
+(ert-deftest beads-backend-test-bd-close-bulk-without-reason ()
+  "Test bd backend close_bulk without reason."
+  (should (equal (beads-backend-bd--operation-to-cli-args
+                  "close_bulk" '((ids . ("bd-1" "bd-2"))))
+                 '("close" "bd-1" "bd-2"))))
+
+(ert-deftest beads-backend-test-bd-close-bulk-registered ()
+  "Test bd backend advertises close_bulk support."
+  (should (beads-backend-supports-p
+           (beads-backend--lookup "bd") "close_bulk")))
+
 (ert-deftest beads-backend-test-bd-no-extra-flags ()
   "Test bd backend has no extra flags."
   (should-not (beads-backend-bd--cli-extra-flags "list"))
