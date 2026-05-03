@@ -11,11 +11,13 @@ This project uses **bd (beads)** for ALL issue tracking. Do NOT use markdown TOD
 **Workflow reference**: Run `bd prime` for the full command reference and session protocol.
 
 **Quick workflow:**
-1. `bd ready --json` — find unblocked work
-2. `bd update <id> --status in_progress` — claim it
-3. Implement, test, document
-4. `bd close <id> --reason "Done"` — complete it
-5. Discover new work? `bd create "Found bug" -p 1 --deps discovered-from:<parent-id>`
+1. `bd dolt pull` - get latest task graph issues from dolt remote
+2. `bd ready --json` — find unblocked work
+3. `bd update <id> --status in_progress` — claim it
+4. Implement, test, document
+5. `bd close <id> --reason "Done"` — complete it
+6. Discover new work? `bd create "Found bug" -p 1 --deps discovered-from:<parent-id>`
+7. `bd dolt push` - push local task graph data to dolt remote
 
 **Key rules:**
 - Always use `--json` for programmatic use
@@ -36,7 +38,7 @@ Run before every commit when code has changed:
 | `make interactive` | Launch Emacs with beads.el loaded for manual testing |
 | `make new-test FEATURE=<name>` | Scaffold a new test file |
 
-**Testing requirement**: All new functionality must include corresponding ERT tests in the `test/` directory (not `tests/`).
+**Testing requirement**: All new functionality must include corresponding ERT tests in the `test/` directory
 
 ## Session Completion
 
