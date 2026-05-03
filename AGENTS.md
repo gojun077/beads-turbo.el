@@ -16,6 +16,7 @@ This project uses **bd (beads)** for ALL issue tracking. Do NOT use markdown TOD
 3. `bd update <id> --status in_progress` — claim it
 4. Implement, test, document
 5. `bd close <id> --reason "Done"` — complete it
+6. `bd dolt commit -m "commit message"` - commit changes
 6. Discover new work? `bd create "Found bug" -p 1 --deps discovered-from:<parent-id>`
 7. `bd dolt push` - push local task graph data to dolt remote
 
