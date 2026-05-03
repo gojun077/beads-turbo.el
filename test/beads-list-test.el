@@ -413,7 +413,16 @@
     (cl-letf (((symbol-function 'beads-client-list)
                (lambda (&rest _args)
                  (signal 'beads-client-error '("Test error")))))
-      (beads-list-refresh)
+       (beads-list-refresh)
+       (should t))))
+
+(ert-deftest beads-list-test-refresh-async-error-handling ()
+  (with-temp-buffer
+    (beads-list-mode)
+    (cl-letf (((symbol-function 'beads-client-list-async)
+               (lambda (cb &rest _args)
+                 (funcall cb "Test async error" nil))))
+      (beads-list-refresh-async)
       (should t))))
 
 (ert-deftest beads-list-test-list-command-creates-buffer ()

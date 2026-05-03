@@ -202,7 +202,8 @@ where the caller needs the result immediately."
          (extra (when-let ((fn (beads-backend-cli-extra-flags backend)))
                   (funcall fn operation)))
          (cmd-args (append extra op-args '("--json")))
-         (out-buffer (generate-new-buffer " *beads-async*"))
+         (out-buffer (generate-new-buffer " *beads-async-stdout*"))
+         (err-buffer (generate-new-buffer " *beads-async-stderr*"))
          (default-directory (or project-root default-directory)))
     (make-process
      :name "beads-async"
@@ -211,9 +212,10 @@ where the caller needs the result immediately."
      :sentinel
      (lambda (process _event)
        (let ((exit-code (process-exit-status process))
-             (output (with-current-buffer (process-buffer process)
-                       (buffer-string))))
-         (kill-buffer (process-buffer process))
+             (output (with-current-buffer out-buffer (buffer-string)))
+             (err-output (with-current-buffer err-buffer (buffer-string))))
+         (kill-buffer out-buffer)
+         (kill-buffer err-buffer)
          (if (zerop exit-code)
              (condition-case nil
                  (let ((parsed (json-read-from-string output)))
@@ -223,13 +225,13 @@ where the caller needs the result immediately."
                               parsed)))
                (json-error
                 (funcall callback
-                         (format "CLI returned invalid JSON: %s" output)
+                         (format "CLI returned invalid JSON: %s (stderr: %s)" output err-output)
                          nil)))
            (funcall callback
-                    (format "CLI failed with exit code %d: %s"
-                            exit-code (string-trim output))
+                    (format "CLI failed with exit code %d: stdout=%s stderr=%s"
+                            exit-code (string-trim output) (string-trim err-output))
                     nil))))
-     :stderr out-buffer
+     :stderr err-buffer
      :noquery t)))
 
 (defun beads-backend-cli-call-raw (args &optional project-root)
