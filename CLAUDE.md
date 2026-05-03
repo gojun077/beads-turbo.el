@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Note**: This project uses [bd (beads)](https://github.com/steveyegge/beads)
+**Note**: This project uses [bd (beads)](https://github.com/gastownhall/beads)
 for issue tracking. Use `bd` commands instead of markdown TODOs.
 See AGENTS.md for workflow details.
 
@@ -16,7 +16,7 @@ The canonical upstream is https://codeberg.org/ctietze/beads.el
 
 Tested with **bd 1.0.3**. Version info maintained in `.claude/skills/beads-compat/references/version-info.md`.
 
-- Changelog: https://github.com/steveyegge/beads/blob/main/CHANGELOG.md
+- Changelog: https://github.com/gastownhall/beads/blob/main/CHANGELOG.md
 - Run `/beads-compat` to check installed version
 - beads.el versioning mirrors beads CLI version (e.g., beads.el 0.44.0 = tested with beads 0.44.0)
 - Git tags use bare version numbers without `v` prefix (e.g., `1.0.3` not `v1.0.3`)

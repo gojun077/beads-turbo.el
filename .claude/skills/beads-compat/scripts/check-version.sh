@@ -19,7 +19,7 @@ if [[ "$installed" == "$documented" ]]; then
     echo "OK: Versions match"
 elif [[ "$installed" > "$documented" ]]; then
     echo "NOTICE: Installed version is newer. Review changelog and test before updating documentation."
-    echo "Changelog: https://github.com/steveyegge/beads/blob/main/CHANGELOG.md"
+    echo "Changelog: https://github.com/gastownhall/beads/blob/main/CHANGELOG.md"
 else
     echo "WARNING: Installed version is older than documented compatible version."
 fi

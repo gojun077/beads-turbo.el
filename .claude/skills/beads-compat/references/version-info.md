@@ -5,7 +5,7 @@ Minimum DB version: 0.35.0
 
 ## Changelog
 
-https://github.com/steveyegge/beads/blob/main/CHANGELOG.md
+https://github.com/gastownhall/beads/blob/main/CHANGELOG.md
 
 ## Version History
 

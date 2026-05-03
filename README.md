@@ -4,7 +4,7 @@
 
 ## Overview
 
-beads.el provides an Emacs interface to the [Beads](https://github.com/steveyegge/beads) issue tracking system.
+beads.el provides an Emacs interface to the [Beads](https://github.com/gastownhall/beads) issue tracking system.
 Beads is a lightweight, Git-backed issue tracker that stores data locally in
 `.beads/` alongside your code. It works well with AI coding assistants but
 doesn't require them—you can use it entirely from Emacs or the command line.
@@ -451,7 +451,7 @@ notes, acceptance criteria, and comments with markdown syntax highlighting.
 ## Requirements
 
 - Emacs 28.1+
-- [Beads](https://github.com/steveyegge/beads) CLI: `bd` 1.0.3+ (recommended) or `br` (beads_rust)
+- [Beads](https://github.com/gastownhall/beads) CLI: `bd` 1.0.3+ (recommended) or `br` (beads_rust)
 - `hierarchy` package (for dependency tree view)
 - `transient` package (for menus)
 - `vui` package (for declarative UI components)
@@ -482,7 +482,7 @@ Or globally:
 
 ## Development
 
-This project uses [Beads](https://github.com/steveyegge/beads) itself for issue tracking.
+This project uses [Beads](https://github.com/gastownhall/beads) itself for issue tracking.
 You can check out the repository and view the project's issues:
 
 ```bash

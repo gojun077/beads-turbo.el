@@ -16,7 +16,7 @@ Run `.claude/skills/beads-compat/scripts/check-version.sh` to compare installed 
 When upgrading beads:
 
 1. Run `bd --version` to get new version
-2. Review changelog for breaking changes: https://github.com/steveyegge/beads/blob/main/CHANGELOG.md
+2. Review changelog for breaking changes: https://github.com/gastownhall/beads/blob/main/CHANGELOG.md
 3. Test beads.el functionality against new version
 4. Update version in `references/version-info.md`
 5. Update version in `README.md` and `AGENTS.md`
