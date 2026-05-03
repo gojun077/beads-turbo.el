@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# elisp-lint: check Emacs Lisp syntax (parens + byte-compile) for all .el files.
-# Runs emacs --batch -Q in isolation. Safe for CI.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -27,25 +25,79 @@ for f in $el_files; do
     rel="${f#$ROOT/}"
     printf "Checking %s..." "$rel"
 
-    paren_out=$(emacs -Q --batch \
-        --eval "(condition-case err
-                   (progn
-                     (find-file \"$f\")
-                     (check-parens)
-                     (kill-emacs 0))
-                 (error
-                   (message \"PAREN-ERROR: %s\" (error-message-string err))
-                   (kill-emacs 1)))" 2>&1) || true
+    lint_defun_out=$(emacs -Q --batch \
+        --eval "
+(defun lint--check-enclosing-form (pos allowed-forms)
+  (save-excursion
+    (goto-char pos)
+    (catch 'found
+      (dotimes (_ 3)
+        (ignore-errors
+          (backward-up-list 1 t t)
+          (when (looking-at \"(\")
+            (forward-char 1)
+            (let ((sym (intern-soft (thing-at-point 'symbol t))))
+              (when (member sym allowed-forms)
+                (throw 'found t)))))))))
+(let ((errors nil)
+      (allowed '(condition-case cl-eval-when eval-when-compile)))
+  (with-temp-buffer
+    (insert-file-contents \"$f\")
+    (goto-char (point-min))
+    (while (re-search-forward \"^[ \\t]+[ \\t]*(defun \" nil t)
+      (let* ((defun-pos (match-beginning 0))
+             (line-num (line-number-at-pos defun-pos)))
+        (unless (lint--check-enclosing-form defun-pos allowed)
+          (push (format \"%s:%d\" (file-name-nondirectory \"$f\") line-num) errors))))))
+  (if errors
+      (progn
+        (message \"NESTED-DEFUN: %s\" (mapconcat 'identity (nreverse errors) \", \"))
+        (kill-emacs 1))
+    (kill-emacs 0)))" 2>&1) || true
 
-    if echo "$paren_out" | grep -q "PAREN-ERROR"; then
+    if echo "$lint_defun_out" | grep -q "NESTED-DEFUN"; then
+        echo " FAIL (nested defun - paren mismatch)"
+        echo "$lint_defun_out"
+        FAILED=1
+        continue
+    fi
+
+    paren_out=$(emacs -Q --batch \
+        --eval "
+(condition-case err
+    (progn
+      (find-file \"$f\")
+      (check-parens)
+      (kill-emacs 0))
+  (error
+    (let ((msg (error-message-string err)))
+      (if (string-match \"at\\\\s-+\\\\([0-9]+\\\\)\" msg)
+          (message \"UNMATCHED-PAREN: line %s: %s\" (match-string 1 msg) msg)
+        (message \"UNMATCHED-PAREN: %s\" msg)))
+    (kill-emacs 1)))" 2>&1) || true
+
+    if echo "$paren_out" | grep -q "UNMATCHED-PAREN"; then
         echo " FAIL (parens)"
         echo "$paren_out"
         FAILED=1
         continue
     fi
 
+    checkdoc_out=$(emacs -Q --batch \
+        -L "$ROOT" -L "$ROOT/lisp" -L "$ROOT/vendor/vui.el" \
+        --eval "(require 'checkdoc)" \
+        --eval "(setq checkdoc-autofix-style 'query)" \
+        --eval "(checkdoc-file \"$f\")" 2>&1) || true
+
+    if echo "$checkdoc_out" | grep -q "Warning:"; then
+        echo " WARN (checkdoc)"
+        echo "$checkdoc_out" | grep "Warning:"
+        WARNINGS=$((WARNINGS + 1))
+    fi
+
     compile_out=$(emacs -Q --batch \
         -L "$ROOT" -L "$ROOT/lisp" -L "$ROOT/vendor/vui.el" \
+        --eval "(setq byte-compile-error-on-warn nil)" \
         -f batch-byte-compile "$f" 2>&1) || true
 
     rm -f "${f}c"

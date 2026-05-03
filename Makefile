@@ -14,7 +14,27 @@ DOLT_PORT   := 3310
 MAIN_REPO   := $(shell git rev-parse --git-common-dir | sed 's|/\.git$$||')
 IS_WORKTREE := $(shell [ "$$(git rev-parse --git-common-dir)" = ".git" ] && echo no || echo yes)
 
-.PHONY: setup lint test build check clean interactive docs docs-view new-test
+.PHONY: setup lint test build check clean interactive docs docs-view new-test check-parens lint-defun
+
+help:
+	@echo "beads.el Makefile targets:"
+	@echo ""
+	@echo "  setup        - Bootstrap dolt/beads environment"
+	@echo "  lint         - Run full lint (check-parens + lint-defun + checkdoc + byte-compile)"
+	@echo "  check-parens - Run parenthesis and syntax checks (delegates to scripts/elisp-lint)"
+	@echo "  lint-defun   - Check for nested defun forms (paren mismatch detector)"
+	@echo "  test         - Run ERT test suite"
+	@echo "  build        - Byte-compile all .el files"
+	@echo "  check        - Run lint + test (full quality gate)"
+	@echo "  clean        - Remove byte-compiled files"
+	@echo "  interactive  - Launch Emacs with beads.el loaded"
+	@echo "  docs         - Build texinfo documentation"
+	@echo "  docs-view    - View built documentation in info"
+	@echo "  new-test     - Scaffold new test file (FEATURE=<name>)"
+	@echo ""
+	@echo "Reference implementations:"
+	@echo "  https://github.com/steveyegge/efrit (lint-defun target)"
+	@echo "  https://github.com/gojun077/org-trello-ng (lint target structure)"
 
 setup:
 	@echo "==> Checking prerequisites..."
@@ -92,6 +112,12 @@ endif
 # --- Elisp tooling (modeled after ~/dotfiles/bin/ patterns) ---
 
 lint:
+	@scripts/elisp-lint
+
+check-parens:
+	@scripts/elisp-lint
+
+lint-defun:
 	@scripts/elisp-lint
 
 test:
