@@ -3,12 +3,12 @@
 ;;; Commentary:
 ;; Tests for the Beads activity feed.
 ;;
-;; IMPORTANT: As of bd 0.49.x, the `bd activity` subcommand does NOT exist
+;; IMPORTANT: As of bd 1.0.x, the `bd activity` subcommand does NOT exist
 ;; (see issue bdel-a6p).  These tests validate the Emacs Lisp rendering layer
 ;; (mode, keybindings, glyphs, faces, error handling) and do NOT call the CLI.
 ;; They remain useful should bd reintroduce an activity/event-feed command.
 ;; If that never happens, the entire beads-activity.el module and these tests
-;; should be removed or reimplemented on top of `bd mutations`.
+;; should be removed or reimplemented on top of a future bd event-feed command.
 ;;
 ;; Test categories:
 ;; 1. Mode definition tests - test beads-activity-mode is defined correctly

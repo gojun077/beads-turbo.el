@@ -1,6 +1,6 @@
 # Beads Version Compatibility
 
-Tested CLI version: 0.49.1
+Tested CLI version: 1.0.3
 Minimum DB version: 0.35.0
 
 ## Changelog
@@ -11,6 +11,7 @@ https://github.com/steveyegge/beads/blob/main/CHANGELOG.md
 
 | beads.el | beads CLI | Notes |
 |----------|-----------|-------|
+| 1.0.3    | 1.0.3     | Dolt SQL backend, bd batch, multi-ID update/close/delete, removed daemon/mutations/resolve-conflicts |
 | 0.49.1   | 0.49.1    | --append-notes, export filters, activity --details |
 | 0.49.0   | 0.49.0    | bd children, bd rename, bd types, Dolt backend |
 | 0.47.1   | 0.47.1    | Pull-first sync, `--ready` flag, dry-run create |
@@ -18,6 +19,18 @@ https://github.com/steveyegge/beads/blob/main/CHANGELOG.md
 | 0.44.0   | 0.44.0    | Initial version tracking |
 
 ## New Features by Version
+
+### v1.0.3
+- Persistent Dolt SQL server backend (auto-started, no manual daemon)
+- `bd batch` for stdin-driven multi-op transactions (close/update/create/dep)
+- `bd update/close/delete` accept multiple IDs natively
+- `bd dolt` subcommand tree (start/stop/status/show)
+- `bd dep tree --direction` (up/down/both)
+- `bd dep add --blocked-by` and `--depends-on` flag aliases
+- `bd find-duplicates` command (AI/mechanical)
+- `bd gate`, `bd merge-slot`, `bd swarm`, `bd formula`, `bd mol`, `bd federation`, `bd ship`
+- `bd stats` and `bd status` both return `--json` output (different schemas)
+- Removed: `bd daemon`, `bd mutations`, `bd resolve-conflicts`, `bd activity`
 
 ### v0.49.1
 - `bd update --append-notes` flag for additive note editing
@@ -60,6 +73,14 @@ https://github.com/steveyegge/beads/blob/main/CHANGELOG.md
 
 ## Known Breaking Changes
 
+### v1.0.0
+- **Removed `bd daemon`**: No Unix socket IPC; Dolt SQL server is the persistent backend
+- **Removed `bd mutations`**: `get_mutations` operation broken; no replacement in 1.0+
+- **Removed `bd activity`**: No activity feed command in 1.0+ (see bdel-a6p)
+- **Removed `bd resolve-conflicts`**: No JSONL conflict resolution in 1.0+
+- **Architecture shift**: Per-call SQLite → persistent Dolt SQL server
+- **`bd stats`** JSON schema changed: now includes `schema_version` and `summary` wrapper
+
 ### v0.33.1
 - Field rename: `ephemeral` -> `wisp` in JSON
 
@@ -70,4 +91,4 @@ https://github.com/steveyegge/beads/blob/main/CHANGELOG.md
 - Default to hash-based IDs
 
 ### v0.20.0
-- Per-project daemon socket (removed in v0.50.0)
+- Per-project daemon socket (removed in v1.0.0)

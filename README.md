@@ -451,7 +451,7 @@ notes, acceptance criteria, and comments with markdown syntax highlighting.
 ## Requirements
 
 - Emacs 28.1+
-- [Beads](https://github.com/steveyegge/beads) CLI: `bd` 0.49.1+ (recommended) or `br` (beads_rust)
+- [Beads](https://github.com/steveyegge/beads) CLI: `bd` 1.0.3+ (recommended) or `br` (beads_rust)
 - `hierarchy` package (for dependency tree view)
 - `transient` package (for menus)
 - `vui` package (for declarative UI components)
@@ -461,8 +461,9 @@ notes, acceptance criteria, and comments with markdown syntax highlighting.
 
 beads.el supports two CLI backends:
 
-- **`bd`** (default) — Full-featured. Supports daemon mode for fast
-  communication via socket, with CLI fallback. Start the daemon with `bd daemon`.
+- **`bd`** (default) — Full-featured. Uses a persistent Dolt SQL server
+  backend (auto-started transparently) for fast operations. Supports `bd batch`
+  for multi-op transactions and native multi-ID update/close/delete.
 - **`br`** (beads_rust) — CLI-only, no daemon support. Reduced operation set
   (no activity feed, comments, or reopen). Useful if you only have `br` installed.
 
@@ -485,9 +486,6 @@ This project uses [Beads](https://github.com/steveyegge/beads) itself for issue 
 You can check out the repository and view the project's issues:
 
 ```bash
-# Start the daemon
-bd daemon
-
 # Launch Emacs with beads.el loaded
 make interactive
 ```

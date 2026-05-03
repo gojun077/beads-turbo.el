@@ -41,13 +41,13 @@ See `example-test.el` for basic examples.
 
 ## Supported Beads Versions
 
-This package is tested with **bd 0.49.1**. Tests may not reflect
+This package is tested with **bd 1.0.3**. Tests may not reflect
 behavior of older or newer beads CLI versions.
 
 | beads.el | beads CLI | Storage Backend           |
 |----------|-----------|---------------------------|
-| current  | 0.49.x    | Dolt (metadata.json)      |
-| legacy   | pre-1.0   | JSONL files + SQLite (.db)|
+| current  | 1.0.x     | Dolt SQL server (metadata.json) |
+| legacy   | 0.49.x    | Dolt (metadata.json)      |
 
 ## Storage Backend Discovery Priority
 
@@ -65,6 +65,6 @@ by checking for these sentinels in order:
   scanning test was removed.
 - **Activity tests** (`beads-activity-test.el`): Preserved but documented as
   testing only the Emacs Lisp rendering layer. The `bd activity` subcommand
-  does not exist in bd 0.49.x (see bdel-a6p).
+  does not exist in bd 1.0.x (see bdel-a6p).
 - **All other test files**: Storage-backend agnostic. Test Emacs Lisp logic
   only (modes, keybindings, rendering, state management).
