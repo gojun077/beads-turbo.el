@@ -93,7 +93,7 @@ With the built-in `:vc` keyword:
 - `M-x beads-stale` - Show stale issues (not updated recently)
 - `M-x beads-orphans` - Show orphaned issues (referenced in commits but not closed)
 - `M-x beads-duplicates` - Find and merge duplicate issues
-- `M-x beads-conflicts` - View and resolve JSONL merge conflicts
+- `M-x beads-conflicts` - View and resolve JSONL merge conflicts (unavailable in bd 1.0+)
 - `M-x beads-lint` - Show issues missing required template sections
 - `M-x beads-create-issue-preview` - Create issue with preview
 
@@ -253,15 +253,8 @@ and sources (duplicates to be closed).
 
 ### Merge Conflicts (`beads-conflicts-mode`)
 
-View and resolve JSONL merge conflict markers. When git merges fail to
-auto-resolve, JSONL files can have conflict markers. This mode detects
-such conflicts and resolves them using beads' mechanical merge rules.
-
-| Key | Command | Description |
-|-----|---------|-------------|
-| `r` | `beads-conflicts-resolve-all` | Resolve all conflicts |
-| `g` | `beads-conflicts-refresh` | Refresh conflict status |
-| `q` | `quit-window` | Quit |
+The `bd resolve-conflicts` command was removed in bd 1.0+. This feature
+is not available with the current beads version.
 
 ### Hierarchy View (`beads-hierarchy-mode`)
 

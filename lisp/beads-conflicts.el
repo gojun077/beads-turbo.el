@@ -97,8 +97,12 @@ and resolves them using beads' mechanical merge rules.
 (defun beads-conflicts ()
   "Display JSONL merge conflict status with resolution options.
 Detects git merge conflict markers in beads JSONL files and offers
-to resolve them using beads' mechanical merge rules."
+to resolve them using beads' mechanical merge rules.
+
+NOTE: The `bd resolve-conflicts` command was removed in bd 1.0+.
+This feature is not available with the current beads version."
   (interactive)
+  (user-error "resolve-conflicts is not available: `bd resolve-conflicts` was removed in bd 1.0+")
   (let ((result (beads-conflicts--fetch)))
     (with-current-buffer (get-buffer-create "*Beads Conflicts*")
       (beads-conflicts-mode)

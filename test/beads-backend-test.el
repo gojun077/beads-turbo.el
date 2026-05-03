@@ -45,8 +45,8 @@
   "Test that bd backend supports standard operations."
   (let ((bd (beads-backend--lookup "bd")))
     (dolist (op '("list" "show" "ready" "create" "update" "close"
-                  "delete" "stats" "types" "duplicates"
-                  "resolve-conflicts" "comments-add"))
+                   "delete" "stats" "types" "duplicates"
+                   "comments-add"))
       (should (beads-backend-supports-p bd op)))))
 
 (ert-deftest beads-backend-test-br-supports-core-ops ()
@@ -59,8 +59,8 @@
 (ert-deftest beads-backend-test-br-missing-ops ()
   "Test that br backend does not support bd-specific operations."
   (let ((br (beads-backend--lookup "br")))
-    (dolist (op '("types" "duplicates" "resolve-conflicts"
-                  "comments-add" "get_mutations" "config_get"))
+    (dolist (op '("types" "duplicates"
+                   "comments-add" "get_mutations" "config_get"))
       (should-not (beads-backend-supports-p br op)))))
 
 (ert-deftest beads-backend-test-require-operation-signals ()

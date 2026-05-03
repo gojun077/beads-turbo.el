@@ -123,11 +123,6 @@
     ("config_unset"
      (let ((key (alist-get 'key args)))
        (list "config" "unset" key)))
-    ("resolve-conflicts"
-     (let ((dry-run (alist-get 'dry_run args)))
-       (if dry-run
-           '("resolve-conflicts" "--dry-run")
-         '("resolve-conflicts"))))
     ("duplicates"
      '("duplicates"))
     ("duplicate"
@@ -164,7 +159,7 @@
                      "delete" "stats" "count" "dep_add" "dep_remove" "dep_tree"
                      "label_add" "label_remove" "get_mutations" "types"
                      "config_get" "config_set" "config_unset"
-                     "resolve-conflicts" "duplicates" "duplicate"
+                      "duplicates" "duplicate"
                      "comments-add" "activity" "lint" "orphans" "stale")
    :op-to-cli-args #'beads-backend-bd--operation-to-cli-args
    :cli-extra-flags #'beads-backend-bd--cli-extra-flags))

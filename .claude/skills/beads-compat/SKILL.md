@@ -42,7 +42,7 @@ persistent Dolt SQL server. This has significant CLI surface implications:
 |---------|-----------------------------|--------|
 | `bd activity` | `activity` | Broken (bdel-a6p) |
 | `bd mutations` | `get_mutations` | Broken |
-| `bd resolve-conflicts` | `resolve-conflicts` | Broken |
+| `bd resolve-conflicts` | `resolve-conflicts` | Handled (bdel-itn) |
 | `bd daemon` | N/A (docs only) | Removed — no socket IPC |
 
 ### New Commands in 1.0+
