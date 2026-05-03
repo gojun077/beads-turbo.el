@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# elisp-new-test: create a new ERT test file with boilerplate.
+# Usage: elisp-new-test FEATURE_NAME
+set -euo pipefail
+
+if [ $# -ne 1 ]; then
+    cat >&2 <<'USAGE'
+Usage: elisp-new-test FEATURE_NAME
+
+Example:
+  elisp-new-test beads-socket
+This will create test/beads-socket-test.el
+USAGE
+    exit 1
+fi
+
+feature_name="${1%.el}"
+feature_name="${feature_name%-test}"
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+test_dir="$ROOT/test"
+test_file="$test_dir/${feature_name}-test.el"
+
+if [ -f "$test_file" ]; then
+    echo "Error: $test_file already exists" >&2
+    exit 1
+fi
+
+mkdir -p "$test_dir"
+
+cat > "$test_file" <<EOF
+;;; ${feature_name}-test.el --- Tests for ${feature_name} -*- lexical-binding: t; -*-
+
+;;; Commentary:
+;; Tests for ${feature_name}.el
+
+;;; Code:
+
+(require 'ert)
+(require '${feature_name})
+
+(ert-deftest ${feature_name}-test-example ()
+  "Example test for ${feature_name}."
+  (should t))
+
+(provide '${feature_name}-test)
+;;; ${feature_name}-test.el ends here
+EOF
+
+echo "Created test/${feature_name}-test.el"
+echo
+echo "Next steps:"
+echo "1. Edit test/${feature_name}-test.el"
+echo "2. Add your test cases"
+echo "3. Run: make test"

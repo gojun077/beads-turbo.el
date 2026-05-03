@@ -4,9 +4,10 @@ This document describes the development workflow for beads.el.
 
 ## Prerequisites
 
-- Emacs 30.2+ (installed at `/opt/homebrew/bin/emacs`)
-- Python 3 (for build scripts)
-- mise (for task running)
+- Emacs 30.2+
+- `bd` CLI (beads)
+
+No Python or mise required — all tooling is plain shell scripts invoked via `make`.
 
 ## Development Tasks
 
@@ -15,7 +16,7 @@ This document describes the development workflow for beads.el.
 Check syntax, parentheses, and byte-compile warnings:
 
 ```bash
-mise run lint
+make lint
 ```
 
 This will:
@@ -28,7 +29,7 @@ This will:
 Run ERT (Emacs Lisp Regression Testing) tests:
 
 ```bash
-mise run test
+make test
 ```
 
 Test files should:
@@ -43,39 +44,47 @@ See `test/README.md` for more details on writing tests.
 Byte-compile all `.el` files:
 
 ```bash
-mise run build
+make build
 ```
 
 This creates `.elc` files alongside the source files. Compiled files are ignored by git.
+
+### Clean
+
+Remove all compiled `.elc` files:
+
+```bash
+make clean
+```
 
 ### Combined Check
 
 Run both lint and test:
 
 ```bash
-mise run check
+make check
 ```
 
 ## File Structure
 
 ```
 beads.el/
-├── scripts/          # Python build/test scripts
-│   ├── lint.py      # Syntax and style checker
-│   ├── test.py      # ERT test runner
-│   └── build.py     # Byte-compiler
-├── test/            # ERT test files (*-test.el)
-│   ├── README.md
-│   └── example-test.el
-├── mise.toml        # Task definitions
-└── .gitignore       # Excludes *.elc, etc.
+├── scripts/           # Shell build/test scripts
+│   ├── elisp-lint    # Syntax and byte-compile checker
+│   ├── elisp-test    # ERT test runner
+│   ├── elisp-build   # Byte-compiler
+│   └── elisp-new-test # Test boilerplate generator
+├── test/              # ERT test files (*-test.el)
+│   └── README.md
+├── Makefile           # Task definitions
+└── .gitignore         # Excludes *.elc, etc.
 ```
 
 ## Workflow
 
 1. Write code in `.el` files
 2. Write tests in `test/*-test.el`
-3. Run `mise run check` to verify
+3. Run `make check` to verify
 4. Fix any issues reported
 5. Commit when all checks pass
 
@@ -99,7 +108,7 @@ Run interactively in Emacs:
 
 ### Parenthesis Mismatch
 
-If `mise run lint` reports unbalanced parens:
+If `make lint` reports unbalanced parens:
 - Open the file in Emacs
 - Run `M-x check-parens` to find the location
 - Use `M-x show-paren-mode` for highlighting
@@ -120,15 +129,18 @@ If tests fail:
 
 ## Adding New Tests
 
-1. Create `test/feature-test.el`
+1. Create `test/feature-test.el` manually, or:
+   ```bash
+   make new-test FEATURE=beads-feature
+   ```
 2. Add `(require 'ert)` at top
 3. Write tests using `ert-deftest`
-4. Run `mise run test` to verify
+4. Run `make test` to verify
 5. Tests automatically discovered by test runner
 
 ## Continuous Integration
 
-The `mise run check` task is designed for CI:
+The `make check` target is designed for CI:
 - Exit code 0 on success
 - Exit code 1 on failure
 - Clear output indicating pass/fail
@@ -137,7 +149,5 @@ Example GitHub Actions workflow:
 
 ```yaml
 - name: Check code
-  run: |
-    mise install
-    mise run check
+  run: make check
 ```

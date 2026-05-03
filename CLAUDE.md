@@ -55,19 +55,19 @@ See `docs/beads-client-howto.md` for the complete protocol specification includi
 
 ## Development
 
-**Tools**: Go, Python (managed by mise, see `mise.toml`)
+**Tools**: Emacs, `bd` CLI. No Python or mise required — all tooling is shell scripts invoked via `make`.
 
 **Quality checks** (run before committing):
 ```bash
-mise run check   # Run lint + test
-mise run lint    # Check syntax/parens, byte-compile
-mise run test    # Run ERT tests
-mise run build   # Byte-compile all .el files
+make check       # Run lint + test
+make lint        # Check syntax/parens, byte-compile
+make test        # Run ERT tests
+make build       # Byte-compile all .el files
 ```
 
 **Interactive testing**:
 ```bash
-mise run interactive   # Launch Emacs with beads.el loaded
+make interactive   # Launch Emacs with beads.el loaded
 ```
 This starts Emacs with `--init-directory=dev`, loading dev/init.el which sets up load-path and requires beads modules. Run `M-x beads-list` to test.
 
@@ -93,7 +93,7 @@ bd sync               # Sync with git
 
 **Atomic commits as you go** - Create logical commits during development, not after:
 
-1. **Tests must pass** - Never commit breaking changes. Run `mise run check` before every commit.
+1. **Tests must pass** - Never commit breaking changes. Run `make check` before every commit.
 2. **Fix code, not tests** - If tests fail, fix the implementation first. Only modify tests if they are genuinely wrong.
 3. **Commit at logical points**:
    - When a beads task is complete

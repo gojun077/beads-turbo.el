@@ -489,7 +489,7 @@ You can check out the repository and view the project's issues:
 bd daemon
 
 # Launch Emacs with beads.el loaded
-mise run interactive
+make interactive
 ```
 
 Then run `M-x beads-list` to see the beads.el development issues.

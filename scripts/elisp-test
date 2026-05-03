@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# elisp-test: run ERT tests for beads.el.
+# Runs emacs --batch -Q in isolation. Safe for CI.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+test_files=$(find "$ROOT/test" -name "*-test.el" | sort)
+
+if [ -z "$test_files" ]; then
+    echo "No test files found"
+    exit 0
+fi
+
+count=$(echo "$test_files" | wc -l)
+echo "Running $count test file(s)..."
+echo
+
+elisp_code="
+(require 'ert)
+"
+
+for tf in $test_files; do
+    elisp_code="$elisp_code
+(load-file \"$tf\")"
+done
+
+elisp_code="$elisp_code
+
+(ert-run-tests-batch-and-exit)
+"
+
+emacs -Q --batch \
+    -L "$ROOT" \
+    -L "$ROOT/lisp" \
+    --eval "$elisp_code" 2>&1
+
+exit_code=$?
+
+echo
+if [ "$exit_code" -eq 0 ]; then
+    echo "✓ All tests passed"
+else
+    echo "✗ Some tests failed"
+fi
+exit "$exit_code"

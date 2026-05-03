@@ -5,7 +5,7 @@ This directory contains a minimal Emacs configuration for interactive testing of
 ## Usage
 
 ```bash
-mise run interactive
+make interactive
 ```
 
 This launches Emacs with `--init-directory=dev`, which:

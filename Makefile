@@ -14,7 +14,7 @@ DOLT_PORT   := 3310
 MAIN_REPO   := $(shell git rev-parse --git-common-dir | sed 's|/\.git$$||')
 IS_WORKTREE := $(shell [ "$$(git rev-parse --git-common-dir)" = ".git" ] && echo no || echo yes)
 
-.PHONY: setup
+.PHONY: setup lint test build check clean interactive docs docs-view new-test
 
 setup:
 	@echo "==> Checking prerequisites..."
@@ -88,3 +88,40 @@ endif
 	@echo ""
 	@echo "Setup complete! You can now use 'bd' commands."
 	@echo "Run 'bd ready --json' to see available tasks."
+
+# --- Elisp tooling (modeled after ~/dotfiles/bin/ patterns) ---
+
+lint:
+	@scripts/elisp-lint
+
+test:
+	@scripts/elisp-test
+
+build:
+	@scripts/elisp-build
+
+check: lint test
+
+clean:
+	@echo "Removing byte-compiled files..."
+	@find . -name "*.elc" -not -path "./.git/*" -delete
+	@echo "Done."
+
+interactive: build
+	emacs -nw --init-directory=dev
+
+docs:
+	emacs --batch docs/beads.org \
+		--eval "(require 'ox-texinfo)" \
+		-f org-texinfo-export-to-texinfo && \
+	makeinfo --no-split docs/beads.texi -o docs/beads.info
+
+docs-view: docs
+	info ./docs/beads.info
+
+new-test:
+	@if [ -z "$(FEATURE)" ]; then \
+		echo "Usage: make new-test FEATURE=<name>"; \
+		exit 1; \
+	fi
+	@scripts/elisp-new-test "$(FEATURE)"

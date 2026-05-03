@@ -5,7 +5,7 @@ This directory contains ERT (Emacs Lisp Regression Testing) tests for beads.el.
 ## Running Tests
 
 ```bash
-mise run test
+make test
 ```
 
 ## Writing Tests

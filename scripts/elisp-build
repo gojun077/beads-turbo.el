@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# elisp-build: byte-compile all Emacs Lisp source files in the project.
+# Excludes test files, vendor, dev, and hidden directories.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+el_files=$(find "$ROOT" -name "*.el" \
+    -not -path "*/.git/*" \
+    -not -path "*/vendor/*" \
+    -not -path "*/dev/*" \
+    -not -name "*-test.el" \
+    | sort)
+
+if [ -z "$el_files" ]; then
+    echo "No .el files to compile"
+    exit 0
+fi
+
+count=$(echo "$el_files" | wc -l)
+echo "Byte-compiling $count file(s)..."
+echo
+
+FAILED=0
+
+for f in $el_files; do
+    rel="${f#$ROOT/}"
+    printf "Compiling %s..." "$rel"
+
+    compile_out=$(emacs -Q --batch \
+        -L "$ROOT" -L "$ROOT/lisp" \
+        -f batch-byte-compile "$f" 2>&1) || compile_rc=$?
+
+    if [ "${compile_rc:-0}" -ne 0 ]; then
+        echo " FAIL"
+        echo "$compile_out"
+        FAILED=1
+    elif echo "$compile_out" | grep -q "Warning:"; then
+        echo " WARN"
+        echo "$compile_out"
+    elif [ -f "${f}c" ]; then
+        echo " OK (→ ${f#$ROOT/}c)"
+    else
+        echo " OK"
+    fi
+    echo
+    compile_rc=0
+done
+
+if [ "$FAILED" -eq 1 ]; then
+    echo "✗ Build failed"
+    exit 1
+else
+    echo "✓ Build completed successfully"
+fi

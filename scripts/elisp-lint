@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# elisp-lint: check Emacs Lisp syntax (parens + byte-compile) for all .el files.
+# Runs emacs --batch -Q in isolation. Safe for CI.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+el_files=$(find "$ROOT" -name "*.el" \
+    -not -path "*/.git/*" \
+    -not -path "*/vendor/*" \
+    -not -path "*/dev/*" \
+    | sort)
+
+if [ -z "$el_files" ]; then
+    echo "No .el files found"
+    exit 0
+fi
+
+count=$(echo "$el_files" | wc -l)
+echo "Linting $count Emacs Lisp file(s)..."
+echo
+
+FAILED=0
+WARNINGS=0
+
+for f in $el_files; do
+    rel="${f#$ROOT/}"
+    printf "Checking %s..." "$rel"
+
+    paren_out=$(emacs -Q --batch \
+        --eval "(condition-case err
+                   (progn
+                     (find-file \"$f\")
+                     (check-parens)
+                     (kill-emacs 0))
+                 (error
+                   (message \"PAREN-ERROR: %s\" (error-message-string err))
+                   (kill-emacs 1)))" 2>&1) || true
+
+    if echo "$paren_out" | grep -q "PAREN-ERROR"; then
+        echo " FAIL (parens)"
+        echo "$paren_out"
+        FAILED=1
+        continue
+    fi
+
+    compile_out=$(emacs -Q --batch \
+        -L "$ROOT" -L "$ROOT/lisp" \
+        -f batch-byte-compile "$f" 2>&1) || true
+
+    rm -f "${f}c"
+
+    if echo "$compile_out" | grep -q "Error:"; then
+        echo " FAIL (compile error)"
+        echo "$compile_out"
+        FAILED=1
+    elif echo "$compile_out" | grep -q "Warning:"; then
+        echo " WARN"
+        echo "$compile_out"
+        WARNINGS=$((WARNINGS + 1))
+    else
+        echo " OK"
+    fi
+    echo
+done
+
+if [ "$FAILED" -eq 1 ]; then
+    echo "✗ Some checks failed"
+    exit 1
+elif [ "$WARNINGS" -gt 0 ]; then
+    echo "✓ All checks passed with $WARNINGS warning(s)"
+else
+    echo "✓ All checks passed"
+fi
