@@ -1,4 +1,20 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(bd show *)",
+      "Bash(make lint *)",
+      "Bash(git submodule *)",
+      "Bash(bd update *)",
+      "Bash(make check *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(bd close *)",
+      "Bash(git pull *)",
+      "Bash(bd sync *)",
+      "Bash(git push *)",
+      "Bash(git stash *)"
+    ]
+  },
   "enabledPlugins": {
     "beads@beads-marketplace": true
   }
