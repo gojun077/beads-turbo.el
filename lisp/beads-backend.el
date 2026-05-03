@@ -181,6 +181,52 @@ Signals `beads-backend-error' on failure."
                    (list (format "CLI returned invalid JSON: %s"
                                  (buffer-string))))))))))
 
+(defun beads-backend-cli-execute-async (operation args callback &optional project-root)
+  "Execute CLI for OPERATION with ARGS asynchronously.
+
+CALLBACK is called with (ERROR DATA) when the process completes:
+  ERROR is nil on success, or a string describing the error.
+  DATA is the parsed JSON result on success, or nil on failure.
+
+Use `beads-backend-cli-execute' for synchronous operations
+where the caller needs the result immediately."
+  (let* ((backend (beads-backend-for-project))
+         (program (beads-backend-cli-program-path backend))
+         (op-args (funcall (beads-backend-op-to-cli-args backend)
+                           operation args))
+         (extra (when-let ((fn (beads-backend-cli-extra-flags backend)))
+                  (funcall fn operation)))
+         (cmd-args (append extra op-args '("--json")))
+         (out-buffer (generate-new-buffer " *beads-async*"))
+         (default-directory (or project-root default-directory)))
+    (make-process
+     :name "beads-async"
+     :buffer out-buffer
+     :command (append (list program) cmd-args)
+     :sentinel
+     (lambda (process _event)
+       (let ((exit-code (process-exit-status process))
+             (output (with-current-buffer (process-buffer process)
+                       (buffer-string))))
+         (kill-buffer (process-buffer process))
+         (if (zerop exit-code)
+             (condition-case nil
+                 (let ((parsed (json-read-from-string output)))
+                   (funcall callback nil
+                            (if (vectorp parsed)
+                                (append parsed nil)
+                              parsed)))
+               (json-error
+                (funcall callback
+                         (format "CLI returned invalid JSON: %s" output)
+                         nil)))
+           (funcall callback
+                    (format "CLI failed with exit code %d: %s"
+                            exit-code (string-trim output))
+                    nil))))
+     :stderr out-buffer
+     :noquery t)))
+
 (defun beads-backend-cli-call-raw (args &optional project-root)
   "Execute CLI with ARGS without --json, returning exit code.
 PROJECT-ROOT overrides the working directory."

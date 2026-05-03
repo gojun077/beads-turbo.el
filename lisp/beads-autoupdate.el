@@ -24,7 +24,7 @@
 
 ;;; Code:
 
-(declare-function beads-list-refresh "beads-list")
+(declare-function beads-list-refresh-async "beads-list")
 
 (defgroup beads-autoupdate nil
   "Auto-refresh settings for Beads list buffers."
@@ -55,7 +55,7 @@ Can be set in .dir-locals.el to reduce noise:
   "Perform auto-refresh if buffer is still valid."
   (when (and (buffer-live-p (current-buffer))
              (derived-mode-p 'beads-list-mode))
-    (beads-list-refresh (not beads-autoupdate-message))))
+    (beads-list-refresh-async (not beads-autoupdate-message))))
 
 (defun beads-autoupdate--start-timer ()
   "Start the auto-refresh timer for current buffer."

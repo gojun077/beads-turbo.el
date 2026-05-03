@@ -129,6 +129,26 @@ Returns the data on success, signals beads-client-error on failure."
       (beads-backend-error
        (signal 'beads-client-error (cdr err))))))
 
+(defun beads-client-request-async (operation args callback)
+  "Execute OPERATION with ARGS asynchronously via CLI.
+
+CALLBACK is called with (ERROR DATA) when complete:
+  ERROR is nil on success, or a string describing the error.
+  DATA is the parsed result on success, or nil on failure.
+
+Use `beads-client-request' for synchronous (blocking) operations."
+  (let ((project-root (when-let ((db (beads-client--find-database)))
+                        (file-name-directory
+                         (directory-file-name
+                          (file-name-directory db))))))
+    (beads-backend-cli-execute-async
+     operation args
+     (lambda (err data)
+       (if err
+           (funcall callback err nil)
+         (funcall callback nil data)))
+     project-root)))
+
 (defun beads-client--unwrap-single (result)
   "Unwrap RESULT if it is a single-element list.
 Some CLI commands return a one-element array where a single object
@@ -147,6 +167,13 @@ Returns array of issue objects."
   (let ((args (beads-client--plist-to-alist filters)))
     (beads-client-request "list" args)))
 
+(defun beads-client-list-async (callback &optional filters)
+  "Fetch issue list asynchronously with optional FILTERS.
+CALLBACK is called with (ERROR DATA) when complete.
+FILTERS uses the same plist format as `beads-client-list'."
+  (let ((args (beads-client--plist-to-alist filters)))
+    (beads-client-request-async "list" args callback)))
+
 (defun beads-client-show (id)
   "Get single issue by ID.
 Returns issue object."
@@ -154,6 +181,17 @@ Returns issue object."
     (signal 'beads-client-error (list "Issue ID required")))
   (beads-client--unwrap-single
    (beads-client-request "show" `((id . ,id)))))
+
+(defun beads-client-show-async (id callback)
+  "Fetch single issue by ID asynchronously.
+CALLBACK is called with (ERROR DATA) when complete."
+  (unless id
+    (signal 'beads-client-error (list "Issue ID required")))
+  (beads-client-request-async "show" `((id . ,id))
+    (lambda (err data)
+      (if err
+          (funcall callback err nil)
+        (funcall callback nil (beads-client--unwrap-single data))))))
 
 (defun beads-client-ready (&optional filters)
   "Get unblocked issues with optional FILTERS.

@@ -80,16 +80,17 @@ Only active when in beads-list-mode with preview mode enabled."
     (setq beads-preview--timer nil)))
 
 (defun beads-preview--display-issue (issue)
-  "Fetch full issue data and display preview for ISSUE in side window."
+  "Fetch full issue data asynchronously, display preview for ISSUE in side window."
   (when issue
     (let ((issue-id (alist-get 'id issue)))
       (unless (equal issue-id beads-preview--current-issue-id)
         (setq beads-preview--current-issue-id issue-id)
-        (condition-case err
-            (let ((full-issue (beads-client-show issue-id)))
-              (beads-detail-show full-issue))
-          (beads-client-error
-           (message "Preview failed: %s" (error-message-string err))))))))
+        (beads-client-show-async
+         issue-id
+         (lambda (err full-issue)
+           (if err
+               (message "Preview failed: %s" err)
+             (beads-detail-show full-issue))))))))
 
 (defun beads-preview--cleanup ()
   "Full cleanup when preview mode is disabled."

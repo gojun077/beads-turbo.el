@@ -428,6 +428,54 @@ Applies `beads-list--filter' if set, and `beads-list--show-only-marked' filter."
       (beads-client-error
        (message "Failed to fetch issues: %s" (error-message-string err))))))
 
+(defun beads-list-refresh-async (&optional silent)
+  "Fetch issues asynchronously and refresh the display.
+
+When SILENT is non-nil, suppress the refresh message.
+Unlike `beads-list-refresh', this uses `make-process' to fetch
+issues without blocking Emacs. Intended for auto-refresh timers
+and background updates where the user isn't waiting for the result."
+  (let ((buffer (current-buffer)))
+    (beads-client-list-async
+     (lambda (err all-issues)
+       (unless (buffer-live-p buffer)
+         (cl-return-from nil))
+       (with-current-buffer buffer
+         (if err
+             (message "Auto-refresh failed: %s" err)
+           (let* ((issues (if beads-list--filter
+                              (beads-filter-apply beads-list--filter all-issues)
+                            all-issues))
+                  (display-issues (if beads-list--show-only-marked
+                                      (seq-filter (lambda (issue)
+                                                    (member (alist-get 'id issue) beads-list--marked))
+                                                  issues)
+                                    issues))
+                  (effective-sort-mode (beads-list--effective-sort-mode))
+                  (sorted-issues (if (eq effective-sort-mode 'sectioned)
+                                     (beads-list--sectioned-sort display-issues)
+                                   display-issues))
+                  (id-width (beads-list--max-id-width display-issues)))
+             (setq beads-list--issues (append issues nil))
+             (setq tabulated-list-format (beads-list--build-format id-width))
+             (tabulated-list-init-header)
+             (when (eq effective-sort-mode 'sectioned)
+               (setq tabulated-list-sort-key nil))
+             (setq tabulated-list-entries (beads-list-entries sorted-issues))
+             (tabulated-list-print t)
+             (beads-list--add-section-separators)
+             (goto-char (point-min))
+             (beads-list--update-mode-line)
+             (unless silent
+               (let ((filter-msg (if beads-list--filter
+                                     (format " [%s]" (beads-filter-name beads-list--filter))
+                                   ""))
+                     (sort-msg (if (eq effective-sort-mode 'sectioned)
+                                   " (sectioned)"
+                                 "")))
+                 (message "Auto-refreshed %d issues%s%s"
+                          (length beads-list--issues) filter-msg sort-msg))))))))))
+
 (defun beads-list-goto-id (id)
   "Move point to the line with issue ID.
 Returns t if found, nil otherwise."
