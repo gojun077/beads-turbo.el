@@ -26,6 +26,22 @@ This project uses **bd (beads)** for ALL issue tracking. Do NOT use markdown TOD
 - Store AI planning docs in `history/` directory, not repo root
 - `bd <cmd> --help` to discover available flags
 
+### Shell-Safe bd Description Input
+When `bd create`/`update` descriptions or notes contain backticks, `!`, `$(...)`, quotes or multiline text, use `--stdin` heredoc (or `--body-file -`) to prevent shell interpolation:
+
+```bash
+bd create "Title" --stdin <<'EOF'
+Description with `backticks`, "quotes", ! and $(literal) preserved.
+EOF
+
+# For notes without --stdin flag:
+notes=$(cat <<'EOF'
+...
+EOF
+)
+bd update <id> --append-notes "$notes"
+```
+
 ## Quality Gates
 
 Run before every commit when code has changed:
