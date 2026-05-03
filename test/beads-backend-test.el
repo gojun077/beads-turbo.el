@@ -60,7 +60,7 @@
   "Test that br backend does not support bd-specific operations."
   (let ((br (beads-backend--lookup "br")))
     (dolist (op '("types" "duplicates"
-                   "comments-add" "get_mutations" "config_get"))
+                    "comments-add" "config_get"))
       (should-not (beads-backend-supports-p br op)))))
 
 (ert-deftest beads-backend-test-require-operation-signals ()

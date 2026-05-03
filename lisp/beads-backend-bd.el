@@ -106,11 +106,6 @@
      (let ((id (alist-get 'id args))
            (label (alist-get 'label args)))
        (list "label" "remove" id label)))
-    ("get_mutations"
-     (let ((since-id (alist-get 'since_id args)))
-       (if since-id
-           (list "mutations" "--since" since-id)
-         '("mutations"))))
     ("types"
      '("types"))
     ("config_get"
@@ -157,7 +152,7 @@
    :supported-ops '("list" "show" "ready" "create" "update" "update_bulk"
                      "close" "close_bulk"
                      "delete" "stats" "count" "dep_add" "dep_remove" "dep_tree"
-                     "label_add" "label_remove" "get_mutations" "types"
+                      "label_add" "label_remove" "types"
                      "config_get" "config_set" "config_unset"
                       "duplicates" "duplicate"
                      "comments-add" "activity" "lint" "orphans" "stale")

@@ -41,7 +41,7 @@ persistent Dolt SQL server. This has significant CLI surface implications:
 | Command | Affected beads.el Operation | Status |
 |---------|-----------------------------|--------|
 | `bd activity` | `activity` | Broken (bdel-a6p) |
-| `bd mutations` | `get_mutations` | Broken |
+| `bd mutations` | `get_mutations` | Handled (bdel-mrb) |
 | `bd resolve-conflicts` | `resolve-conflicts` | Handled (bdel-itn) |
 | `bd daemon` | N/A (docs only) | Removed — no socket IPC |
 

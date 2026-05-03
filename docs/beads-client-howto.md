@@ -345,20 +345,7 @@ Dependency types:
 
 ### Real-Time Updates
 
-#### get_mutations
-
-Poll for changes to implement live UI updates.
-
-```json
-{
-  "operation": "get_mutations",
-  "args": {"since_id": "mut-12345"}
-}
-```
-
-Response: array of mutation objects with `id`, `type`, `issue_id`, `data`, `timestamp`.
-
-Track `since_id` to get only new mutations. Poll every 1-2 seconds.
+The `bd mutations` command was removed in bd 1.0+. Real-time polling via mutations is not currently available.
 
 ## Issue Object Schema
 

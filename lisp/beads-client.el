@@ -339,13 +339,6 @@ Defaults to \"blocks\"."
   (beads-client-request "label_remove" `((id . ,id)
                                        (label . ,label))))
 
-(defun beads-client-get-mutations (&optional since-id)
-  "Get mutations since SINCE-ID for real-time updates.
-Returns array of mutation objects."
-  (let ((args (when since-id
-                `((since_id . ,since-id)))))
-    (beads-client-request "get_mutations" args)))
-
 (defun beads-client-activity (&optional filters)
   "Fetch activity events with optional FILTERS plist.
 Supported keys: :limit, :mol (issue prefix), :type.
