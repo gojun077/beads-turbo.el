@@ -453,8 +453,10 @@ Uses CLI fallback since RPC does not support comment_add."
 (defun beads-detail--render-vui (buffer issue)
   "Render ISSUE into BUFFER using vui.el components."
   (require 'beads-vui)
-  (let ((refresh-fn (lambda ()
-                      (beads-detail-refresh)))
+    (let ((refresh-fn (lambda ()
+                        (when (buffer-live-p buffer)
+                          (with-current-buffer buffer
+                            (beads-detail-refresh)))))
         (navigate-fn (lambda (id)
                        (when-let ((target (beads-client-show id)))
                          (beads-detail-open target)))))
