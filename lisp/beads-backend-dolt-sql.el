@@ -72,6 +72,10 @@ Set back to t periodically so we retry after transient failures.")
 (defvar beads-backend-dolt-sql--cli-fallback-program nil
   "Path to the bd CLI for fallback execution.")
 
+(defvar beads-dolt-sql--mysql-proc nil)
+(defvar beads-dolt-sql--mysql-output nil)
+(defvar beads-dolt-sql--mysql-params nil)
+
 (defconst beads-dolt-sql--list-sql
   "SELECT JSON_ARRAYAGG(\
 JSON_OBJECT(\
@@ -310,6 +314,53 @@ WHERE i.ephemeral = 0 \
 ORDER BY i.priority ASC, i.created_at DESC"
   "SQL template for the `stale' operation.")
 
+(defun beads-dolt-sql--mysql-filter (_proc string)
+  (setq beads-dolt-sql--mysql-output (concat (or beads-dolt-sql--mysql-output "") string)))
+
+(defun beads-dolt-sql--mysql-sentinel (_proc event)
+  (when (string-match-p "finished\\|exited\\|killed" event)
+    (setq beads-dolt-sql--mysql-proc nil)
+    (setq beads-dolt-sql--mysql-output nil)
+    (setq beads-dolt-sql--mysql-params nil)
+    (beads-backend-dolt-sql--mark-unavailable)))
+
+(defun beads-dolt-sql--start-mysql-proc (dolt)
+  (let* ((host (alist-get 'host dolt "127.0.0.1"))
+         (port (number-to-string (alist-get 'port dolt 3310)))
+         (user (alist-get 'user dolt "root"))
+         (database (alist-get 'database dolt "beads_bdel"))
+         (client (or (executable-find "mysql") (executable-find "mariadb") "mysql"))
+         (buf (generate-new-buffer " *beads-mysql*"))
+         (proc (start-process "beads-mysql" buf client "--batch" "--skip-column-names" "--raw" "--host" host "--port" port "--user" user database)))
+    (set-process-filter proc #'beads-dolt-sql--mysql-filter)
+    (set-process-sentinel proc #'beads-dolt-sql--mysql-sentinel)
+    (setq beads-dolt-sql--mysql-proc proc)
+    (setq beads-dolt-sql--mysql-params dolt)
+    (setq beads-dolt-sql--mysql-output "")
+    proc))
+
+(defun beads-dolt-sql--ensure-mysql-connected ()
+  (if (and beads-dolt-sql--mysql-proc (process-live-p beads-dolt-sql--mysql-proc))
+      beads-dolt-sql--mysql-proc
+    (let ((dolt (beads-backend-dolt-sql--fetch-dolt-params)))
+      (unless dolt (signal 'beads-backend-error '("Dolt SQL server not available")))
+      (when beads-dolt-sql--mysql-proc (delete-process beads-dolt-sql--mysql-proc))
+      (beads-dolt-sql--start-mysql-proc dolt))))
+
+(defun beads-dolt-sql--mysql-query (sql)
+  (let ((proc (beads-dolt-sql--ensure-mysql-connected)))
+    (setq beads-dolt-sql--mysql-output "")
+    (process-send-string proc (concat sql ";\n"))
+    (let ((timeout 5.0) (start (float-time)))
+      (while (and (< (- (float-time) start) timeout) (not (string-suffix-p "\n" (or beads-dolt-sql--mysql-output ""))))
+        (accept-process-output proc 0.05)))
+    (let ((raw (string-trim (or beads-dolt-sql--mysql-output ""))))
+      (when (string-match-p "\\`ERROR\\|WARNING" raw)
+        (signal 'beads-backend-error (list raw)))
+      (condition-case _err
+          (with-temp-buffer (insert raw) (goto-char (point-min)) (let ((obj (json-read))) (if (vectorp obj) (append obj nil) obj)))
+        (json-error (signal 'beads-backend-error (list (format "bad json: %s" raw))))))))
+
 (cl-defun beads-backend-dolt-sql--fetch-dolt-params ()
   "Fetch Dolt SQL server connection params from `bd dolt show --json'.
 Returns nil and sets `beads-dolt-sql--available' to nil on failure.
@@ -347,7 +398,7 @@ Caches result for 60 seconds."
     (cl-return-from beads-backend-dolt-sql--available-p nil))
   (unless beads-dolt-sql--available
     (cl-return-from beads-backend-dolt-sql--available-p nil))
-  (unless (executable-find "mariadb")
+  (unless (or (executable-find "mariadb") (executable-find "mysql"))
     (cl-return-from beads-backend-dolt-sql--available-p nil))
   (and (beads-backend-dolt-sql--fetch-dolt-params) t))
 
@@ -355,46 +406,27 @@ Caches result for 60 seconds."
   "Mark Dolt SQL transport as unavailable."
   (setq beads-dolt-sql--available nil))
 
+(defun beads-backend-dolt-sql--one-shot-mariadb (sql-str dolt)
+  (let* ((host (alist-get 'host dolt "127.0.0.1"))
+         (port (number-to-string (alist-get 'port dolt 3310)))
+         (user (alist-get 'user dolt "root"))
+         (database (alist-get 'database dolt "beads_bdel")))
+    (with-temp-buffer
+       (let* ((default-directory temporary-file-directory)
+             (exit-code (apply #'call-process "mariadb" nil (list t nil) nil (list "-h" host "-P" port "-u" user database "--batch" "--skip-column-names" "--raw" "-e" sql-str))))
+        (goto-char (point-min))
+        (unless (zerop exit-code) (signal 'beads-backend-error (list (format "mariadb failed with exit code %d: %s" exit-code (string-trim (buffer-string))))))
+        (goto-char (point-min))
+        (condition-case nil (let ((output (json-read))) (if (vectorp output) (append output nil) output)) (json-error (signal 'beads-backend-error (list (format "SQL query returned invalid JSON: %s" (buffer-string))))))))))
+
 (defun beads-backend-dolt-sql--execute-sql (sql &optional params)
-  "Execute SQL via mariadb subprocess and return parsed JSON.
-Returns nil on failure."
   (let ((dolt (beads-backend-dolt-sql--fetch-dolt-params)))
-    (unless dolt
-      (signal 'beads-backend-error '("Dolt SQL server not available")))
-    (let* ((host (alist-get 'host dolt "127.0.0.1"))
-           (port (number-to-string (alist-get 'port dolt 3310)))
-           (user (alist-get 'user dolt "root"))
-           (database (alist-get 'database dolt "beads_bdel"))
-           (sql-str sql))
-      (when params
-        (dolist (param params)
-          (setq sql-str
-                (replace-regexp-in-string
-                 "\\?" (if (stringp param)
-                           (concat "'" (replace-regexp-in-string "'" "''" param) "'")
-                         (format "%s" param))
-                 sql-str t t))))
-      (with-temp-buffer
-         (let* ((default-directory temporary-file-directory)
-               (exit-code (apply #'call-process "mariadb" nil
-                                 (list t nil) nil
-                                 (list "-h" host "-P" port "-u" user database
-                                       "--batch" "--skip-column-names" "--raw"
-                                       "-e" sql-str))))
-          (goto-char (point-min))
-          (unless (zerop exit-code)
-            (signal 'beads-backend-error
-                    (list (format "mariadb failed with exit code %d: %s"
-                                  exit-code
-                                  (string-trim (buffer-string))))))
-          (goto-char (point-min))
-          (condition-case nil
-              (let ((output (json-read)))
-                (if (vectorp output) (append output nil) output))
-            (json-error
-             (signal 'beads-backend-error
-                     (list (format "SQL query returned invalid JSON: %s"
-                                   (buffer-string)))))))))))
+    (unless dolt (signal 'beads-backend-error '("Dolt SQL server not available")))
+    (let ((sql-str sql))
+      (when params (dolist (param params) (setq sql-str (replace-regexp-in-string "\\?" (if (stringp param) (concat "'" (replace-regexp-in-string "'" "''" param) "'") (format "%s" param)) sql-str t t))))
+      (if (executable-find "mysql")
+          (condition-case _err (beads-dolt-sql--mysql-query sql-str) (error (beads-backend-dolt-sql--one-shot-mariadb sql-str dolt)))
+        (beads-backend-dolt-sql--one-shot-mariadb sql-str dolt)))))
 
 (defun beads-backend-dolt-sql--execute-list (_args _project-root)
   "Execute `list' operation via direct SQL."
@@ -444,10 +476,10 @@ Returns t if ready, signals an error otherwise."
     (if (called-interactively-p 'any)
         (message "Dolt SQL transport is disabled (beads-dolt-sql-enabled is nil)")
       (signal 'beads-backend-error '("Dolt SQL transport is disabled"))))
-  (unless (executable-find "mariadb")
+  (unless (or (executable-find "mariadb") (executable-find "mysql"))
     (if (called-interactively-p 'any)
-        (message "mariadb executable not found")
-      (signal 'beads-backend-error '("mariadb executable not found"))))
+        (message "mariadb/mysql executable not found")
+      (signal 'beads-backend-error '("mariadb/mysql executable not found"))))
   (let ((params (beads-backend-dolt-sql--fetch-dolt-params)))
     (unless params
       (if (called-interactively-p 'any)
@@ -547,6 +579,10 @@ is available, returns the bd-dolt-sql backend."
   (setq beads-dolt-sql--available t)
   (setq beads-dolt-sql--params nil)
   (setq beads-dolt-sql--params-time nil)
+  (when beads-dolt-sql--mysql-proc (delete-process beads-dolt-sql--mysql-proc))
+  (setq beads-dolt-sql--mysql-proc nil)
+  (setq beads-dolt-sql--mysql-output nil)
+  (setq beads-dolt-sql--mysql-params nil)
   (beads-backend-register beads-backend-dolt-sql)
   (advice-add 'beads-backend--auto-detect
               :around #'beads-backend-dolt-sql--auto-detect-advice)
@@ -559,6 +595,7 @@ is available, returns the bd-dolt-sql backend."
   (interactive)
   (setq beads-dolt-sql-enabled nil)
   (setq beads-dolt-sql--available nil)
+  (when beads-dolt-sql--mysql-proc (delete-process beads-dolt-sql--mysql-proc) (setq beads-dolt-sql--mysql-proc nil) (setq beads-dolt-sql--mysql-output nil) (setq beads-dolt-sql--mysql-params nil))
   (advice-remove 'beads-backend--auto-detect
                  #'beads-backend-dolt-sql--auto-detect-advice)
   (beads-backend-clear-cache)
