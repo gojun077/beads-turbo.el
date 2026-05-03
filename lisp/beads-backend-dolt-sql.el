@@ -329,9 +329,9 @@ ORDER BY i.priority ASC, i.created_at DESC"
          (port (number-to-string (alist-get 'port dolt 3310)))
          (user (alist-get 'user dolt "root"))
          (database (alist-get 'database dolt "beads_bdel"))
-         (client (or (executable-find "mysql") (executable-find "mariadb") "mysql"))
+         (client (or (executable-find "mariadb") (executable-find "mysql") "mariadb"))
          (buf (generate-new-buffer " *beads-mysql*"))
-         (proc (start-process "beads-mysql" buf client "--batch" "--skip-column-names" "--raw" "--host" host "--port" port "--user" user database)))
+         (proc (start-process "beads-mysql" buf client "--batch" "--skip-column-names" "--raw" "--skip-ssl" "--host" host "--port" port "--user" user database)))
     (set-process-filter proc #'beads-dolt-sql--mysql-filter)
     (set-process-sentinel proc #'beads-dolt-sql--mysql-sentinel)
     (setq beads-dolt-sql--mysql-proc proc)
@@ -347,6 +347,19 @@ ORDER BY i.priority ASC, i.created_at DESC"
       (when beads-dolt-sql--mysql-proc (delete-process beads-dolt-sql--mysql-proc))
       (beads-dolt-sql--start-mysql-proc dolt))))
 
+(defun beads-dolt-sql--strip-banner (output)
+  "Strip mariadb/mysql deprecation banners and non-error warnings from OUTPUT.
+Removes lines that are client version banners (e.g. deprecated program name)
+or ssl-verify-server-cert warnings, which are not SQL errors."
+  (with-temp-buffer
+    (insert output)
+    (goto-char (point-min))
+    (while (re-search-forward
+            "^/.*: Deprecated program name.*\n\\|WARNING: option --ssl-verify-server-cert.*\n?"
+            nil t)
+      (replace-match ""))
+    (string-trim (buffer-string))))
+
 (defun beads-dolt-sql--mysql-query (sql)
   (let ((proc (beads-dolt-sql--ensure-mysql-connected)))
     (setq beads-dolt-sql--mysql-output "")
@@ -354,8 +367,9 @@ ORDER BY i.priority ASC, i.created_at DESC"
     (let ((timeout 5.0) (start (float-time)))
       (while (and (< (- (float-time) start) timeout) (not (string-suffix-p "\n" (or beads-dolt-sql--mysql-output ""))))
         (accept-process-output proc 0.05)))
-    (let ((raw (string-trim (or beads-dolt-sql--mysql-output ""))))
-      (when (string-match-p "\\`ERROR\\|WARNING" raw)
+    (let* ((raw (beads-dolt-sql--strip-banner
+                 (string-trim (or beads-dolt-sql--mysql-output "")))))
+      (when (string-match-p "\\`ERROR" raw)
         (signal 'beads-backend-error (list raw)))
       (condition-case _err
           (with-temp-buffer (insert raw) (goto-char (point-min)) (let ((obj (json-read))) (if (vectorp obj) (append obj nil) obj)))

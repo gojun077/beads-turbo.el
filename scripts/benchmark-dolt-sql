@@ -1,0 +1,418 @@
+#!/usr/bin/env bash
+# benchmark-dolt-sql: Benchmark Dolt SQL transport vs bd CLI path end-to-end
+#
+# Measures wall-clock time for each read operation via:
+#   Tier 0: bd CLI (call-process, full Go runtime startup)
+#   Tier 1: mariadb -e one-shot subprocess
+#   Tier 1.5: persistent mysql client (start-process + send-string)
+#
+# Also profiles mariadb subprocess overhead and tests cold vs warm caches.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ITERS=${ITERS:-10}
+RESULTS_DIR="$ROOT/history/benchmark-$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$RESULTS_DIR"
+
+echo "=== Dolt SQL Transport Benchmark ==="
+echo "Date: $(date -Iseconds)"
+echo "Iterations per test: $ITERS"
+echo "Results dir: $RESULTS_DIR"
+echo
+
+cd "$ROOT"
+
+# Verify prerequisites
+if ! bd dolt status >/dev/null 2>&1; then
+    echo "ERROR: Dolt server not running. Run 'bd dolt start' first."
+    exit 1
+fi
+
+if ! command -v mariadb >/dev/null 2>&1; then
+    echo "ERROR: mariadb not found"
+    exit 1
+fi
+
+DOLT_HOST="127.0.0.1"
+DOLT_PORT="3310"
+DOLT_USER="root"
+DOLT_DB="beads_bdel"
+
+ISSUE_COUNT=$(mariadb -h "$DOLT_HOST" -P "$DOLT_PORT" -u "$DOLT_USER" "$DOLT_DB" \
+    --batch --skip-column-names -e "SELECT COUNT(*) FROM issues WHERE ephemeral=0" 2>/dev/null)
+echo "Dataset size: $ISSUE_COUNT issues"
+echo
+
+# ---- Shell-level benchmarks (bd CLI vs mariadb -e) ----
+
+benchmark_shell() {
+    local label="$1"
+    local shift cmd
+    shift
+    cmd=("$@")
+    local total_ms=0 min_ms=999999 max_ms=0
+    local -a times
+
+    for i in $(seq 1 "$ITERS"); do
+        local start_ns end_ns elapsed_ms
+        start_ns=$(date +%s%N)
+        "${cmd[@]}" >/dev/null 2>&1
+        end_ns=$(date +%s%N)
+        elapsed_ms=$(( (end_ns - start_ns) / 1000000 ))
+        times+=("$elapsed_ms")
+        total_ms=$((total_ms + elapsed_ms))
+        if [ "$elapsed_ms" -lt "$min_ms" ]; then min_ms=$elapsed_ms; fi
+        if [ "$elapsed_ms" -gt "$max_ms" ]; then max_ms=$elapsed_ms; fi
+    done
+
+    local avg_ms=$((total_ms / ITERS))
+    echo "$label | avg=${avg_ms}ms min=${min_ms}ms max=${max_ms}ms | samples=${times[*]}"
+}
+
+echo "--- Shell-level benchmarks (bd CLI vs mariadb -e) ---"
+echo
+
+echo "[list]"
+benchmark_shell "bd-cli  " bd list --json
+benchmark_shell "mariadb " mariadb -h "$DOLT_HOST" -P "$DOLT_PORT" -u "$DOLT_USER" "$DOLT_DB" \
+    --batch --skip-column-names --raw -e \
+    "SELECT JSON_ARRAYAGG(JSON_OBJECT('id',id,'title',title,'status',status,'priority',priority)) FROM issues WHERE ephemeral=0"
+echo
+
+echo "[show]"
+benchmark_shell "bd-cli  " bd show bdel-4c4.1 --json
+benchmark_shell "mariadb " mariadb -h "$DOLT_HOST" -P "$DOLT_PORT" -u "$DOLT_USER" "$DOLT_DB" \
+    --batch --skip-column-names --raw -e \
+    "SELECT JSON_OBJECT('id',id,'title',title,'status',status) FROM issues WHERE id='bdel-4c4.1' AND ephemeral=0"
+echo
+
+echo "[ready]"
+benchmark_shell "bd-cli  " bd ready --json
+benchmark_shell "mariadb " mariadb -h "$DOLT_HOST" -P "$DOLT_PORT" -u "$DOLT_USER" "$DOLT_DB" \
+    --batch --skip-column-names --raw -e \
+    "SELECT JSON_ARRAYAGG(JSON_OBJECT('id',i.id,'title',i.title,'status',i.status)) FROM ready_issues r INNER JOIN issues i ON i.id=r.id WHERE i.ephemeral=0"
+echo
+
+echo "[stats]"
+benchmark_shell "bd-cli  " bd stats --json
+benchmark_shell "mariadb " mariadb -h "$DOLT_HOST" -P "$DOLT_PORT" -u "$DOLT_USER" "$DOLT_DB" \
+    --batch --skip-column-names --raw -e \
+    "SELECT JSON_OBJECT('total',(SELECT COUNT(*) FROM issues WHERE ephemeral=0),'open',(SELECT COUNT(*) FROM issues WHERE status='open' AND ephemeral=0),'closed',(SELECT COUNT(*) FROM issues WHERE status='closed' AND ephemeral=0))"
+echo
+
+echo "[count]"
+benchmark_shell "bd-cli  " bd list --json --limit 1
+benchmark_shell "mariadb " mariadb -h "$DOLT_HOST" -P "$DOLT_PORT" -u "$DOLT_USER" "$DOLT_DB" \
+    --batch --skip-column-names --raw -e \
+    "SELECT JSON_OBJECT('count',COUNT(*)) FROM issues WHERE ephemeral=0"
+echo
+
+echo "[stale]"
+benchmark_shell "bd-cli  " bd stale --json
+benchmark_shell "mariadb " mariadb -h "$DOLT_HOST" -P "$DOLT_PORT" -u "$DOLT_USER" "$DOLT_DB" \
+    --batch --skip-column-names --raw -e \
+    "SELECT JSON_ARRAYAGG(JSON_OBJECT('id',id,'title',title,'status',status)) FROM issues WHERE ephemeral=0 AND status IN ('open','in_progress','blocked') AND updated_at < DATE_SUB(NOW(), INTERVAL 14 DAY)"
+echo
+
+# ---- Mariadb subprocess overhead profiling ----
+
+echo
+echo "--- Mariadb subprocess overhead profiling ---"
+echo
+
+echo "[bare mariadb connect + SELECT 1]"
+benchmark_shell "mariadb " mariadb -h "$DOLT_HOST" -P "$DOLT_PORT" -u "$DOLT_USER" "$DOLT_DB" \
+    --batch --skip-column-names -e "SELECT 1"
+
+echo "[mariadb connect only (no query, just exit)]"
+benchmark_shell "mariadb " mariadb -h "$DOLT_HOST" -P "$DOLT_PORT" -u "$DOLT_USER" "$DOLT_DB" \
+    --batch --skip-column-names -e "SELECT 1" -q
+
+echo "[bare bd help (Go runtime startup baseline)]"
+benchmark_shell "bd-help " bd --help
+
+echo
+
+# ---- Cold vs warm cache profiling ----
+
+echo "--- Cold vs warm cache (mariadb -e) ---"
+echo
+
+echo "[Cold: first query after 2s pause]"
+sleep 2
+cold_start=$(date +%s%N)
+mariadb -h "$DOLT_HOST" -P "$DOLT_PORT" -u "$DOLT_USER" "$DOLT_DB" \
+    --batch --skip-column-names --raw -e \
+    "SELECT JSON_ARRAYAGG(JSON_OBJECT('id',id,'title',title,'status',status,'priority',priority)) FROM issues WHERE ephemeral=0" >/dev/null 2>&1
+cold_end=$(date +%s%N)
+cold_ms=$(( (cold_end - cold_start) / 1000000 ))
+echo "Cold query: ${cold_ms}ms"
+
+echo "[Warm: 5 consecutive queries]"
+warm_total=0
+for i in $(seq 1 5); do
+    s=$(date +%s%N)
+    mariadb -h "$DOLT_HOST" -P "$DOLT_PORT" -u "$DOLT_USER" "$DOLT_DB" \
+        --batch --skip-column-names --raw -e \
+        "SELECT JSON_ARRAYAGG(JSON_OBJECT('id',id,'title',title,'status',status,'priority',priority)) FROM issues WHERE ephemeral=0" >/dev/null 2>&1
+    e=$(date +%s%N)
+    ms=$(( (e - s) / 1000000 ))
+    warm_total=$((warm_total + ms))
+    echo "  warm #$i: ${ms}ms"
+done
+warm_avg=$((warm_total / 5))
+echo "Warm average: ${warm_avg}ms (speedup: $((cold_ms / (warm_avg > 0 ? warm_avg : 1)))x)"
+echo
+
+# ---- Elisp-level benchmarks (Tier 0 vs Tier 1 vs Tier 1.5) ----
+
+ELISP_BENCH="$RESULTS_DIR/elisp-bench.el"
+
+cat > "$ELISP_BENCH" <<'ELISP_EOF'
+(require 'cl-lib)
+(require 'json)
+(require 'beads-backend)
+(require 'beads-backend-bd)
+(require 'beads-backend-dolt-sql)
+(require 'beads-client)
+
+(defvar bench-iters 10)
+(defvar bench-results nil)
+
+(defun bench--time-it (fn)
+  (let ((times nil))
+    (dotimes (_ bench-iters)
+      (garbage-collect)
+      (let* ((start (float-time))
+             (_ (funcall fn))
+             (elapsed (* 1000.0 (- (float-time) start))))
+        (push elapsed times)))
+    (nreverse times)))
+
+(defun bench--stats (times)
+  (let* ((sorted (sort (copy-sequence times) #'<))
+         (n (length sorted))
+         (total (cl-reduce #'+ sorted))
+         (avg (/ total n 1.0))
+         (min (car sorted))
+         (max (car (last sorted))))
+    (list :avg avg :min min :max max :samples sorted)))
+
+(defun bench--format-row (label stats)
+  (format "%-20s | avg=%6.1fms min=%6.1fms max=%6.1fms"
+          label
+          (plist-get stats :avg)
+          (plist-get stats :min)
+          (plist-get stats :max)))
+
+;; ---- Setup ----
+(setq beads-dolt-sql-enabled t)
+(setq beads-dolt-sql--available t)
+(setq beads-dolt-sql--params nil)
+(setq beads-dolt-sql--params-time nil)
+
+;; Pre-warm dolt params cache
+(beads-backend-dolt-sql--fetch-dolt-params)
+
+;; Pre-warm persistent mysql client
+(when (and beads-dolt-sql--mysql-proc (process-live-p beads-dolt-sql--mysql-proc))
+  (delete-process beads-dolt-sql--mysql-proc)
+  (setq beads-dolt-sql--mysql-proc nil))
+
+;; ---- Cold cache benchmark ----
+(message "\n--- Cold cache (first call per operation) ---\n")
+
+;; Cold: clear all caches
+(setq beads-dolt-sql--params nil)
+(setq beads-dolt-sql--params-time nil)
+(when (and beads-dolt-sql--mysql-proc (process-live-p beads-dolt-sql--mysql-proc))
+  (delete-process beads-dolt-sql--mysql-proc)
+  (setq beads-dolt-sql--mysql-proc nil))
+
+(let* ((start (float-time))
+       (_ (beads-backend-dolt-sql--execute-list nil default-directory))
+       (elapsed (* 1000.0 (- (float-time) start))))
+  (message "Cold list (SQL Tier 1.5): %.1fms" elapsed))
+
+;; ---- Warm cache benchmarks ----
+
+(message "\n--- Warm cache benchmarks (%d iterations) ---\n" bench-iters)
+
+;; list
+(let* ((cli-times (bench--time-it
+                   (lambda ()
+                     (let ((default-directory (or (beads-client--project-root) default-directory)))
+                       (with-temp-buffer
+                         (apply #'call-process "bd" nil t nil '("list" "--json"))
+                         (goto-char (point-min))
+                         (json-read))))))
+       (cli-stats (bench--stats cli-times))
+       (sql-times (bench--time-it
+                   (lambda ()
+                     (beads-backend-dolt-sql--execute-list nil default-directory))))
+       (sql-stats (bench--stats sql-times))
+       (cli-avg (plist-get cli-stats :avg))
+       (sql-avg (plist-get sql-stats :avg))
+       (speedup (if (> sql-avg 0) (/ cli-avg sql-avg 1.0) 0)))
+  (message "[list]")
+  (message "%s" (bench--format-row "bd-cli" cli-stats))
+  (message "%s" (bench--format-row "dolt-sql" sql-stats))
+  (message "Speedup: %.1fx" speedup))
+
+;; show
+(let* ((cli-times (bench--time-it
+                   (lambda ()
+                     (let ((default-directory (or (beads-client--project-root) default-directory)))
+                       (with-temp-buffer
+                         (apply #'call-process "bd" nil t nil '("show" "bdel-4c4.1" "--json"))
+                         (goto-char (point-min))
+                         (json-read))))))
+       (cli-stats (bench--stats cli-times))
+       (sql-times (bench--time-it
+                   (lambda ()
+                     (beads-backend-dolt-sql--execute-show '((id . "bdel-4c4.1")) default-directory))))
+       (sql-stats (bench--stats sql-times))
+       (cli-avg (plist-get cli-stats :avg))
+       (sql-avg (plist-get sql-stats :avg))
+       (speedup (if (> sql-avg 0) (/ cli-avg sql-avg 1.0) 0)))
+  (message "\n[show]")
+  (message "%s" (bench--format-row "bd-cli" cli-stats))
+  (message "%s" (bench--format-row "dolt-sql" sql-stats))
+  (message "Speedup: %.1fx" speedup))
+
+;; ready
+(let* ((cli-times (bench--time-it
+                   (lambda ()
+                     (let ((default-directory (or (beads-client--project-root) default-directory)))
+                       (with-temp-buffer
+                         (apply #'call-process "bd" nil t nil '("ready" "--json"))
+                         (goto-char (point-min))
+                         (json-read))))))
+       (cli-stats (bench--stats cli-times))
+       (sql-times (bench--time-it
+                   (lambda ()
+                     (beads-backend-dolt-sql--execute-ready nil default-directory))))
+       (sql-stats (bench--stats sql-times))
+       (cli-avg (plist-get cli-stats :avg))
+       (sql-avg (plist-get sql-stats :avg))
+       (speedup (if (> sql-avg 0) (/ cli-avg sql-avg 1.0) 0)))
+  (message "\n[ready]")
+  (message "%s" (bench--format-row "bd-cli" cli-stats))
+  (message "%s" (bench--format-row "dolt-sql" sql-stats))
+  (message "Speedup: %.1fx" speedup))
+
+;; stats
+(let* ((cli-times (bench--time-it
+                   (lambda ()
+                     (let ((default-directory (or (beads-client--project-root) default-directory)))
+                       (with-temp-buffer
+                         (apply #'call-process "bd" nil t nil '("stats" "--json"))
+                         (goto-char (point-min))
+                         (json-read))))))
+       (cli-stats (bench--stats cli-times))
+       (sql-times (bench--time-it
+                   (lambda ()
+                     (beads-backend-dolt-sql--execute-stats nil default-directory))))
+       (sql-stats (bench--stats sql-times))
+       (cli-avg (plist-get cli-stats :avg))
+       (sql-avg (plist-get sql-stats :avg))
+       (speedup (if (> sql-avg 0) (/ cli-avg sql-avg 1.0) 0)))
+  (message "\n[stats]")
+  (message "%s" (bench--format-row "bd-cli" cli-stats))
+  (message "%s" (bench--format-row "dolt-sql" sql-stats))
+  (message "Speedup: %.1fx" speedup))
+
+;; count
+(let* ((cli-times (bench--time-it
+                   (lambda ()
+                     (let ((default-directory (or (beads-client--project-root) default-directory)))
+                       (with-temp-buffer
+                         (apply #'call-process "bd" nil t nil '("list" "--json" "--limit" "1"))
+                         (goto-char (point-min))
+                         (json-read))))))
+       (cli-stats (bench--stats cli-times))
+       (sql-times (bench--time-it
+                   (lambda ()
+                     (beads-backend-dolt-sql--execute-count nil default-directory))))
+       (sql-stats (bench--stats sql-times))
+       (cli-avg (plist-get cli-stats :avg))
+       (sql-avg (plist-get sql-stats :avg))
+       (speedup (if (> sql-avg 0) (/ cli-avg sql-avg 1.0) 0)))
+  (message "\n[count]")
+  (message "%s" (bench--format-row "bd-cli" cli-stats))
+  (message "%s" (bench--format-row "dolt-sql" sql-stats))
+  (message "Speedup: %.1fx" speedup))
+
+;; stale
+(let* ((cli-times (bench--time-it
+                   (lambda ()
+                     (let ((default-directory (or (beads-client--project-root) default-directory)))
+                       (with-temp-buffer
+                         (apply #'call-process "bd" nil t nil '("stale" "--json"))
+                         (goto-char (point-min))
+                         (json-read))))))
+       (cli-stats (bench--stats cli-times))
+       (sql-times (bench--time-it
+                   (lambda ()
+                     (beads-backend-dolt-sql--execute-stale '((days . 365)) default-directory))))
+       (sql-stats (bench--stats sql-times))
+       (cli-avg (plist-get cli-stats :avg))
+       (sql-avg (plist-get sql-stats :avg))
+       (speedup (if (> sql-avg 0) (/ cli-avg sql-avg 1.0) 0)))
+  (message "\n[stale]")
+  (message "%s" (bench--format-row "bd-cli" cli-stats))
+  (message "%s" (bench--format-row "dolt-sql" sql-stats))
+  (message "Speedup: %.1fx" speedup))
+
+;; ---- Tier 1 vs Tier 1.5 profiling ----
+(message "\n--- Tier 1 (one-shot mariadb -e) vs Tier 1.5 (persistent mysql client) ---\n")
+
+;; Force Tier 1 by killing persistent client
+(when (and beads-dolt-sql--mysql-proc (process-live-p beads-dolt-sql--mysql-proc))
+  (delete-process beads-dolt-sql--mysql-proc)
+  (setq beads-dolt-sql--mysql-proc nil))
+
+;; Tier 1: one-shot mariadb
+(let* ((tier1-times (bench--time-it
+                     (lambda ()
+                       (let ((dolt (beads-backend-dolt-sql--fetch-dolt-params)))
+                         (beads-backend-dolt-sql--one-shot-mariadb
+                          beads-dolt-sql--list-sql dolt)))))
+       (tier1-stats (bench--stats tier1-times)))
+
+  ;; Tier 1.5: ensure persistent client is up
+  (beads-dolt-sql--ensure-mysql-connected)
+
+  (let* ((tier15-times (bench--time-it
+                        (lambda ()
+                          (beads-dolt-sql--mysql-query beads-dolt-sql--list-sql))))
+         (tier15-stats (bench--stats tier15-times))
+         (t1-avg (plist-get tier1-stats :avg))
+         (t15-avg (plist-get tier15-stats :avg))
+         (speedup (if (> t15-avg 0) (/ t1-avg t15-avg 1.0) 0)))
+    (message "[list - Tier comparison]")
+    (message "%s" (bench--format-row "Tier1-one-shot" tier1-stats))
+    (message "%s" (bench--format-row "Tier1.5-persist" tier15-stats))
+    (message "Speedup: %.1fx" speedup)))
+
+;; Clean up
+(when (and beads-dolt-sql--mysql-proc (process-live-p beads-dolt-sql--mysql-proc))
+  (delete-process beads-dolt-sql--mysql-proc))
+
+(message "\nBenchmark complete.")
+ELISP_EOF
+
+echo "--- Elisp-level benchmarks (Tier 0 vs Tier 1 vs Tier 1.5) ---"
+echo
+
+emacs -Q --batch \
+    -L "$ROOT" \
+    -L "$ROOT/lisp" \
+    -L "$ROOT/vendor/vui.el" \
+    --eval "(setq default-directory \"$ROOT/\")" \
+    -l "$ELISP_BENCH" 2>&1 | tee "$RESULTS_DIR/elisp-bench-results.txt"
+
+echo
+echo "=== All benchmark results saved to $RESULTS_DIR ==="
+echo "Files:"
+ls -la "$RESULTS_DIR/"
