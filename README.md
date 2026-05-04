@@ -77,6 +77,13 @@ With the built-in `:vc` keyword:
 (require 'beads)
 ```
 
+> **Note:** When cloning the repository, make sure to also pull the
+> vendored `vui.el` submodule under `vendor/vui.el`. Either clone with
+> `git clone --recurse-submodules <url>`, or, if you've already cloned,
+> run `git submodule update --init --recursive` from the repo root.
+> A leading `-` in `git submodule status` indicates the submodule has
+> not been initialized yet.
+
 ### With straight.el
 
 ```elisp
