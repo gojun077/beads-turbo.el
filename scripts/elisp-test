@@ -16,32 +16,29 @@ count=$(echo "$test_files" | wc -l)
 echo "Running $count test file(s)..."
 echo
 
-elisp_code="
-(require 'ert)
-"
+tmpfile=$(mktemp --suffix=.el)
+{
+  echo "(require 'ert)"
+  for tf in $test_files; do
+    echo "(load-file \"$tf\")"
+  done
+  echo
+  echo "(ert-run-tests-batch-and-exit)"
+} >"$tmpfile"
 
-for tf in $test_files; do
-    elisp_code="$elisp_code
-(load-file \"$tf\")"
-done
-
-elisp_code="$elisp_code
-
-(ert-run-tests-batch-and-exit)
-"
-
+rc=0
 emacs -Q --batch \
     -L "$ROOT" \
     -L "$ROOT/lisp" \
     -L "$ROOT/vendor/vui.el" \
-    --eval "$elisp_code" 2>&1
+    -l "$tmpfile" 2>&1 || rc=$?
 
-exit_code=$?
+rm -f "$tmpfile"
 
 echo
-if [ "$exit_code" -eq 0 ]; then
+if [ "$rc" -eq 0 ]; then
     echo "✓ All tests passed"
 else
     echo "✗ Some tests failed"
 fi
-exit "$exit_code"
+exit "$rc"
