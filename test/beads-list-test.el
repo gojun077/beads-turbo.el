@@ -425,6 +425,42 @@
       (beads-list-refresh-async)
       (should t))))
 
+(ert-deftest beads-list-test-refresh-async-preserves-point ()
+  "Auto-refresh must not yank the cursor back to the top of the buffer.
+
+Regression test for bdel-efx: `beads-list-refresh-async' previously
+called `(goto-char (point-min))' unconditionally after rebuilding the
+table, clobbering the user's cursor position every time the auto-refresh
+timer fired."
+  (let* ((issues (mapcar (lambda (i)
+                           `((id . ,(format "bd-%03d" i))
+                             (title . ,(format "Issue %d" i))
+                             (status . "open")
+                             (priority . 2)
+                             (issue_type . "task")
+                             (created_at . "2025-01-01T00:00:00Z")
+                             (updated_at . "2025-01-01T00:00:00Z")))
+                         (number-sequence 1 5)))
+         (target-id "bd-003"))
+    (with-temp-buffer
+      (cl-letf (((symbol-function 'beads-client-list-async)
+                 (lambda (cb &rest _args) (funcall cb nil issues)))
+                ;; Stub the hint helper (defined in beads.el, which the
+                ;; test does not load) so beads-list-mode setup doesn't
+                ;; signal void-function.
+                ((symbol-function 'beads-show-hint)
+                 (lambda () nil)))
+        (beads-list-mode)
+        ;; Initial population.
+        (beads-list-refresh-async)
+        ;; Move point to a specific row.
+        (should (beads-list-goto-id target-id))
+        (should (equal (tabulated-list-get-id) target-id))
+        ;; Fire another async refresh and confirm point stays put.
+        (beads-list-refresh-async)
+        (should (equal (tabulated-list-get-id) target-id))
+        (should-not (= (point) (point-min)))))))
+
 (ert-deftest beads-list-test-list-command-creates-buffer ()
   "Test that beads-list creates and switches to issue buffer."
   :tags '(:integration)

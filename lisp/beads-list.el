@@ -434,7 +434,11 @@ Applies `beads-list--filter' if set, and `beads-list--show-only-marked' filter."
 When SILENT is non-nil, suppress the refresh message.
 Unlike `beads-list-refresh', this uses `make-process' to fetch
 issues without blocking Emacs. Intended for auto-refresh timers
-and background updates where the user isn't waiting for the result."
+and background updates where the user isn't waiting for the result.
+
+Preserves point and window-start across the rebuild so an auto-refresh
+fired while the user is scrolling does not yank the cursor back to the
+top of the buffer (see bdel-efx)."
   (let ((buffer (current-buffer)))
     (beads-client-list-async
      (lambda (err all-issues)
@@ -443,7 +447,11 @@ and background updates where the user isn't waiting for the result."
        (with-current-buffer buffer
           (if err
               (message "Auto-refresh failed: %s" (if (> (length err) 200) (concat (substring err 0 197) "...") err))
-            (let* ((issues (if beads-list--filter
+            (let* ((saved-id (tabulated-list-get-id))
+                   (saved-line (line-number-at-pos))
+                   (saved-start (when-let ((win (get-buffer-window buffer)))
+                                  (window-start win)))
+                   (issues (if beads-list--filter
                               (beads-filter-apply beads-list--filter all-issues)
                             all-issues))
                   (display-issues (if beads-list--show-only-marked
@@ -464,7 +472,18 @@ and background updates where the user isn't waiting for the result."
              (setq tabulated-list-entries (beads-list-entries sorted-issues))
              (tabulated-list-print t)
              (beads-list--add-section-separators)
-             (goto-char (point-min))
+             ;; Restore point: prefer matching the issue id, then the
+             ;; line number, then top-of-buffer as a last resort.
+             (if saved-id
+                 (unless (beads-list-goto-id saved-id)
+                   (goto-char (point-min))
+                   (forward-line (1- (min saved-line
+                                          (line-number-at-pos (point-max))))))
+               (goto-char (point-min)))
+             ;; Restore window-start so the visible region doesn't jump.
+             (when-let ((win (get-buffer-window buffer))
+                        (start saved-start))
+               (set-window-start win (min start (point-max))))
              (beads-list--update-mode-line)
              (unless silent
                (let ((filter-msg (if beads-list--filter
