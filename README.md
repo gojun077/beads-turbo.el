@@ -444,6 +444,20 @@ Or globally:
 (setq beads-cli-program "br")
 ```
 
+### Direct Dolt SQL read path (optional)
+
+`beads-backend-dolt-sql` is an optional read-path accelerator that
+sends `list`/`show`/`ready`/`stats`/`count`/`stale` queries directly
+to the local Dolt SQL server via a long-lived `mysql`/`mariadb` client
+session — avoiding the per-call overhead of forking `bd`. Writes
+always fall back to the `bd` CLI.
+
+Toggle it from the menu: `M-x beads-menu` → `,` (Config…) → `d`
+(`[ ] Dolt SQL read path` / `[x] Dolt SQL read path`). The toggle
+calls `beads-backend-dolt-sql-activate` /
+`beads-backend-dolt-sql-deactivate` and respects the
+`beads-dolt-sql-enabled` custom variable.
+
 ## Development
 
 This project uses [Beads](https://github.com/gastownhall/beads) itself for issue tracking.

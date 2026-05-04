@@ -62,6 +62,10 @@
 (declare-function beads-detail-edit-form "beads-detail")
 (declare-function beads-hierarchy-show "beads-hierarchy")
 
+(defvar beads-dolt-sql-enabled)
+(declare-function beads-backend-dolt-sql-activate "beads-backend-dolt-sql")
+(declare-function beads-backend-dolt-sql-deactivate "beads-backend-dolt-sql")
+
 (defgroup beads-transient nil
   "Transient menus for Beads issue tracker."
   :group 'beads)
@@ -593,10 +597,33 @@ Uses canonical order from `beads-list--column-order' for insertion."
   ["Navigation"
    ("q" "Back" transient-quit-one)])
 
+(defun beads-transient--dolt-sql-enabled-p ()
+  "Return non-nil if Dolt SQL transport is currently enabled."
+  (and (boundp 'beads-dolt-sql-enabled) beads-dolt-sql-enabled))
+
+(transient-define-suffix beads-transient-toggle-dolt-sql ()
+  "Toggle the Dolt SQL read-path transport.
+When enabled, read operations (list/show/ready/stats/count/stale)
+prefer a persistent mysql client session against the local Dolt
+SQL server for speed; writes always fall back to the bd CLI.
+See `beads-backend-dolt-sql-activate' and
+`beads-backend-dolt-sql-deactivate'."
+  :description (lambda ()
+                 (format "%s Dolt SQL read path"
+                         (if (beads-transient--dolt-sql-enabled-p)
+                             "[x]" "[ ]")))
+  (interactive)
+  (require 'beads-backend-dolt-sql)
+  (if (beads-transient--dolt-sql-enabled-p)
+      (beads-backend-dolt-sql-deactivate)
+    (beads-backend-dolt-sql-activate)))
+
 (transient-define-prefix beads-config-menu ()
   "Configure beads list view."
+  :transient-suffix 'transient--do-call
   ["Configuration"
-   ("c" "Columns..." beads-columns-menu)]
+   ("c" "Columns..." beads-columns-menu)
+   ("d" beads-transient-toggle-dolt-sql)]
   ["Navigation"
    ("q" "Back" transient-quit-one)])
 
@@ -771,6 +798,7 @@ Uses canonical order from `beads-list--column-order' for insertion."
    ["More"
     ("B" "Bulk menu..." beads-mark-menu)
     ("V" "Views..." beads-views-menu)
+    ("," "Config..." beads-config-menu)
     ""
     ("?" "Describe mode" describe-mode)
     ("q" "Quit" transient-quit-one)]])
@@ -795,6 +823,7 @@ Uses canonical order from `beads-list--column-order' for insertion."
     ("x" "Close issue" beads-close-issue)
     ("R" "Reopen issue" beads-reopen-issue)
     ("D" "Delete issue" beads-delete-issue)
+    ("," "Config..." beads-config-menu)
     ""
     ("?" "Describe mode" describe-mode)
     ("q" "Quit" transient-quit-one)]])

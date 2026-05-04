@@ -206,5 +206,48 @@
     (should (keymapp (lookup-key beads-detail-mode-map (kbd "e"))))
     (should (eq (lookup-key beads-detail-mode-map (kbd "q")) #'quit-window))))
 
+;;; Dolt SQL toggle tests
+
+(require 'beads-backend-dolt-sql)
+
+(ert-deftest beads-transient-test-dolt-sql-toggle-defined ()
+  "Test that beads-transient-toggle-dolt-sql is defined and interactive."
+  (should (fboundp 'beads-transient-toggle-dolt-sql))
+  (should (commandp 'beads-transient-toggle-dolt-sql)))
+
+(ert-deftest beads-transient-test-dolt-sql-enabled-predicate ()
+  "Test the enabled-p predicate reflects beads-dolt-sql-enabled."
+  (let ((beads-dolt-sql-enabled nil))
+    (should-not (beads-transient--dolt-sql-enabled-p)))
+  (let ((beads-dolt-sql-enabled t))
+    (should (beads-transient--dolt-sql-enabled-p))))
+
+(ert-deftest beads-transient-test-dolt-sql-toggle-activates ()
+  "Test that toggling from disabled calls the activate function."
+  (let ((beads-dolt-sql-enabled nil)
+        (called nil))
+    (cl-letf (((symbol-function 'beads-backend-dolt-sql-activate)
+               (lambda () (setq called 'activate)))
+              ((symbol-function 'beads-backend-dolt-sql-deactivate)
+               (lambda () (setq called 'deactivate))))
+      (call-interactively 'beads-transient-toggle-dolt-sql)
+      (should (eq called 'activate)))))
+
+(ert-deftest beads-transient-test-dolt-sql-toggle-deactivates ()
+  "Test that toggling from enabled calls the deactivate function."
+  (let ((beads-dolt-sql-enabled t)
+        (called nil))
+    (cl-letf (((symbol-function 'beads-backend-dolt-sql-activate)
+               (lambda () (setq called 'activate)))
+              ((symbol-function 'beads-backend-dolt-sql-deactivate)
+               (lambda () (setq called 'deactivate))))
+      (call-interactively 'beads-transient-toggle-dolt-sql)
+      (should (eq called 'deactivate)))))
+
+(ert-deftest beads-transient-test-config-menu-defined ()
+  "Test that beads-config-menu is a transient prefix."
+  (should (commandp 'beads-config-menu))
+  (should (get 'beads-config-menu 'transient--prefix)))
+
 (provide 'beads-transient-test)
 ;;; beads-transient-test.el ends here

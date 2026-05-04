@@ -92,6 +92,10 @@ Hints are shown when entering beads modes to help with discoverability."
 (require 'beads-project)
 
 (autoload 'beads-hierarchy-show "beads-hierarchy" "Display dependency tree." t)
+(autoload 'beads-backend-dolt-sql-activate "beads-backend-dolt-sql"
+  "Activate Dolt SQL transport for the current Emacs session." t)
+(autoload 'beads-backend-dolt-sql-deactivate "beads-backend-dolt-sql"
+  "Deactivate Dolt SQL transport, reverting to bd CLI for all operations." t)
 
 ;;;###autoload
 (defun beads ()
