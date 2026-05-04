@@ -40,8 +40,8 @@
 (declare-function beads-list "beads-list")
 (declare-function beads-list-refresh "beads-list")
 (declare-function beads-form-open "beads-form")
-(declare-function beads-show-hint "beads")
 (declare-function beads-hierarchy-show "beads-hierarchy")
+(require 'beads-core)
 (declare-function evil-set-initial-state "evil-core")
 (declare-function evil-make-overriding-map "evil-core")
 

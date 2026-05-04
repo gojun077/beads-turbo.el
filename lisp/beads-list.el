@@ -34,9 +34,9 @@
 (require 'tabulated-list)
 (require 'seq)
 (require 'cl-lib)
+(require 'beads-core)
 
 (declare-function beads-menu "beads-transient")
-(declare-function beads-show-hint "beads")
 (declare-function beads-form-open "beads-form")
 (declare-function beads-edit-field-minibuffer "beads-edit")
 (declare-function beads-edit-field-completing "beads-edit")

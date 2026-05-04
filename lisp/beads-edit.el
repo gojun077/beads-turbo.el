@@ -25,9 +25,7 @@
 ;;; Code:
 
 (require 'beads-client)
-
-(defvar beads-verbose)
-(declare-function beads-show-hint "beads")
+(require 'beads-core)
 
 (defgroup beads-edit nil
   "Dedicated editing buffers for Beads issues."

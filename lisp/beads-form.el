@@ -28,8 +28,8 @@
 (require 'wid-edit)
 (require 'cl-lib)
 (require 'beads-client)
+(require 'beads-core)
 
-(declare-function beads-show-hint "beads")
 (declare-function vui-mount "vui")
 (declare-function vui-component "vui")
 (declare-function beads-vui-form-view "beads-vui")
