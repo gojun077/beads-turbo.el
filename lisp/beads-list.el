@@ -1085,7 +1085,11 @@ With completion for known assignees from current issues."
 (defun beads-list ()
   "Open the Beads issue list buffer.
 If beads-project.el is loaded and per-project buffers are enabled,
-creates a project-specific buffer."
+creates a project-specific buffer.
+
+Pins `default-directory' in the resulting buffer to the project root so
+that subsequent refreshes always resolve to the correct beads database,
+even when multiple projects are open simultaneously."
   (interactive)
   (let* ((buffer-name (if (featurep 'beads-project)
                           (beads-project-buffer-name)
@@ -1096,6 +1100,10 @@ creates a project-specific buffer."
       (unless (eq major-mode 'beads-list-mode)
         (beads-list-mode))
       (setq beads-list--project-root project-root)
+      ;; Pin default-directory to the project root so client lookups
+      ;; (which key off default-directory) always target this project,
+      ;; regardless of which buffer the user was in when refresh fires.
+      (setq default-directory project-root)
       (beads-list-refresh))
     (switch-to-buffer buffer)))
 

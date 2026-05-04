@@ -167,6 +167,35 @@
           (should (null (beads-client--find-database))))
       (delete-directory temp-dir t))))
 
+(ert-deftest beads-client-test-find-database-multi-project-cache ()
+  "Test that the per-directory cache returns the correct DB for each project.
+
+Regression test for bdel-91f.3: when two beads projects are open in the
+same Emacs session, looking up the database from one project must not
+return the cached path from the other project."
+  (let ((proj-a (make-temp-file "beads-test-proj-a-" t))
+        (proj-b (make-temp-file "beads-test-proj-b-" t)))
+    (unwind-protect
+        (let ((meta-a (expand-file-name ".beads/metadata.json" proj-a))
+              (meta-b (expand-file-name ".beads/metadata.json" proj-b)))
+          (make-directory (file-name-directory meta-a) t)
+          (make-directory (file-name-directory meta-b) t)
+          (write-region "{}" nil meta-a)
+          (write-region "{}" nil meta-b)
+          (beads-client-clear-cache)
+          ;; First lookup from project A populates the cache for A.
+          (let ((default-directory proj-a))
+            (should (equal (beads-client--find-database) meta-a)))
+          ;; Lookup from project B (within TTL) must NOT return A's cached path.
+          (let ((default-directory proj-b))
+            (should (equal (beads-client--find-database) meta-b)))
+          ;; Lookup from project A again still resolves to A.
+          (let ((default-directory proj-a))
+            (should (equal (beads-client--find-database) meta-a))))
+      (delete-directory proj-a t)
+      (delete-directory proj-b t)
+      (beads-client-clear-cache))))
+
 ;;; Request dispatch tests (mock the CLI)
 
 (ert-deftest beads-client-test-request-dispatches-to-cli ()

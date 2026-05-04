@@ -34,53 +34,63 @@
 
 (define-error 'beads-client-error "Beads client error")
 
+(defvar beads-client--db-cache (make-hash-table :test 'equal)
+  "Cache of resolved DB paths.
+Hash table keyed by the absolute search directory; each value is a
+cons cell (DB-PATH . CACHE-TIME).  Keying by directory lets multiple
+projects coexist in the same Emacs session without one project's
+cache poisoning another's lookup.")
+(defconst beads-client--cache-ttl 10)
+
+;; Backwards-compatible aliases for code or tests that may inspect
+;; the previous globals.  They are no longer used internally.
 (defvar beads-client--cached-db-path nil)
 (defvar beads-client--cache-time nil)
-(defconst beads-client--cache-ttl 10)
 
 (cl-defun beads-client--find-database ()
   "Find the Beads database path using auto-discovery.
-Checks BEADS_DIR env, BEADS_DB env, then walks up from default-directory."
-  (when (and beads-client--cached-db-path
-             beads-client--cache-time
-             (< (float-time (time-since beads-client--cache-time))
-                beads-client--cache-ttl))
-    (when (file-exists-p beads-client--cached-db-path)
-      (cl-return-from beads-client--find-database beads-client--cached-db-path)))
+Checks BEADS_DIR env, BEADS_DB env, then walks up from default-directory.
+Results are cached per search directory so multiple projects opened in
+the same Emacs session each resolve to their own database."
+  (let* ((search-dir (expand-file-name default-directory))
+         (cached (gethash search-dir beads-client--db-cache)))
+    (when (and cached
+               (< (float-time (time-since (cdr cached)))
+                  beads-client--cache-ttl)
+               (file-exists-p (car cached)))
+      (cl-return-from beads-client--find-database (car cached)))
 
-  (let ((db-path
-         (or
-          (let ((beads-dir (getenv "BEADS_DIR")))
-            (when beads-dir
-              (setq beads-dir (expand-file-name beads-dir))
-              (setq beads-dir (beads-client--follow-redirect beads-dir))
-              (beads-client--find-db-in-dir beads-dir)))
+    (let ((db-path
+           (or
+            (let ((beads-dir (getenv "BEADS_DIR")))
+              (when beads-dir
+                (setq beads-dir (expand-file-name beads-dir))
+                (setq beads-dir (beads-client--follow-redirect beads-dir))
+                (beads-client--find-db-in-dir beads-dir)))
 
-          (let ((beads-db (getenv "BEADS_DB")))
-            (when beads-db
-              (expand-file-name beads-db)))
+            (let ((beads-db (getenv "BEADS_DB")))
+              (when beads-db
+                (expand-file-name beads-db)))
 
-          (let ((dir (expand-file-name default-directory)))
-            (while (and dir
-                        (not (string= dir "/"))
-                        (not (string= dir (expand-file-name "~/.."))))
-              (let* ((beads-dir (expand-file-name ".beads" dir))
-                     (redirected-dir (beads-client--follow-redirect beads-dir))
-                     (db (beads-client--find-db-in-dir redirected-dir)))
-                (when db
-                  (cl-return-from beads-client--find-database
-                                  (progn
-                                    (setq beads-client--cached-db-path db)
-                                    (setq beads-client--cache-time (current-time))
-                                    db)))
-                (setq dir (file-name-directory (directory-file-name dir)))))
-            nil))))
+            (let ((dir search-dir)
+                  (found nil))
+              (while (and dir
+                          (not found)
+                          (not (string= dir "/"))
+                          (not (string= dir (expand-file-name "~/.."))))
+                (let* ((beads-dir (expand-file-name ".beads" dir))
+                       (redirected-dir (beads-client--follow-redirect beads-dir))
+                       (db (beads-client--find-db-in-dir redirected-dir)))
+                  (if db
+                      (setq found db)
+                    (setq dir (file-name-directory (directory-file-name dir))))))
+              found))))
 
-    (when db-path
-      (setq beads-client--cached-db-path db-path)
-      (setq beads-client--cache-time (current-time)))
+      (when db-path
+        (puthash search-dir (cons db-path (current-time))
+                 beads-client--db-cache))
 
-    db-path))
+      db-path)))
 
 (defun beads-client--follow-redirect (beads-dir)
   "Follow redirect file if present in BEADS-DIR."
@@ -428,6 +438,7 @@ Converts :kebab-case to snake_case symbols."
   "Clear the cached database path.
 Useful when switching between projects."
   (interactive)
+  (clrhash beads-client--db-cache)
   (setq beads-client--cached-db-path nil)
   (setq beads-client--cache-time nil))
 
