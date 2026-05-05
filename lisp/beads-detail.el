@@ -184,12 +184,12 @@ Creates a unique buffer per issue and focuses it."
          (buffer-name (format "*Beads Detail: %s*" id))
          (buffer (get-buffer-create buffer-name)))
     (with-current-buffer buffer
-      (setq beads-detail--current-issue-id id)
-      (setq beads-detail--current-issue issue)
       (if beads-detail-use-vui
           (beads-detail--render-vui buffer issue)
         (unless (eq major-mode 'beads-detail-mode)
           (beads-detail-mode))
+        (setq beads-detail--current-issue-id id)
+        (setq beads-detail--current-issue issue)
         (let ((inhibit-read-only t))
           (erase-buffer)
           (beads-detail--render issue)
@@ -208,12 +208,12 @@ Uses a single reusable buffer in a side window without focusing."
   (let* ((id (alist-get 'id issue))
          (buffer (get-buffer-create "*Beads Preview*")))
     (with-current-buffer buffer
-      (setq beads-detail--current-issue-id id)
-      (setq beads-detail--current-issue issue)
       (if beads-detail-use-vui
           (beads-detail--render-vui buffer issue)
         (unless (eq major-mode 'beads-detail-mode)
           (beads-detail-mode))
+        (setq beads-detail--current-issue-id id)
+        (setq beads-detail--current-issue issue)
         (let ((inhibit-read-only t))
           (erase-buffer)
           (beads-detail--render issue)
@@ -462,7 +462,13 @@ Uses CLI fallback since RPC does not support comment_add."
                          (beads-detail-open target)))))
     (with-current-buffer buffer
       (unless (derived-mode-p 'beads-detail-vui-mode)
-        (beads-detail-vui-mode)))
+        (beads-detail-vui-mode))
+      ;; NOTE: define-derived-mode (and special-mode/vui-mode) call
+      ;; `kill-all-local-variables', wiping any buffer-locals set before
+      ;; mode activation. Set them AFTER the mode is active so that the
+      ;; vui on-click refresh handler can find the current issue id.
+      (setq beads-detail--current-issue-id (alist-get 'id issue))
+      (setq beads-detail--current-issue issue))
     (save-window-excursion
       (vui-mount (vui-component 'beads-vui-detail-view
                                 :issue issue

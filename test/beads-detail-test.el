@@ -711,6 +711,34 @@
     (beads-detail-mode)
     (should-error (beads-detail-refresh))))
 
+;;; Regression test for bdel-ylt / bdel-91f.2
+
+(ert-deftest beads-detail-test-vui-render-sets-issue-id-after-mode ()
+  "Regression test for bdel-ylt: `beads-detail--render-vui' must set
+`beads-detail--current-issue-id' AFTER activating
+`beads-detail-vui-mode', because `define-derived-mode' calls
+`kill-all-local-variables' and would otherwise wipe the var. The
+vui on-click refresh handler depends on this var being bound."
+  (let ((buffer (generate-new-buffer "*beads-detail-test-vui*"))
+        (issue '((id . "bd-vui-regression-1")
+                 (title . "Regression")
+                 (status . "open")
+                 (priority . 2)
+                 (issue_type . "task"))))
+    (require 'beads-vui)
+    (unwind-protect
+        (cl-letf (((symbol-function 'vui-mount) (lambda (&rest _) nil))
+                  ((symbol-function 'vui-component) (lambda (&rest _) nil)))
+          (beads-detail--render-vui buffer issue)
+          (with-current-buffer buffer
+            (should (derived-mode-p 'beads-detail-vui-mode))
+            (should (equal beads-detail--current-issue-id
+                           "bd-vui-regression-1"))
+            (should (equal (alist-get 'id beads-detail--current-issue)
+                           "bd-vui-regression-1"))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
 (ert-deftest beads-detail-test-buffer-reuse ()
   "Test that calling beads-detail-show twice reuses the same buffer."
   :tags '(:integration)
