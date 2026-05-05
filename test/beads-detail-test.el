@@ -711,7 +711,21 @@
     (beads-detail-mode)
     (should-error (beads-detail-refresh))))
 
-;;; Regression test for bdel-ylt / bdel-91f.2
+;;; Regression tests for bdel-ylt / bdel-kry / bdel-91f.2
+
+(defun beads-detail-test--capture-on-refresh (buffer issue)
+  "Run `beads-detail--render-vui' on BUFFER with ISSUE and return the
+on-refresh callback that would be passed to vui. Useful for testing
+the closure created inside `beads-detail--render-vui'."
+  (require 'beads-vui)
+  (let (captured-on-refresh)
+    (cl-letf (((symbol-function 'vui-mount) (lambda (&rest _) nil))
+              ((symbol-function 'vui-component)
+               (lambda (_component &rest args)
+                 (setq captured-on-refresh (plist-get args :on-refresh))
+                 nil)))
+      (beads-detail--render-vui buffer issue))
+    captured-on-refresh))
 
 (ert-deftest beads-detail-test-vui-render-sets-issue-id-after-mode ()
   "Regression test for bdel-ylt: `beads-detail--render-vui' must set
@@ -738,6 +752,101 @@ vui on-click refresh handler depends on this var being bound."
                            "bd-vui-regression-1"))))
       (when (buffer-live-p buffer)
         (kill-buffer buffer)))))
+
+(ert-deftest beads-detail-test-render-vui-passes-on-refresh-closure ()
+  "`beads-detail--render-vui' must pass an on-refresh callback to vui."
+  (let ((buffer (generate-new-buffer "*beads-detail-test-vui-closure*"))
+        (issue '((id . "bd-vui-closure-1")
+                 (title . "Closure capture")
+                 (status . "open")
+                 (priority . 2)
+                 (issue_type . "task"))))
+    (unwind-protect
+        (let ((on-refresh (beads-detail-test--capture-on-refresh
+                           buffer issue)))
+          (should (functionp on-refresh)))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
+(ert-deftest beads-detail-test-refresh-fn-switches-to-detail-buffer ()
+  "Regression test: refresh-fn closure captured by `beads-detail--render-vui'
+must switch to the detail buffer it was created for, even when invoked
+from a different current-buffer (e.g. after the minibuffer edit handler
+finishes). This prevents the \"No issue to refresh\" vui warning from
+bdel-91f.2."
+  (let ((detail-buffer (generate-new-buffer "*beads-detail-test-refresh-fn*"))
+        (other-buffer (generate-new-buffer "*beads-detail-test-other*"))
+        (issue '((id . "bd-refresh-fn-1")
+                 (title . "Refresh closure")
+                 (status . "open")
+                 (priority . 2)
+                 (issue_type . "task")))
+        observed-buffer)
+    (unwind-protect
+        (let ((on-refresh (beads-detail-test--capture-on-refresh
+                           detail-buffer issue)))
+          (should (functionp on-refresh))
+          (cl-letf (((symbol-function 'beads-detail-refresh)
+                     (lambda () (setq observed-buffer (current-buffer)))))
+            ;; Invoke the closure from a DIFFERENT current-buffer (as
+            ;; would happen after the minibuffer edit handler finishes).
+            (with-current-buffer other-buffer
+              (funcall on-refresh))
+            (should (eq observed-buffer detail-buffer))))
+      (when (buffer-live-p detail-buffer) (kill-buffer detail-buffer))
+      (when (buffer-live-p other-buffer) (kill-buffer other-buffer)))))
+
+(ert-deftest beads-detail-test-refresh-fn-survives-killed-buffer ()
+  "refresh-fn closure must not error when its detail buffer was killed
+before it fires (buffer-live-p guard)."
+  (let ((detail-buffer (generate-new-buffer "*beads-detail-test-killed*"))
+        (issue '((id . "bd-killed-1")
+                 (title . "Killed buffer")
+                 (status . "open")
+                 (priority . 2)
+                 (issue_type . "task"))))
+    (let ((on-refresh (beads-detail-test--capture-on-refresh
+                       detail-buffer issue)))
+      (kill-buffer detail-buffer)
+      ;; Should be a no-op, not an error.
+      (should-not (funcall on-refresh)))))
+
+(ert-deftest beads-detail-test-edit-refresh-flow-no-error ()
+  "End-to-end regression for bdel-91f.2: invoking the on-refresh closure
+after an edit handler completes must NOT raise \"No issue to refresh\".
+
+Simulates the full flow: render-vui builds the closure, the edit
+handler eventually calls the closure from outside the detail buffer's
+context, and the closure must successfully call beads-client-show via
+beads-detail-refresh without user-error."
+  (let ((detail-buffer (generate-new-buffer "*beads-detail-test-flow*"))
+        (issue '((id . "bd-flow-1")
+                 (title . "Flow")
+                 (status . "open")
+                 (priority . 2)
+                 (issue_type . "task")))
+        (client-show-called-with nil))
+    (unwind-protect
+        (let ((on-refresh (beads-detail-test--capture-on-refresh
+                           detail-buffer issue)))
+          (cl-letf (((symbol-function 'beads-client-show)
+                     (lambda (id)
+                       (setq client-show-called-with id)
+                       ;; Return updated issue
+                       '((id . "bd-flow-1")
+                         (title . "Flow updated")
+                         (status . "in_progress")
+                         (priority . 2)
+                         (issue_type . "task"))))
+                    ;; Stub re-render: avoid pulling in vui internals
+                    ;; for this flow test.
+                    ((symbol-function 'beads-detail--render-vui)
+                     (lambda (&rest _) nil)))
+            ;; Invoke from a different buffer to mimic post-edit context.
+            (with-temp-buffer
+              (funcall on-refresh))
+            (should (equal client-show-called-with "bd-flow-1"))))
+      (when (buffer-live-p detail-buffer) (kill-buffer detail-buffer)))))
 
 (ert-deftest beads-detail-test-buffer-reuse ()
   "Test that calling beads-detail-show twice reuses the same buffer."
