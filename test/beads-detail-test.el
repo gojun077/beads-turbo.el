@@ -25,7 +25,7 @@
   "Test that all detail mode faces are defined."
   (should (facep 'beads-detail-id-face))
   (should (facep 'beads-detail-title-face))
-  (should (facep 'beads-detail-section-face))
+  (should (facep 'beads-detail-header-face))
   (should (facep 'beads-detail-label-face))
   (should (facep 'beads-detail-value-face)))
 
@@ -39,9 +39,9 @@
   (let ((face-attrs (face-all-attributes 'beads-detail-title-face nil)))
     (should (listp face-attrs))))
 
-(ert-deftest beads-detail-test-section-face-properties ()
-  "Test that beads-detail-section-face has expected properties."
-  (let ((face-attrs (face-all-attributes 'beads-detail-section-face nil)))
+(ert-deftest beads-detail-test-header-face-properties ()
+  "Test that beads-detail-header-face has expected properties."
+  (let ((face-attrs (face-all-attributes 'beads-detail-header-face nil)))
     (should (listp face-attrs))))
 
 (ert-deftest beads-detail-test-label-face-properties ()
