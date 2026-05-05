@@ -19,6 +19,7 @@
 (require 'ert)
 (require 'json)
 (require 'beads-client)
+(require 'beads-test-helpers)
 
 ;;; Discovery tests
 
@@ -223,6 +224,7 @@ return the cached path from the other project."
 (ert-deftest beads-client-test-list ()
   "Test that beads-client-list returns issues."
   :tags '(:integration)
+  (skip-unless (beads-test-integration-enabled-p))
   (skip-unless (beads-client--find-database))
   (let ((issues (beads-client-list)))
     (should (listp issues))))
@@ -230,6 +232,7 @@ return the cached path from the other project."
 (ert-deftest beads-client-test-list-with-filters ()
   "Test that beads-client-list accepts filter arguments."
   :tags '(:integration)
+  (skip-unless (beads-test-integration-enabled-p))
   (skip-unless (beads-client--find-database))
   (let ((issues (beads-client-list '(:status "open" :priority 1))))
     (should (listp issues))))
@@ -237,6 +240,7 @@ return the cached path from the other project."
 (ert-deftest beads-client-test-ready ()
   "Test that beads-client-ready returns unblocked issues."
   :tags '(:integration)
+  (skip-unless (beads-test-integration-enabled-p))
   (skip-unless (beads-client--find-database))
   (let ((issues (beads-client-ready)))
     (should (listp issues))))
@@ -244,6 +248,7 @@ return the cached path from the other project."
 (ert-deftest beads-client-test-stats ()
   "Test that beads-client-stats returns statistics."
   :tags '(:integration)
+  (skip-unless (beads-test-integration-enabled-p))
   (skip-unless (beads-client--find-database))
   (let ((stats (beads-client-stats)))
     (should (numberp (alist-get 'total_issues stats)))
@@ -253,6 +258,7 @@ return the cached path from the other project."
 (ert-deftest beads-client-test-show ()
   "Test that beads-client-show returns issue details."
   :tags '(:integration)
+  (skip-unless (beads-test-integration-enabled-p))
   (skip-unless (beads-client--find-database))
   (let ((issues (beads-client-list '(:limit 1))))
     (skip-unless (> (length issues) 0))
@@ -265,6 +271,7 @@ return the cached path from the other project."
 (ert-deftest beads-client-test-create-and-close ()
   "Test creating and closing an issue via CLI."
   :tags '(:integration :destructive)
+  (skip-unless (beads-test-integration-enabled-p))
   (skip-unless (beads-client--find-database))
   (let* ((title "Test issue from ERT")
          (issue (beads-client-create
@@ -286,6 +293,7 @@ return the cached path from the other project."
 (ert-deftest beads-client-test-update ()
   "Test updating an issue via CLI."
   :tags '(:integration :destructive)
+  (skip-unless (beads-test-integration-enabled-p))
   (skip-unless (beads-client--find-database))
   (let* ((issue (beads-client-create
                  "Test update issue"
@@ -305,6 +313,7 @@ return the cached path from the other project."
 (ert-deftest beads-client-test-count ()
   "Test that beads-client-count returns grouped counts."
   :tags '(:integration)
+  (skip-unless (beads-test-integration-enabled-p))
   (skip-unless (beads-client--find-database))
   (let ((counts (beads-client-count '(:group-by "status"))))
     (should (listp counts))))
@@ -312,6 +321,7 @@ return the cached path from the other project."
 (ert-deftest beads-client-test-dep-add-remove ()
   "Test adding and removing dependencies via CLI."
   :tags '(:integration :destructive)
+  (skip-unless (beads-test-integration-enabled-p))
   (skip-unless (beads-client--find-database))
   (let* ((issue1 (beads-client-create "Dependency test 1"))
          (issue2 (beads-client-create "Dependency test 2"))
@@ -330,6 +340,7 @@ return the cached path from the other project."
 (ert-deftest beads-client-test-label-operations ()
   "Test adding and removing labels via CLI."
   :tags '(:integration :destructive)
+  (skip-unless (beads-test-integration-enabled-p))
   (skip-unless (beads-client--find-database))
   (let* ((issue (beads-client-create "Label test"))
          (issue-id (alist-get 'id issue)))
@@ -347,6 +358,7 @@ return the cached path from the other project."
 (ert-deftest beads-client-test-invalid-operation ()
   "Test that invalid operations are handled."
   :tags '(:integration)
+  (skip-unless (beads-test-integration-enabled-p))
   (skip-unless (beads-client--find-database))
   (should-error (beads-client-request "invalid-operation" nil)
                 :type 'beads-client-error))

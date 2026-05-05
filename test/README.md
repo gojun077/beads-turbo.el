@@ -8,6 +8,21 @@ This directory contains ERT (Emacs Lisp Regression Testing) tests for beads.el.
 make test
 ```
 
+By default, `make test` runs only the hermetic unit tests.
+Integration tests that talk to a live `bd` CLI / Dolt server are
+skipped unless explicitly opted-in via the
+`BEADS_RUN_INTEGRATION_TESTS` environment variable:
+
+```bash
+BEADS_RUN_INTEGRATION_TESTS=1 make test
+```
+
+Integration tests are tagged with `:integration` and additionally
+guarded by `(skip-unless (beads-test-integration-enabled-p))`
+followed by `(skip-unless (beads-client--find-database))`.  They
+require a running dolt server (see `make setup`) and a beads-managed
+project in the working directory.
+
 ## Writing Tests
 
 Test files should:

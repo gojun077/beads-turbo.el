@@ -30,6 +30,7 @@ rc=0
 emacs -Q --batch \
     -L "$ROOT" \
     -L "$ROOT/lisp" \
+    -L "$ROOT/test" \
     -L "$ROOT/vendor/vui.el" \
     -l "$tmpfile" 2>&1 || rc=$?
 

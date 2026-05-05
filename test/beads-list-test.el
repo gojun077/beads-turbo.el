@@ -17,6 +17,7 @@
 
 (require 'ert)
 (require 'beads-list)
+(require 'beads-test-helpers)
 
 ;;; Formatter tests (no daemon needed)
 
@@ -387,6 +388,7 @@
 (ert-deftest beads-list-test-refresh-with-cli ()
   "Test that beads-list-refresh fetches issues via CLI."
   :tags '(:integration)
+  (skip-unless (beads-test-integration-enabled-p))
   (skip-unless (beads-client--find-database))
   (with-temp-buffer
     (beads-list-mode)
@@ -398,6 +400,7 @@
 (ert-deftest beads-list-test-refresh-populates-entries ()
   "Test that beads-list-refresh populates tabulated-list-entries."
   :tags '(:integration)
+  (skip-unless (beads-test-integration-enabled-p))
   (skip-unless (beads-client--find-database))
   (with-temp-buffer
     (beads-list-mode)
@@ -464,6 +467,7 @@ timer fired."
 (ert-deftest beads-list-test-list-command-creates-buffer ()
   "Test that beads-list creates and switches to issue buffer."
   :tags '(:integration)
+  (skip-unless (beads-test-integration-enabled-p))
   (skip-unless (beads-client--find-database))
   (let ((buffer-name "*Beads Issues*"))
     (when (get-buffer buffer-name)
@@ -479,6 +483,7 @@ timer fired."
 (ert-deftest beads-list-test-list-command-refreshes ()
   "Test that beads-list fetches issues on open."
   :tags '(:integration)
+  (skip-unless (beads-test-integration-enabled-p))
   (skip-unless (beads-client--find-database))
   (let ((buffer-name "*Beads Issues*"))
     (when (get-buffer buffer-name)
@@ -494,6 +499,7 @@ timer fired."
 (ert-deftest beads-list-test-goto-issue-with-issue ()
   "Test that beads-list-goto-issue displays message for issue at point."
   :tags '(:integration)
+  (skip-unless (beads-test-integration-enabled-p))
   (skip-unless (beads-client--find-database))
   (let ((buffer-name "*Beads Issues*"))
     (when (get-buffer buffer-name)
@@ -523,6 +529,7 @@ timer fired."
 (ert-deftest beads-list-test-buffer-reuse ()
   "Test that calling beads-list twice reuses the same buffer."
   :tags '(:integration)
+  (skip-unless (beads-test-integration-enabled-p))
   (skip-unless (beads-client--find-database))
   (let ((buffer-name "*Beads Issues*"))
     (when (get-buffer buffer-name)
