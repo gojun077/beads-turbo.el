@@ -16,7 +16,15 @@ count=$(echo "$test_files" | wc -l)
 echo "Running $count test file(s)..."
 echo
 
-tmpfile=$(mktemp --suffix=.el)
+# Portable mktemp across GNU (Linux) and BSD (macOS).
+# GNU's `--suffix=.el` is not supported by BSD mktemp, so create a base
+# tempfile with the standard XXXXXX template and add the `.el` suffix
+# ourselves.
+tmpbase=$(mktemp -t beads-elisp-test.XXXXXX)
+tmpfile="${tmpbase}.el"
+mv "$tmpbase" "$tmpfile"
+trap 'rm -f "$tmpfile"' EXIT
+
 {
   echo "(require 'ert)"
   for tf in $test_files; do
@@ -33,8 +41,6 @@ emacs -Q --batch \
     -L "$ROOT/test" \
     -L "$ROOT/vendor/vui.el" \
     -l "$tmpfile" 2>&1 || rc=$?
-
-rm -f "$tmpfile"
 
 echo
 if [ "$rc" -eq 0 ]; then
