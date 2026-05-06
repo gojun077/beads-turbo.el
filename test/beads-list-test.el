@@ -32,49 +32,49 @@
   (let ((issue '((status . "open"))))
     (let ((result (beads--format-status issue)))
       (should (equal result "open"))
-      (should (eq (get-text-property 0 'face result) 'beads-list-status-open)))))
+      (should (eq (get-text-property 0 'face result) 'beads-status-open)))))
 
 (ert-deftest beads-list-test-format-status-in-progress ()
   "Test that beads--format-status formats in_progress status with face."
   (let ((issue '((status . "in_progress"))))
     (let ((result (beads--format-status issue)))
       (should (equal result "in_progress"))
-      (should (eq (get-text-property 0 'face result) 'beads-list-status-in-progress)))))
+      (should (eq (get-text-property 0 'face result) 'beads-status-in-progress)))))
 
 (ert-deftest beads-list-test-format-status-closed ()
   "Test that beads--format-status formats closed status with face."
   (let ((issue '((status . "closed"))))
     (let ((result (beads--format-status issue)))
       (should (equal result "closed"))
-      (should (eq (get-text-property 0 'face result) 'beads-list-status-closed)))))
+      (should (eq (get-text-property 0 'face result) 'beads-status-closed)))))
 
 (ert-deftest beads-list-test-format-status-blocked ()
   "Test that beads--format-status formats blocked status with face."
   (let ((issue '((status . "blocked"))))
     (let ((result (beads--format-status issue)))
       (should (equal result "blocked"))
-      (should (eq (get-text-property 0 'face result) 'beads-list-status-blocked)))))
+      (should (eq (get-text-property 0 'face result) 'beads-status-blocked)))))
 
 (ert-deftest beads-list-test-format-status-hooked ()
   "Test that beads--format-status formats hooked status with face."
   (let ((issue '((status . "hooked"))))
     (let ((result (beads--format-status issue)))
       (should (equal result "hooked"))
-      (should (eq (get-text-property 0 'face result) 'beads-list-status-hooked)))))
+      (should (eq (get-text-property 0 'face result) 'beads-status-hooked)))))
 
 (ert-deftest beads-list-test-format-priority-p0 ()
   "Test that beads--format-priority formats P0 with bold red face."
   (let ((issue '((priority . 0))))
     (let ((result (beads--format-priority issue)))
       (should (equal result "P0"))
-      (should (eq (get-text-property 0 'face result) 'beads-list-priority-p0)))))
+      (should (eq (get-text-property 0 'face result) 'beads-priority-p0)))))
 
 (ert-deftest beads-list-test-format-priority-p1 ()
   "Test that beads--format-priority formats P1 with orange face."
   (let ((issue '((priority . 1))))
     (let ((result (beads--format-priority issue)))
       (should (equal result "P1"))
-      (should (eq (get-text-property 0 'face result) 'beads-list-priority-p1)))))
+      (should (eq (get-text-property 0 'face result) 'beads-priority-p1)))))
 
 (ert-deftest beads-list-test-format-priority-p2 ()
   "Test that beads--format-priority formats P2 with default face."
@@ -214,7 +214,8 @@
       (let ((entry (car entries)))
         (should (equal (car entry) "bd-a1b2"))
         (should (vectorp (cadr entry)))
-        (should (= (length (cadr entry)) 5))))))
+        ;; Mark column + 6 default columns (id date status priority type title)
+        (should (= (length (cadr entry)) 7))))))
 
 (ert-deftest beads-list-test-entries-multiple-issues ()
   "Test that beads-list-entries converts multiple issues correctly."
@@ -250,11 +251,14 @@
     (let* ((entries (beads-list-entries issues))
            (entry (car entries))
            (columns (cadr entry)))
-      (should (equal (aref columns 0) "bd-test"))
-      (should (equal (aref columns 1) "closed"))
-      (should (equal (aref columns 2) "P0"))
-      (should (equal (aref columns 3) "feature"))
-      (should (equal (aref columns 4) "Test")))))
+      ;; Default column order: mark, id, date, status, priority, type, title.
+      (should (equal (aref columns 0) " "))
+      (should (equal (aref columns 1) "bd-test"))
+      (should (equal (aref columns 2) ""))
+      (should (equal (aref columns 3) "closed"))
+      (should (equal (aref columns 4) "P0"))
+      (should (equal (aref columns 5) "feature"))
+      (should (equal (aref columns 6) "Test")))))
 
 (ert-deftest beads-list-test-entries-preserves-faces ()
   "Test that beads-list-entries preserves text properties from formatters."
@@ -265,10 +269,11 @@
                    (issue_type . "task")))))
     (let* ((entries (beads-list-entries issues))
            (columns (cadr (car entries)))
-           (status-col (aref columns 1))
-           (priority-col (aref columns 2)))
-      (should (eq (get-text-property 0 'face status-col) 'beads-list-status-in-progress))
-      (should (eq (get-text-property 0 'face priority-col) 'beads-list-priority-p0)))))
+           ;; Default column order: mark, id, date, status, priority, type, title.
+           (status-col (aref columns 3))
+           (priority-col (aref columns 4)))
+      (should (eq (get-text-property 0 'face status-col) 'beads-status-in-progress))
+      (should (eq (get-text-property 0 'face priority-col) 'beads-priority-p0)))))
 
 ;;; Mode tests (no daemon)
 
@@ -284,12 +289,15 @@
   (with-temp-buffer
     (beads-list-mode)
     (should (vectorp tabulated-list-format))
-    (should (= (length tabulated-list-format) 5))
-    (should (equal (car (aref tabulated-list-format 0)) "ID"))
-    (should (equal (car (aref tabulated-list-format 1)) "Status"))
-    (should (equal (car (aref tabulated-list-format 2)) "Pri"))
-    (should (equal (car (aref tabulated-list-format 3)) "Type"))
-    (should (equal (car (aref tabulated-list-format 4)) "Title"))))
+    ;; Mark column + 6 default columns (id date status priority type title).
+    (should (= (length tabulated-list-format) 7))
+    (should (equal (car (aref tabulated-list-format 0)) " "))
+    (should (equal (car (aref tabulated-list-format 1)) "ID"))
+    (should (equal (car (aref tabulated-list-format 2)) "Date"))
+    (should (equal (car (aref tabulated-list-format 3)) "Status"))
+    (should (equal (car (aref tabulated-list-format 4)) "Pri"))
+    (should (equal (car (aref tabulated-list-format 5)) "Type"))
+    (should (equal (car (aref tabulated-list-format 6)) "Title"))))
 
 (ert-deftest beads-list-test-mode-sets-padding ()
   "Test that beads-list-mode sets tabulated-list-padding."
@@ -298,10 +306,10 @@
     (should (= tabulated-list-padding 2))))
 
 (ert-deftest beads-list-test-mode-sets-sort-key ()
-  "Test that beads-list-mode sets initial sort key to ID."
+  "Test that beads-list-mode sets initial sort key to Date (descending)."
   (with-temp-buffer
     (beads-list-mode)
-    (should (equal tabulated-list-sort-key '("ID")))))
+    (should (equal tabulated-list-sort-key '("Date" . t)))))
 
 (ert-deftest beads-list-test-mode-keybindings ()
   "Test that beads-list-mode sets up keybindings correctly."
@@ -312,11 +320,12 @@
     (should (eq (lookup-key beads-list-mode-map (kbd "q")) #'beads-list-quit))))
 
 (ert-deftest beads-list-test-mode-inherits-parent-keybindings ()
-  "Test that beads-list-mode inherits tabulated-list-mode keybindings."
+  "Test that beads-list-mode inherits tabulated-list-mode keybindings.
+Use a key that is not overridden by `beads-list-mode-map' (e.g. `n')."
   (with-temp-buffer
     (beads-list-mode)
-    (should (eq (lookup-key beads-list-mode-map (kbd "S"))
-                (lookup-key tabulated-list-mode-map (kbd "S"))))))
+    (should (eq (lookup-key beads-list-mode-map (kbd "n"))
+                (lookup-key tabulated-list-mode-map (kbd "n"))))))
 
 (ert-deftest beads-list-test-get-issue-at-point-found ()
   "Test that beads-list--get-issue-at-point returns issue when found."
@@ -675,12 +684,16 @@ timer fired."
     (should (member "custom-type" (beads-list--collect-types)))))
 
 (ert-deftest beads-list-test-available-types-includes-builtin ()
-  "Test that available-types includes built-in types."
+  "Test that available-types includes built-in types.
+Stub `beads-get-types' so the result is deterministic and does not
+depend on whatever the daemon currently advertises."
   (let ((beads-list--issues nil))
-    (let ((types (beads-list-available-types)))
-      (should (member "bug" types))
-      (should (member "feature" types))
-      (should (member "rig" types)))))
+    (cl-letf (((symbol-function 'beads-get-types)
+               (lambda () beads-builtin-types)))
+      (let ((types (beads-list-available-types)))
+        (should (member "bug" types))
+        (should (member "feature" types))
+        (should (member "rig" types))))))
 
 (ert-deftest beads-list-test-available-types-includes-custom ()
   "Test that available-types includes custom types from issues."
