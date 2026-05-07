@@ -81,7 +81,7 @@ Optional STATUS filters by issue status."
 
 (defun beads-stale--days-ago (updated-at)
   "Calculate days since UPDATED-AT timestamp."
-  (if (and updated-at (stringp updated-at))
+  (if (and updated-at (stringp updated-at) (not (string= updated-at "")))
       (let* ((time (date-to-time updated-at))
              (now (current-time))
              (diff (time-subtract now time))

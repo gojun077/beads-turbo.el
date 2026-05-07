@@ -519,6 +519,7 @@ Uses CLI fallback since RPC does not support comment_add."
         (assignee (alist-get 'assignee issue))
         (created-by (alist-get 'created_by issue))
         (created (alist-get 'created_at issue))
+        (updated (alist-get 'updated_at issue))
         (labels (alist-get 'labels issue))
         (parent-id (alist-get 'parent_id issue)))
 
@@ -537,6 +538,10 @@ Uses CLI fallback since RPC does not support comment_add."
       (insert "  "))
     (when created
       (beads-detail--insert-field "Created" (beads-detail--format-timestamp created)))
+    (when updated
+      (when (or assignee created-by created)
+        (insert "  "))
+      (beads-detail--insert-field "Updated" (beads-detail--format-timestamp updated)))
     (insert "\n")
 
     (when parent-id
