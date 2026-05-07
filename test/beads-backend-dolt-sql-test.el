@@ -15,6 +15,18 @@
 
 ;;; Helpers
 
+(defun beads-dolt-sql-test--dest-buffer (dest)
+  "Resolve a `call-process' DEST argument to the buffer to write into.
+Handles `t' (current buffer), a buffer/buffer-name, and the
+\\(STDOUT STDERR\\) form used by `--one-shot-mariadb', where STDOUT
+itself may be `t' or a buffer."
+  (let ((stdout (cond ((consp dest) (car dest))
+                      (t dest))))
+    (cond ((eq stdout t) (current-buffer))
+          ((bufferp stdout) stdout)
+          ((stringp stdout) (get-buffer stdout))
+          (t nil))))
+
 (defmacro beads-dolt-sql-test--with-mocks (mariadb-output &rest body)
   "Eval BODY with `call-process' mocked to return MARIADB-OUTPUT.
 MARIADB-OUTPUT is inserted into the temp buffer on each call-process
@@ -23,9 +35,7 @@ targeting \"mariadb\".  Calls targeting \"bd\" pass through."
   `(cl-letf (((symbol-function 'call-process)
               (lambda (program &optional _infile dest _display &rest _)
                 (if (equal program "mariadb")
-                    (let ((buf (if (eq dest t)
-                                   (current-buffer)
-                                 (car-safe dest))))
+                    (let ((buf (beads-dolt-sql-test--dest-buffer dest)))
                       (when buf
                         (with-current-buffer buf
                           (insert ,mariadb-output)))
@@ -54,9 +64,19 @@ targeting \"mariadb\".  Calls targeting \"bd\" pass through."
      ,@body))
 
 (defun beads-dolt-sql-test--with-clean-state (body-fn)
-  "Call BODY-FN with Dolt SQL state clean (no cache, enabled, available)."
-  (let ((beads-dolt-sql--params nil)
-        (beads-dolt-sql--params-time nil)
+  "Call BODY-FN with Dolt SQL state clean (enabled, available, fresh cache).
+Pre-populates `beads-dolt-sql--params' so `--fetch-dolt-params' returns
+from cache and never invokes the real `bd dolt show'.  Mocks
+`executable-find' to report mariadb+bd present and mysql absent so
+`--execute-sql' takes the one-shot mariadb branch (which uses
+`call-process', easy to mock)."
+  (let ((beads-dolt-sql--params '((backend . "dolt")
+                                  (connection_ok . t)
+                                  (database . "testdb")
+                                  (host . "127.0.0.1")
+                                  (port . 3310)
+                                  (user . "root")))
+        (beads-dolt-sql--params-time (current-time))
         (beads-dolt-sql--available t)
         (beads-dolt-sql-enabled t))
     (cl-letf (((symbol-function 'executable-find)
@@ -219,22 +239,17 @@ targeting \"mariadb\".  Calls targeting \"bd\" pass through."
 
 (ert-deftest beads-dolt-sql-test-execute-sql-returns-json ()
   "Test execute-sql parses JSON output from mariadb."
-  (beads-dolt-sql-test--with-bd-dolt-show
-   "{\"backend\":\"dolt\",\"connection_ok\":true,\"database\":\"db\",\"host\":\"127.0.0.1\",\"port\":3310,\"user\":\"root\"}"
-   (let ((beads-dolt-sql--params nil)
-         (beads-dolt-sql--params-time nil)
-         (beads-dolt-sql--available t))
-     (cl-letf (((symbol-function 'beads-client--project-root)
-                (lambda () "/fake/project/"))
-               ((symbol-function 'call-process)
-                 (lambda (program &optional _infile dest _display &rest _)
-                   (if (equal program "mariadb")
-                       (let ((buf (if (eq dest t) (current-buffer) (car-safe dest))))
-                         (when buf
-                           (with-current-buffer buf
-                             (insert "[{\"id\":\"t1\",\"title\":\"test\"}]")))
-                         0)
-                     0))))
+  (beads-dolt-sql-test--with-clean-state
+   (lambda ()
+     (cl-letf (((symbol-function 'call-process)
+                (lambda (program &optional _infile dest _display &rest _)
+                  (if (equal program "mariadb")
+                      (let ((buf (beads-dolt-sql-test--dest-buffer dest)))
+                        (when buf
+                          (with-current-buffer buf
+                            (insert "[{\"id\":\"t1\",\"title\":\"test\"}]")))
+                        0)
+                    0))))
        (let ((result (beads-backend-dolt-sql--execute-sql "SELECT 1")))
          (should (listp result))
          (should (= (length result) 1))
@@ -245,8 +260,10 @@ targeting \"mariadb\".  Calls targeting \"bd\" pass through."
   (let ((beads-dolt-sql--params nil)
         (beads-dolt-sql--params-time nil)
         (beads-dolt-sql--available nil))
-    (should-error (beads-backend-dolt-sql--execute-sql "SELECT 1")
-                  :type 'beads-backend-error)))
+    (cl-letf (((symbol-function 'beads-backend-dolt-sql--fetch-dolt-params)
+               (lambda () nil)))
+      (should-error (beads-backend-dolt-sql--execute-sql "SELECT 1")
+                    :type 'beads-backend-error))))
 
 (ert-deftest beads-dolt-sql-test-execute-sql-mariadb-fails ()
   "Test execute-sql signals on non-zero mariadb exit."
@@ -260,7 +277,7 @@ targeting \"mariadb\".  Calls targeting \"bd\" pass through."
                ((symbol-function 'call-process)
                  (lambda (program &optional _infile dest _display &rest _)
                    (if (equal program "mariadb")
-                       (let ((buf (if (eq dest t) (current-buffer) (car-safe dest))))
+                       (let ((buf (beads-dolt-sql-test--dest-buffer dest)))
                          (when buf
                            (with-current-buffer buf
                              (insert "ERROR: table not found")))
@@ -281,7 +298,7 @@ targeting \"mariadb\".  Calls targeting \"bd\" pass through."
                ((symbol-function 'call-process)
                 (lambda (program &optional _infile dest _display &rest _)
                   (if (equal program "mariadb")
-                      (let ((buf (if (eq dest t) (current-buffer) (car-safe dest))))
+                      (let ((buf (beads-dolt-sql-test--dest-buffer dest)))
                         (when buf
                           (with-current-buffer buf
                             (insert "not json at all")))
@@ -292,27 +309,22 @@ targeting \"mariadb\".  Calls targeting \"bd\" pass through."
 
 (ert-deftest beads-dolt-sql-test-execute-sql-param-replacement ()
   "Test that ? placeholders are replaced with escaped values."
-  (beads-dolt-sql-test--with-bd-dolt-show
-   "{\"backend\":\"dolt\",\"connection_ok\":true,\"database\":\"db\",\"host\":\"127.0.0.1\",\"port\":3310,\"user\":\"root\"}"
-   (let ((beads-dolt-sql--params nil)
-         (beads-dolt-sql--params-time nil)
-         (beads-dolt-sql--available t)
-         (captured-sql nil))
-     (cl-letf (((symbol-function 'beads-client--project-root)
-                (lambda () "/fake/project/"))
-               ((symbol-function 'call-process)
-                 (lambda (program &optional _infile dest _display &rest args)
-                   (if (equal program "mariadb")
-                       (let ((buf (if (eq dest t) (current-buffer) (car-safe dest))))
-                         (setq captured-sql (car (last args)))
-                        (when buf
-                          (with-current-buffer buf
-                            (insert "[]")))
-                        0)
-                    0))))
-       (beads-backend-dolt-sql--execute-sql "WHERE id = ?" '("test-1"))
-       (should (string-match "test-1" captured-sql))
-        (should-not (string-match "\\?" captured-sql))))))
+  (let ((captured-sql nil))
+    (beads-dolt-sql-test--with-clean-state
+     (lambda ()
+       (cl-letf (((symbol-function 'call-process)
+                  (lambda (program &optional _infile dest _display &rest args)
+                    (if (equal program "mariadb")
+                        (let ((buf (beads-dolt-sql-test--dest-buffer dest)))
+                          (setq captured-sql (car (last args)))
+                          (when buf
+                            (with-current-buffer buf
+                              (insert "[]")))
+                          0)
+                      0))))
+         (beads-backend-dolt-sql--execute-sql "WHERE id = ?" '("test-1"))
+         (should (string-match "test-1" captured-sql))
+         (should-not (string-match "\\?" captured-sql)))))))
 
 ;;; Operation-specific tests
 
@@ -323,44 +335,38 @@ targeting \"mariadb\".  Calls targeting \"bd\" pass through."
 
 (ert-deftest beads-dolt-sql-test-execute-list-returns-array ()
   "Test list returns a plain list."
-  (beads-dolt-sql-test--with-bd-dolt-show
-   "{\"backend\":\"dolt\",\"connection_ok\":true,\"database\":\"db\",\"host\":\"127.0.0.1\",\"port\":3310,\"user\":\"root\"}"
-   (beads-dolt-sql-test--with-mocks
-    "[{\"id\":\"a\",\"title\":\"one\"},{\"id\":\"b\",\"title\":\"two\"}]"
-    (beads-dolt-sql-test--with-clean-state
-     (lambda ()
-       (let ((result (beads-backend-dolt-sql--execute-list nil nil)))
-         (should (listp result))
-         (should (= (length result) 2))
-         (should (equal (alist-get 'id (car result)) "a"))
-         (should (equal (alist-get 'id (cadr result)) "b"))))))))
+  (beads-dolt-sql-test--with-mocks
+   "[{\"id\":\"a\",\"title\":\"one\"},{\"id\":\"b\",\"title\":\"two\"}]"
+   (beads-dolt-sql-test--with-clean-state
+    (lambda ()
+      (let ((result (beads-backend-dolt-sql--execute-list nil nil)))
+        (should (listp result))
+        (should (= (length result) 2))
+        (should (equal (alist-get 'id (car result)) "a"))
+        (should (equal (alist-get 'id (cadr result)) "b")))))))
 
 (ert-deftest beads-dolt-sql-test-execute-stats-returns-summary ()
   "Test stats returns summary alist."
-  (beads-dolt-sql-test--with-bd-dolt-show
-   "{\"backend\":\"dolt\",\"connection_ok\":true,\"database\":\"db\",\"host\":\"127.0.0.1\",\"port\":3310,\"user\":\"root\"}"
-   (beads-dolt-sql-test--with-mocks
-    "{\"schema_version\":1,\"summary\":{\"total_issues\":42,\"open_issues\":10,\"closed_issues\":30,\"ready_issues\":5}}"
-    (beads-dolt-sql-test--with-clean-state
-     (lambda ()
-       (let ((result (beads-backend-dolt-sql--execute-stats nil nil)))
-         (should (alist-get 'summary result))
-         (let ((s (alist-get 'summary result)))
-           (should (= (alist-get 'total_issues s) 42))
-           (should (= (alist-get 'open_issues s) 10))
-           (should (= (alist-get 'closed_issues s) 30))
-           (should (= (alist-get 'ready_issues s) 5)))))))))
+  (beads-dolt-sql-test--with-mocks
+   "{\"schema_version\":1,\"summary\":{\"total_issues\":42,\"open_issues\":10,\"closed_issues\":30,\"ready_issues\":5}}"
+   (beads-dolt-sql-test--with-clean-state
+    (lambda ()
+      (let ((result (beads-backend-dolt-sql--execute-stats nil nil)))
+        (should (alist-get 'summary result))
+        (let ((s (alist-get 'summary result)))
+          (should (= (alist-get 'total_issues s) 42))
+          (should (= (alist-get 'open_issues s) 10))
+          (should (= (alist-get 'closed_issues s) 30))
+          (should (= (alist-get 'ready_issues s) 5))))))))
 
 (ert-deftest beads-dolt-sql-test-execute-count-returns-count ()
   "Test count returns count alist."
-  (beads-dolt-sql-test--with-bd-dolt-show
-   "{\"backend\":\"dolt\",\"connection_ok\":true,\"database\":\"db\",\"host\":\"127.0.0.1\",\"port\":3310,\"user\":\"root\"}"
-   (beads-dolt-sql-test--with-mocks
-    "{\"count\":99}"
-    (beads-dolt-sql-test--with-clean-state
-     (lambda ()
-       (let ((result (beads-backend-dolt-sql--execute-count nil nil)))
-         (should (= (alist-get 'count result) 99))))))))
+  (beads-dolt-sql-test--with-mocks
+   "{\"count\":99}"
+   (beads-dolt-sql-test--with-clean-state
+    (lambda ()
+      (let ((result (beads-backend-dolt-sql--execute-count nil nil)))
+        (should (= (alist-get 'count result) 99)))))))
 
 ;;; Executor routing tests
 
@@ -411,7 +417,7 @@ targeting \"mariadb\".  Calls targeting \"bd\" pass through."
               ((symbol-function 'beads-backend-dolt-sql--execute-fallback)
                (lambda (_op _args _project-root &optional _prev)
                  (setq called-fallback t)
-                 '((id . "fallback")))))
+                 (list '((id . "fallback"))))))
       (let ((result (beads-backend-dolt-sql--executor "list" nil nil)))
         (should called-fallback)
         (should (equal (alist-get 'id (car result)) "fallback"))))))
@@ -421,10 +427,17 @@ targeting \"mariadb\".  Calls targeting \"bd\" pass through."
   (let ((called-fallback nil))
     (cl-letf (((symbol-function 'beads-backend-dolt-sql--available-p)
                (lambda () nil))
+              ;; Force the SQL path to fail so executor exercises the
+              ;; fallback branch even though available-p returns nil
+              ;; (the executor itself doesn't gate on available-p for
+              ;; SQL-mapped ops).
+              ((symbol-function 'beads-backend-dolt-sql--execute-list)
+               (lambda (_args _project-root)
+                 (signal 'beads-backend-error '("SQL disabled"))))
               ((symbol-function 'beads-backend-dolt-sql--execute-fallback)
                (lambda (_op _args _project-root &optional _prev)
                  (setq called-fallback t)
-                 '((id . "bd")))))
+                 (list '((id . "bd"))))))
       (let ((result (beads-backend-dolt-sql--executor "list" nil nil)))
         (should called-fallback)
         (should (equal (alist-get 'id (car result)) "bd"))))))
@@ -453,7 +466,7 @@ targeting \"mariadb\".  Calls targeting \"bd\" pass through."
       (let ((beads-dolt-sql-enabled nil))
         (should (equal (beads-backend-name
                         (beads-backend-dolt-sql--auto-detect-advice
-                         (lambda () (beads-backend--lookup "bd"))
+                         (lambda (&rest _) (beads-backend--lookup "bd"))
                          nil))
                        "bd"))))))
 
@@ -541,7 +554,9 @@ targeting \"mariadb\".  Calls targeting \"bd\" pass through."
                #'beads-dolt-sql-test--mock-exec-find-bd)
               ((symbol-function 'call-process)
                (lambda (program &optional _infile dest _display &rest args)
-                 (when (equal program "bd")
+                 ;; The program is the resolved path
+                 ;; (e.g. "/usr/bin/bd"), so match by basename.
+                 (when (equal (file-name-nondirectory program) "bd")
                    (setq called-bd-args args)
                    (when dest
                      (let ((buf (if (eq dest t)
