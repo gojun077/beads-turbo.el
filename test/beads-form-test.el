@@ -40,14 +40,14 @@
                  (priority . 2)
                  (issue_type . "task"))))
     (unwind-protect
-        (progn
+        (let ((beads-form-use-vui nil))
           (cl-letf (((symbol-function 'pop-to-buffer)
                      (lambda (buf) (setq buffer buf))))
             (beads-form-open issue))
           (should buffer)
           (should (buffer-live-p buffer))
-          (should (string-match-p "beads-form.*test-123"
-                                  (buffer-name buffer))))
+          (should (string= "*Beads Form: test-123*"
+                           (buffer-name buffer))))
       (when (and buffer (buffer-live-p buffer))
         (kill-buffer buffer)))))
 
@@ -60,7 +60,7 @@
                  (priority . 2)
                  (issue_type . "task"))))
     (unwind-protect
-        (progn
+        (let ((beads-form-use-vui nil))
           (cl-letf (((symbol-function 'pop-to-buffer)
                      (lambda (buf) (setq buffer buf))))
             (beads-form-open issue))
@@ -81,7 +81,7 @@
                  (issue_type . "feature")
                  (description . "Test description"))))
     (unwind-protect
-        (progn
+        (let ((beads-form-use-vui nil))
           (cl-letf (((symbol-function 'pop-to-buffer)
                      (lambda (buf) (setq buffer buf))))
             (beads-form-open issue))
@@ -104,7 +104,7 @@
                  (priority . 2)
                  (issue_type . "task"))))
     (unwind-protect
-        (progn
+        (let ((beads-form-use-vui nil))
           (cl-letf (((symbol-function 'pop-to-buffer)
                      (lambda (buf) (setq buffer buf))))
             (beads-form-open issue))

@@ -314,8 +314,13 @@ Derives from `vui-mode' and adds form-specific keybindings.
     (cl-flet ((check-field (name rpc-key &optional transform)
                 (let* ((new-val (beads-form--get-value name))
                        (old-val (or (alist-get name original) ""))
-                       (new-val-transformed (if transform (funcall transform new-val) new-val)))
-                  (unless (equal new-val-transformed old-val)
+                       (new-val-transformed (if transform (funcall transform new-val) new-val))
+                       (old-val-normalized (if (and transform
+                                                     (null new-val-transformed)
+                                                     (string= old-val ""))
+                                                nil
+                                              old-val)))
+                  (unless (equal new-val-transformed old-val-normalized)
                     (setq changes (plist-put changes rpc-key new-val-transformed))))))
       (check-field 'title :title)
       (check-field 'status :status)

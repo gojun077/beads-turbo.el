@@ -36,8 +36,8 @@
             (beads-edit-field "test-123" :description "Initial content"))
           (should buffer)
           (should (buffer-live-p buffer))
-          (should (string-match-p "beads-edit.*test-123.*description"
-                                  (buffer-name buffer))))
+          (should (string= "*Beads Edit: test-123 description*"
+                           (buffer-name buffer))))
       (when (and buffer (buffer-live-p buffer))
         (kill-buffer buffer)))))
 
@@ -99,8 +99,8 @@
   "Test that beads-edit-mode has correct lighter."
   (with-temp-buffer
     (beads-edit-mode 1)
-    (let ((mode-line (format-mode-line minor-mode-alist)))
-      (should (string-match-p "BeadsEdit" mode-line)))))
+    (should (equal (assq 'beads-edit-mode minor-mode-alist)
+                   '(beads-edit-mode " BeadsEdit")))))
 
 (ert-deftest beads-edit-test-abort-sets-flag ()
   "Test that abort sets allow-write-back to nil."

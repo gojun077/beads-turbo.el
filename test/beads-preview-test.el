@@ -63,8 +63,8 @@
   (with-temp-buffer
     (beads-list-mode)
     (beads-preview-mode 1)
-    (let ((mode-line (format-mode-line minor-mode-alist)))
-      (should (string-match-p "Preview" mode-line)))))
+    (should (equal (assq 'beads-preview-mode minor-mode-alist)
+                   '(beads-preview-mode " Preview")))))
 
 (ert-deftest beads-preview-test-mode-disable-cancels-timer ()
   "Test that disabling mode cancels any pending timer."
@@ -187,22 +187,26 @@
 (ert-deftest beads-preview-test-display-issue-mocked ()
   "Test that beads-preview--display-issue creates preview buffer."
   (let ((buffer-created nil))
-    (cl-letf (((symbol-function 'beads-client-show)
-               (lambda (_issue-id)
-                 '((id . "bd-test")
-                   (title . "Test Issue")
-                   (status . "open")
-                   (priority . 2)
-                   (issue_type . "task")
-                   (description . "Test description"))))
-              ((symbol-function 'display-buffer)
-               (lambda (buffer _action)
-                 (setq buffer-created buffer)
-                 buffer)))
-      (beads-preview--display-issue '((id . "bd-test")))
-      (should buffer-created)
-      (should (buffer-live-p buffer-created))
-      (kill-buffer buffer-created))))
+    (unwind-protect
+        (cl-letf (((symbol-function 'beads-client-show-async)
+                   (lambda (_issue-id callback)
+                     (funcall callback nil
+                              '((id . "bd-test")
+                                (title . "Test Issue")
+                                (status . "open")
+                                (priority . 2)
+                                (issue_type . "task")
+                                (description . "Test description")))))
+                  ((symbol-function 'display-buffer)
+                   (lambda (buffer _action)
+                     (setq buffer-created buffer)
+                     buffer))
+                  (beads-detail-use-vui nil))
+          (beads-preview--display-issue '((id . "bd-test")))
+          (should buffer-created)
+          (should (buffer-live-p buffer-created)))
+      (when (and buffer-created (buffer-live-p buffer-created))
+        (kill-buffer buffer-created)))))
 
 (ert-deftest beads-preview-test-display-issue-error-handling ()
   "Test that display-issue handles RPC errors gracefully."
@@ -246,7 +250,9 @@
                  (lambda () nil))
                 ((symbol-function 'beads-preview--start-timer)
                  (lambda (_issue)
-                   (setq timer-started t))))
+                   (setq timer-started t)))
+                ((symbol-function 'beads-list--get-issue-at-point)
+                 (lambda () '((id . "bd-test")))))
         (beads-preview-trigger)
         (should timer-started)))))
 
@@ -254,7 +260,7 @@
 
 (ert-deftest beads-preview-test-cleanup-kills-preview-buffer ()
   "Test that cleanup kills the preview buffer."
-  (let ((preview-buf (get-buffer-create "*beads-preview*")))
+  (let ((preview-buf (get-buffer-create "*Beads Preview*")))
     (unwind-protect
         (progn
           (beads-preview--cleanup)
