@@ -53,7 +53,7 @@ below 1ms — making auto-refresh and preview near-instant.
 
 ## Implementation Plan
 
-### Tier 1: `mariadb -e` Transport (current)
+### Tier 1: `mariadb -e` Transport
 
 Create `beads-backend-dolt-sql.el` that issues SELECT queries via the
 `mariadb` CLI subprocess. Reads Dolt connection params from `bd dolt show`
@@ -65,22 +65,36 @@ format so existing elisp callers work unchanged.
 - **Risk:** Low — thin wrapper, falls back to `bd` if Dolt is down
 - **Status:** [bdel-4c4.1][] (core), [bdel-4c4.2][] (expand ops)
 
-### Tier 2: Native MySQL Protocol (future)
+### Tier 1.5: Persistent CLI Transport (current fallback)
 
-Replace the `mariadb` subprocess with a native Elisp MySQL protocol client
-using `make-network-process`. Talks MySQL binary protocol directly to Dolt
-over TCP. Passwordless auth (Dolt defaults) simplifies the handshake.
+Keep a long-lived `mysql`/`mariadb --batch --skip-column-names --raw`
+process and send each SELECT over stdin.  This avoids per-query process
+startup and handshake overhead while preserving the same SQL query catalog
+and JSON result shape.
 
-- **Effort:** ~500 lines of elisp (handshake + result set parsing)
+- **Effort:** ~150 lines of elisp
+- **Speedup:** 30-50x vs `bd` CLI
+- **Risk:** Low — still delegates protocol details to the mysql/mariadb CLI
+- **Status:** implemented
+
+### Tier 2: Native MySQL Protocol via mysql.el (current preferred path)
+
+Use Lucius Chen's [mysql.el](https://github.com/LuciusChen/mysql.el), a
+pure Emacs Lisp MySQL wire-protocol client using `make-network-process`,
+when it is installed.  This lets beads.el talk MySQL protocol directly to
+Dolt over TCP without maintaining its own protocol implementation.  The
+persistent CLI and one-shot CLI transports remain fallbacks.
+
+- **Effort:** small integration layer; mysql.el owns handshake + result parsing
 - **Speedup:** 50x+ vs `bd` CLI, ~10x vs Tier 1
-- **Status:** [bdel-4c4.5][] (stretch goal)
+- **Status:** [bdel-4c4.5][]
 
 ### Opt-in Gate
 
-Both tiers are gated behind `beads-dolt-sql-enabled` (defcustom, default
-`nil`). When disabled or when Dolt server is unreachable, beads.el silently
-falls back to `bd` CLI. This ensures zero risk for existing users while
-allowing early adopters to opt in.
+All direct-SQL transports are gated behind `beads-dolt-sql-enabled`
+(defcustom, default `nil`). When disabled or when Dolt server is unreachable,
+beads.el silently falls back to `bd` CLI. This ensures zero risk for existing
+users while allowing early adopters to opt in.
 
 ## Schema Stability Notes
 

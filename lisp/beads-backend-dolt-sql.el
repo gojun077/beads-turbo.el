@@ -23,7 +23,10 @@
 ;; Direct Dolt SQL transport for read-only operations.  Instead of
 ;; forking `bd' (which starts the Go runtime, connects to Dolt,
 ;; serializes, and exits), this module sends SELECT queries directly
-;; to the Dolt SQL server via `mariadb' CLI subprocess.
+;; to the Dolt SQL server.  When Lucius Chen's mysql.el package is
+;; installed, it uses mysql.el's native wire-protocol client.  Otherwise
+;; it falls back to a long-lived `mysql'/`mariadb' CLI subprocess, then
+;; to one-shot `mariadb -e'.
 ;;
 ;; Benchmarks (mariadb 11.8.6, bd 1.0.3, 88 issues):
 ;;
@@ -34,8 +37,9 @@
 ;;   ready     | 47ms             | 7ms        | 6.7x
 ;;   stats     | 210ms            | 8ms        | 26.3x
 ;;
-;; Tier 1 (this module): `mariadb -e` subprocess → ~10ms overhead.
-;; Tier 2 (future, bdel-4c4.5): MySQL wire protocol in elisp → ~0.1ms.
+;; Tier 1: `mariadb -e` subprocess → ~10ms overhead.
+;; Tier 1.5: persistent `mysql'/`mariadb' subprocess → ~1-2ms.
+;; Tier 2: mysql.el native MySQL wire protocol → sub-ms expected.
 ;;
 ;; Writes always go through `bd` CLI — SQL transport is a read-only
 ;; accelerator only.
@@ -71,6 +75,9 @@ Set back to t periodically so we retry after transient failures.")
 
 (defvar beads-backend-dolt-sql--cli-fallback-program nil
   "Path to the bd CLI for fallback execution.")
+
+(defvar beads-dolt-sql--native-mysql-conn nil)
+(defvar beads-dolt-sql--native-mysql-params nil)
 
 (defvar beads-dolt-sql--mysql-proc nil)
 (defvar beads-dolt-sql--mysql-output nil)
@@ -314,6 +321,97 @@ WHERE i.ephemeral = 0 \
 ORDER BY i.priority ASC, i.created_at DESC"
   "SQL template for the `stale' operation.")
 
+(defun beads-dolt-sql--normalize-json-value (value)
+  "Normalize VALUE to the backend's public alist/list representation."
+  (cond
+   ((hash-table-p value)
+    (let (alist)
+      (maphash (lambda (key val)
+                 (push (cons (if (stringp key) (intern key) key)
+                             (beads-dolt-sql--normalize-json-value val))
+                       alist))
+               value)
+      (nreverse alist)))
+   ((vectorp value)
+    (mapcar #'beads-dolt-sql--normalize-json-value (append value nil)))
+   ((and (consp value) (consp (car value)))
+    (mapcar (lambda (entry)
+              (cons (car entry)
+                    (beads-dolt-sql--normalize-json-value (cdr entry))))
+            value))
+   ((listp value)
+    (mapcar #'beads-dolt-sql--normalize-json-value value))
+   (t value)))
+
+(defun beads-dolt-sql--parse-json-output (raw)
+  "Parse RAW JSON using the backend's public alist/list representation."
+  (condition-case nil
+      (with-temp-buffer
+        (insert raw)
+        (goto-char (point-min))
+        (beads-dolt-sql--normalize-json-value (json-read)))
+    (json-error
+     (signal 'beads-backend-error
+             (list (format "SQL query returned invalid JSON: %s" raw))))))
+
+(defun beads-dolt-sql--native-mysql-available-p ()
+  "Return non-nil when Lucius Chen's mysql.el package can be loaded."
+  (or (featurep 'mysql)
+      (locate-library "mysql")))
+
+(defun beads-dolt-sql--native-mysql-load ()
+  "Load mysql.el if available."
+  (or (featurep 'mysql)
+      (require 'mysql nil t)))
+
+(defun beads-dolt-sql--native-mysql-disconnect ()
+  "Disconnect and clear the native mysql.el connection, if any."
+  (when beads-dolt-sql--native-mysql-conn
+    (ignore-errors (mysql-disconnect beads-dolt-sql--native-mysql-conn)))
+  (setq beads-dolt-sql--native-mysql-conn nil)
+  (setq beads-dolt-sql--native-mysql-params nil))
+
+(defun beads-dolt-sql--native-mysql-connect (dolt)
+  "Open a native mysql.el connection to DOLT params."
+  (unless (beads-dolt-sql--native-mysql-load)
+    (signal 'beads-backend-error '("mysql.el is not available")))
+  (let* ((host (alist-get 'host dolt "127.0.0.1"))
+         (port (alist-get 'port dolt 3310))
+         (user (alist-get 'user dolt "root"))
+         (password (alist-get 'password dolt ""))
+         (database (alist-get 'database dolt "beads_bdel")))
+    (setq beads-dolt-sql--native-mysql-conn
+          (mysql-connect :host host
+                         :port port
+                         :user user
+                         :password password
+                         :database database
+                         :tls nil))
+    (setq beads-dolt-sql--native-mysql-params dolt)
+    beads-dolt-sql--native-mysql-conn))
+
+(defun beads-dolt-sql--ensure-native-mysql-connected (dolt)
+  "Return a live mysql.el connection for DOLT params."
+  (if (and beads-dolt-sql--native-mysql-conn
+           (equal beads-dolt-sql--native-mysql-params dolt))
+      beads-dolt-sql--native-mysql-conn
+    (beads-dolt-sql--native-mysql-disconnect)
+    (beads-dolt-sql--native-mysql-connect dolt)))
+
+(defun beads-dolt-sql--native-mysql-query (sql dolt)
+  "Execute SQL against DOLT via mysql.el and parse the JSON result cell."
+  (let* ((conn (beads-dolt-sql--ensure-native-mysql-connected dolt))
+         (result (mysql-query conn sql))
+         (rows (mysql-result-rows result))
+         (cell (caar rows)))
+    (cond
+     ((stringp cell) (beads-dolt-sql--parse-json-output cell))
+     ((or (vectorp cell) (listp cell) (hash-table-p cell))
+      (beads-dolt-sql--normalize-json-value cell))
+     ((null cell) nil)
+     (t (signal 'beads-backend-error
+                (list (format "SQL query returned unsupported value: %S" cell)))))))
+
 (defun beads-dolt-sql--mysql-filter (_proc string)
   (setq beads-dolt-sql--mysql-output (concat (or beads-dolt-sql--mysql-output "") string)))
 
@@ -371,9 +469,7 @@ or ssl-verify-server-cert warnings, which are not SQL errors."
                  (string-trim (or beads-dolt-sql--mysql-output "")))))
       (when (string-match-p "\\`ERROR" raw)
         (signal 'beads-backend-error (list raw)))
-      (condition-case _err
-          (with-temp-buffer (insert raw) (goto-char (point-min)) (let ((obj (json-read))) (if (vectorp obj) (append obj nil) obj)))
-        (json-error (signal 'beads-backend-error (list (format "bad json: %s" raw))))))))
+      (beads-dolt-sql--parse-json-output raw))))
 
 (cl-defun beads-backend-dolt-sql--fetch-dolt-params ()
   "Fetch Dolt SQL server connection params from `bd dolt show --json'.
@@ -412,7 +508,9 @@ Caches result for 60 seconds."
     (cl-return-from beads-backend-dolt-sql--available-p nil))
   (unless beads-dolt-sql--available
     (cl-return-from beads-backend-dolt-sql--available-p nil))
-  (unless (or (executable-find "mariadb") (executable-find "mysql"))
+  (unless (or (beads-dolt-sql--native-mysql-available-p)
+              (executable-find "mariadb")
+              (executable-find "mysql"))
     (cl-return-from beads-backend-dolt-sql--available-p nil))
   (and (beads-backend-dolt-sql--fetch-dolt-params) t))
 
@@ -431,16 +529,38 @@ Caches result for 60 seconds."
         (goto-char (point-min))
         (unless (zerop exit-code) (signal 'beads-backend-error (list (format "mariadb failed with exit code %d: %s" exit-code (string-trim (buffer-string))))))
         (goto-char (point-min))
-        (condition-case nil (let ((output (json-read))) (if (vectorp output) (append output nil) output)) (json-error (signal 'beads-backend-error (list (format "SQL query returned invalid JSON: %s" (buffer-string))))))))))
+        (beads-dolt-sql--parse-json-output (buffer-string))))))
 
 (defun beads-backend-dolt-sql--execute-sql (sql &optional params)
   (let ((dolt (beads-backend-dolt-sql--fetch-dolt-params)))
     (unless dolt (signal 'beads-backend-error '("Dolt SQL server not available")))
     (let ((sql-str sql))
       (when params (dolist (param params) (setq sql-str (replace-regexp-in-string "\\?" (if (stringp param) (concat "'" (replace-regexp-in-string "'" "''" param) "'") (format "%s" param)) sql-str t t))))
-      (if (executable-find "mysql")
-          (condition-case _err (beads-dolt-sql--mysql-query sql-str) (error (beads-backend-dolt-sql--one-shot-mariadb sql-str dolt)))
-        (beads-backend-dolt-sql--one-shot-mariadb sql-str dolt)))))
+      (cond
+       ((beads-dolt-sql--native-mysql-available-p)
+        (condition-case _err
+            (beads-dolt-sql--native-mysql-query sql-str dolt)
+          (error
+           (beads-dolt-sql--native-mysql-disconnect)
+           (cond
+            ((executable-find "mysql")
+             (condition-case _fallback-err
+                 (beads-dolt-sql--mysql-query sql-str)
+               (error (beads-backend-dolt-sql--one-shot-mariadb sql-str dolt))))
+            ((executable-find "mariadb")
+             (beads-backend-dolt-sql--one-shot-mariadb sql-str dolt))
+            (t
+             (signal 'beads-backend-error
+                     '("mysql.el query failed and no CLI fallback is available")))))))
+       ((executable-find "mysql")
+        (condition-case _err
+            (beads-dolt-sql--mysql-query sql-str)
+          (error (beads-backend-dolt-sql--one-shot-mariadb sql-str dolt))))
+       ((executable-find "mariadb")
+        (beads-backend-dolt-sql--one-shot-mariadb sql-str dolt))
+       (t
+        (signal 'beads-backend-error
+                '("mysql.el and mariadb/mysql executables are not available")))))))
 
 (defun beads-backend-dolt-sql--execute-list (_args _project-root)
   "Execute `list' operation via direct SQL."
@@ -490,10 +610,13 @@ Returns t if ready, signals an error otherwise."
     (if (called-interactively-p 'any)
         (message "Dolt SQL transport is disabled (beads-dolt-sql-enabled is nil)")
       (signal 'beads-backend-error '("Dolt SQL transport is disabled"))))
-  (unless (or (executable-find "mariadb") (executable-find "mysql"))
+  (unless (or (beads-dolt-sql--native-mysql-available-p)
+              (executable-find "mariadb")
+              (executable-find "mysql"))
     (if (called-interactively-p 'any)
-        (message "mariadb/mysql executable not found")
-      (signal 'beads-backend-error '("mariadb/mysql executable not found"))))
+        (message "mysql.el or mariadb/mysql executable not found")
+      (signal 'beads-backend-error
+              '("mysql.el or mariadb/mysql executable not found"))))
   (let ((params (beads-backend-dolt-sql--fetch-dolt-params)))
     (unless params
       (if (called-interactively-p 'any)
@@ -574,6 +697,10 @@ PREVIOUS-ERROR is the error from the failed SQL attempt, for context."
 
 (declare-function beads-backend-bd--operation-to-cli-args "beads-backend-bd")
 (declare-function beads-backend-bd--cli-extra-flags "beads-backend-bd")
+(declare-function mysql-connect "mysql")
+(declare-function mysql-disconnect "mysql")
+(declare-function mysql-query "mysql")
+(declare-function mysql-result-rows "mysql")
 
 (defun beads-backend-dolt-sql--auto-detect-advice (orig-fun &rest args)
   "Advice for `beads-backend--auto-detect' to prefer SQL transport.
@@ -593,6 +720,7 @@ is available, returns the bd-dolt-sql backend."
   (setq beads-dolt-sql--available t)
   (setq beads-dolt-sql--params nil)
   (setq beads-dolt-sql--params-time nil)
+  (beads-dolt-sql--native-mysql-disconnect)
   (when beads-dolt-sql--mysql-proc (delete-process beads-dolt-sql--mysql-proc))
   (setq beads-dolt-sql--mysql-proc nil)
   (setq beads-dolt-sql--mysql-output nil)
@@ -609,6 +737,7 @@ is available, returns the bd-dolt-sql backend."
   (interactive)
   (setq beads-dolt-sql-enabled nil)
   (setq beads-dolt-sql--available nil)
+  (beads-dolt-sql--native-mysql-disconnect)
   (when beads-dolt-sql--mysql-proc (delete-process beads-dolt-sql--mysql-proc) (setq beads-dolt-sql--mysql-proc nil) (setq beads-dolt-sql--mysql-output nil) (setq beads-dolt-sql--mysql-params nil))
   (advice-remove 'beads-backend--auto-detect
                  #'beads-backend-dolt-sql--auto-detect-advice)

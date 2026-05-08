@@ -84,6 +84,10 @@ from cache and never invokes the real `bd dolt show'.  Mocks
                  (cond ((equal cmd "mariadb") "/usr/bin/mariadb")
                        ((equal cmd "bd") "/usr/bin/bd")
                        (t nil))))
+              ((symbol-function 'locate-library)
+               (lambda (_library) nil))
+              ((symbol-function 'beads-dolt-sql--native-mysql-available-p)
+               (lambda () nil))
               ((symbol-function 'beads-client--project-root)
                (lambda () "/fake/project/")))
       (funcall body-fn))))
@@ -222,11 +226,15 @@ from cache and never invokes the real `bd dolt show'.  Mocks
       (should-not (beads-backend-dolt-sql--available-p)))))
 
 (ert-deftest beads-dolt-sql-test-unavailable-no-mariadb ()
-  "Test available-p returns nil when mariadb not found."
+  "Test available-p returns nil when no SQL transport is found."
   (let ((beads-dolt-sql-enabled t)
         (beads-dolt-sql--available t))
     (cl-letf (((symbol-function 'executable-find)
-               (lambda (_cmd) nil)))
+               (lambda (_cmd) nil))
+              ((symbol-function 'locate-library)
+               (lambda (_library) nil))
+              ((symbol-function 'beads-dolt-sql--native-mysql-available-p)
+               (lambda () nil)))
       (should-not (beads-backend-dolt-sql--available-p)))))
 
 (ert-deftest beads-dolt-sql-test-mark-unavailable ()
@@ -325,6 +333,32 @@ from cache and never invokes the real `bd dolt show'.  Mocks
          (beads-backend-dolt-sql--execute-sql "WHERE id = ?" '("test-1"))
          (should (string-match "test-1" captured-sql))
          (should-not (string-match "\\?" captured-sql)))))))
+
+(ert-deftest beads-dolt-sql-test-native-mysql-execute-sql-returns-json ()
+  "Test execute-sql prefers mysql.el when it is available."
+  (let ((called-native nil))
+    (beads-dolt-sql-test--with-clean-state
+     (lambda ()
+       (cl-letf (((symbol-function 'beads-dolt-sql--native-mysql-available-p)
+                  (lambda () t))
+                 ((symbol-function 'beads-dolt-sql--native-mysql-query)
+                  (lambda (sql _dolt)
+                    (setq called-native sql)
+                    (beads-dolt-sql--parse-json-output
+                     "[{\"id\":\"native-1\",\"title\":\"native\"}]"))))
+         (let ((result (beads-backend-dolt-sql--execute-sql "SELECT 1")))
+           (should called-native)
+           (should (equal (alist-get 'id (car result)) "native-1"))))))))
+
+(ert-deftest beads-dolt-sql-test-native-mysql-normalizes-hash-json ()
+  "Test mysql.el-parsed hash-table JSON is converted to alists."
+  (let ((issue (make-hash-table :test 'equal)))
+    (puthash "id" "native-1" issue)
+    (puthash "priority" 1 issue)
+    (let ((result (beads-dolt-sql--normalize-json-value (vector issue))))
+      (should (listp result))
+      (should (equal (alist-get 'id (car result)) "native-1"))
+      (should (= (alist-get 'priority (car result)) 1)))))
 
 ;;; Operation-specific tests
 
@@ -507,10 +541,14 @@ from cache and never invokes the real `bd dolt show'.  Mocks
                   :type 'beads-backend-error)))
 
 (ert-deftest beads-dolt-sql-test-check-no-mariadb ()
-  "Test check signals when mariadb not found."
+  "Test check signals when no SQL transport is found."
   (let ((beads-dolt-sql-enabled t))
     (cl-letf (((symbol-function 'executable-find)
-               (lambda (_cmd) nil)))
+               (lambda (_cmd) nil))
+              ((symbol-function 'locate-library)
+               (lambda (_library) nil))
+              ((symbol-function 'beads-dolt-sql--native-mysql-available-p)
+               (lambda () nil)))
       (should-error (beads-backend-dolt-sql--check)
                     :type 'beads-backend-error))))
 
