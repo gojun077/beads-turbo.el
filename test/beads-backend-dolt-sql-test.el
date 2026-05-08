@@ -632,6 +632,346 @@ from cache and never invokes the real `bd dolt show'.  Mocks
       (should-error (beads-backend-dolt-sql--execute-fallback "list" nil nil)
                     :type 'beads-backend-error))))
 
+;;; Persistent mysql/mariadb subprocess (Tier 1.5) tests
+
+(defun beads-dolt-sql-test--make-fake-proc ()
+  "Return a sentinel symbol used as a stand-in for a live process.
+All persistent-client process operations are stubbed so the tests
+never touch a real subprocess."
+  (make-symbol "fake-mysql-proc"))
+
+(defmacro beads-dolt-sql-test--with-mysql-state (&rest body)
+  "Eval BODY with all `--mysql-*' state vars freshly bound to nil."
+  (declare (indent 0))
+  `(let ((beads-dolt-sql--mysql-proc nil)
+         (beads-dolt-sql--mysql-output nil)
+         (beads-dolt-sql--mysql-params nil)
+         (beads-dolt-sql--available t))
+     ,@body))
+
+;; --- Filter tests ---
+
+(ert-deftest beads-dolt-sql-test-mysql-filter-appends-chunks ()
+  "Test `--mysql-filter' concatenates successive chunks."
+  (beads-dolt-sql-test--with-mysql-state
+    (setq beads-dolt-sql--mysql-output "")
+    (beads-dolt-sql--mysql-filter nil "abc")
+    (beads-dolt-sql--mysql-filter nil "def")
+    (beads-dolt-sql--mysql-filter nil "ghi\n")
+    (should (equal beads-dolt-sql--mysql-output "abcdefghi\n"))))
+
+(ert-deftest beads-dolt-sql-test-mysql-filter-handles-nil-start ()
+  "Test `--mysql-filter' tolerates a nil starting `--mysql-output'."
+  (beads-dolt-sql-test--with-mysql-state
+    (should (null beads-dolt-sql--mysql-output))
+    (beads-dolt-sql--mysql-filter nil "first")
+    (should (equal beads-dolt-sql--mysql-output "first"))
+    (beads-dolt-sql--mysql-filter nil "+second")
+    (should (equal beads-dolt-sql--mysql-output "first+second"))))
+
+;; --- Sentinel tests ---
+
+(ert-deftest beads-dolt-sql-test-mysql-sentinel-clears-on-finished ()
+  "Test sentinel clears state and marks unavailable on `finished'."
+  (beads-dolt-sql-test--with-mysql-state
+    (setq beads-dolt-sql--mysql-proc (beads-dolt-sql-test--make-fake-proc))
+    (setq beads-dolt-sql--mysql-output "buffered")
+    (setq beads-dolt-sql--mysql-params '((host . "x")))
+    (beads-dolt-sql--mysql-sentinel nil "finished\n")
+    (should-not beads-dolt-sql--mysql-proc)
+    (should-not beads-dolt-sql--mysql-output)
+    (should-not beads-dolt-sql--mysql-params)
+    (should-not beads-dolt-sql--available)))
+
+(ert-deftest beads-dolt-sql-test-mysql-sentinel-clears-on-exited ()
+  "Test sentinel clears state on `exited' event."
+  (beads-dolt-sql-test--with-mysql-state
+    (setq beads-dolt-sql--mysql-proc (beads-dolt-sql-test--make-fake-proc))
+    (beads-dolt-sql--mysql-sentinel nil "exited abnormally with code 1\n")
+    (should-not beads-dolt-sql--mysql-proc)))
+
+(ert-deftest beads-dolt-sql-test-mysql-sentinel-clears-on-killed ()
+  "Test sentinel clears state on `killed' event."
+  (beads-dolt-sql-test--with-mysql-state
+    (setq beads-dolt-sql--mysql-proc (beads-dolt-sql-test--make-fake-proc))
+    (beads-dolt-sql--mysql-sentinel nil "killed\n")
+    (should-not beads-dolt-sql--mysql-proc)))
+
+(ert-deftest beads-dolt-sql-test-mysql-sentinel-ignores-other-events ()
+  "Test sentinel leaves state alone for non-terminating events."
+  (beads-dolt-sql-test--with-mysql-state
+    (let ((proc (beads-dolt-sql-test--make-fake-proc)))
+      (setq beads-dolt-sql--mysql-proc proc)
+      (setq beads-dolt-sql--mysql-output "still here")
+      (beads-dolt-sql--mysql-sentinel nil "open from 127.0.0.1\n")
+      (should (eq beads-dolt-sql--mysql-proc proc))
+      (should (equal beads-dolt-sql--mysql-output "still here"))
+      (should beads-dolt-sql--available))))
+
+;; --- Start / ensure tests ---
+
+(defmacro beads-dolt-sql-test--with-start-process-stub (capture &rest body)
+  "Eval BODY with `start-process' stubbed.
+CAPTURE is a list-cell whose car is set to an alist of call args:
+  ((name . NAME) (buffer . BUFFER) (program . PROGRAM)
+   (args . ARGS) (proc . PROC))."
+  (declare (indent 1))
+  `(cl-letf (((symbol-function 'start-process)
+              (lambda (name buffer program &rest args)
+                (let ((proc (beads-dolt-sql-test--make-fake-proc)))
+                  (setcar ,capture
+                          (list (cons 'name name)
+                                (cons 'buffer buffer)
+                                (cons 'program program)
+                                (cons 'args args)
+                                (cons 'proc proc)))
+                  proc)))
+             ((symbol-function 'set-process-filter)
+              (lambda (proc fn)
+                (setcar ,capture
+                        (cons (cons 'filter (cons proc fn))
+                              (car ,capture)))))
+             ((symbol-function 'set-process-sentinel)
+              (lambda (proc fn)
+                (setcar ,capture
+                        (cons (cons 'sentinel (cons proc fn))
+                              (car ,capture)))))
+             ((symbol-function 'generate-new-buffer)
+              (lambda (name) (format "<buf:%s>" name)))
+             ((symbol-function 'executable-find)
+              (lambda (cmd)
+                (cond ((equal cmd "mariadb") "/usr/bin/mariadb")
+                      (t nil)))))
+     ,@body))
+
+(ert-deftest beads-dolt-sql-test-start-mysql-proc-sets-state ()
+  "Test `--start-mysql-proc' wires up state, filter, and sentinel."
+  (beads-dolt-sql-test--with-mysql-state
+    (let* ((capture (list nil))
+           (dolt '((host . "127.0.0.1")
+                   (port . 3310)
+                   (user . "root")
+                   (database . "testdb"))))
+      (beads-dolt-sql-test--with-start-process-stub capture
+        (let ((proc (beads-dolt-sql--start-mysql-proc dolt)))
+          (should proc)
+          (should (eq beads-dolt-sql--mysql-proc proc))
+          (should (equal beads-dolt-sql--mysql-params dolt))
+          (should (equal beads-dolt-sql--mysql-output ""))
+          (let ((c (car capture)))
+            (should (equal (alist-get 'name c) "beads-mysql"))
+            (should (equal (alist-get 'program c) "/usr/bin/mariadb"))
+            (let ((args (alist-get 'args c)))
+              (should (member "--batch" args))
+              (should (member "--skip-column-names" args))
+              (should (member "--host" args))
+              (should (member "127.0.0.1" args))
+              (should (member "--port" args))
+              (should (member "3310" args))
+              (should (member "--user" args))
+              (should (member "root" args))
+              (should (member "testdb" args)))
+            ;; filter and sentinel were attached to the same proc.
+            (should (eq (cadr (assq 'filter c)) proc))
+            (should (eq (cddr (assq 'filter c)) #'beads-dolt-sql--mysql-filter))
+            (should (eq (cadr (assq 'sentinel c)) proc))
+            (should (eq (cddr (assq 'sentinel c))
+                        #'beads-dolt-sql--mysql-sentinel))))))))
+
+(ert-deftest beads-dolt-sql-test-ensure-mysql-connected-reuses-live ()
+  "Test `--ensure-mysql-connected' returns existing live proc."
+  (beads-dolt-sql-test--with-mysql-state
+    (let* ((proc (beads-dolt-sql-test--make-fake-proc))
+           (start-called nil))
+      (setq beads-dolt-sql--mysql-proc proc)
+      (cl-letf (((symbol-function 'process-live-p) (lambda (_) t))
+                ((symbol-function 'beads-dolt-sql--start-mysql-proc)
+                 (lambda (_dolt) (setq start-called t) 'new-proc)))
+        (should (eq (beads-dolt-sql--ensure-mysql-connected) proc))
+        (should-not start-called)))))
+
+(ert-deftest beads-dolt-sql-test-ensure-mysql-connected-restarts-dead ()
+  "Test `--ensure-mysql-connected' restarts when proc is dead."
+  (beads-dolt-sql-test--with-mysql-state
+    (let* ((dead (beads-dolt-sql-test--make-fake-proc))
+           (deleted nil)
+           (started-with nil))
+      (setq beads-dolt-sql--mysql-proc dead)
+      (cl-letf (((symbol-function 'process-live-p) (lambda (_) nil))
+                ((symbol-function 'delete-process)
+                 (lambda (p) (setq deleted p)))
+                ((symbol-function 'beads-backend-dolt-sql--fetch-dolt-params)
+                 (lambda () '((host . "127.0.0.1") (port . 3310))))
+                ((symbol-function 'beads-dolt-sql--start-mysql-proc)
+                 (lambda (dolt)
+                   (setq started-with dolt)
+                   'fresh-proc)))
+        (should (eq (beads-dolt-sql--ensure-mysql-connected) 'fresh-proc))
+        (should (eq deleted dead))
+        (should (equal (alist-get 'host started-with) "127.0.0.1"))))))
+
+(ert-deftest beads-dolt-sql-test-ensure-mysql-connected-no-params-signals ()
+  "Test `--ensure-mysql-connected' signals when no Dolt params available."
+  (beads-dolt-sql-test--with-mysql-state
+    (cl-letf (((symbol-function 'process-live-p) (lambda (_) nil))
+              ((symbol-function 'beads-backend-dolt-sql--fetch-dolt-params)
+               (lambda () nil)))
+      (should-error (beads-dolt-sql--ensure-mysql-connected)
+                    :type 'beads-backend-error))))
+
+;; --- Query tests ---
+
+(defmacro beads-dolt-sql-test--with-mysql-query-stubs
+    (proc sent-store &rest body)
+  "Stub `--ensure-mysql-connected', `process-send-string', and friends.
+PROC is the symbol used as the fake live proc returned by ensure.
+SENT-STORE is a list-cell whose car captures the SQL string sent."
+  (declare (indent 2))
+  `(cl-letf (((symbol-function 'beads-dolt-sql--ensure-mysql-connected)
+              (lambda () ,proc))
+             ((symbol-function 'process-send-string)
+              (lambda (_p s) (setcar ,sent-store s))))
+     ,@body))
+
+(ert-deftest beads-dolt-sql-test-mysql-query-sends-sql-and-parses-json ()
+  "Test `--mysql-query' sends \"<sql>;\\n\" and parses JSON output."
+  (beads-dolt-sql-test--with-mysql-state
+    (let* ((proc (beads-dolt-sql-test--make-fake-proc))
+           (sent (list nil))
+           (poll-count 0))
+      (setq beads-dolt-sql--mysql-output "stale-leftover")
+      (beads-dolt-sql-test--with-mysql-query-stubs proc sent
+        (cl-letf (((symbol-function 'accept-process-output)
+                   (lambda (&rest _)
+                     (cl-incf poll-count)
+                     (setq beads-dolt-sql--mysql-output
+                           "[{\"id\":\"x\",\"title\":\"t\"}]\n"))))
+          (let ((result (beads-dolt-sql--mysql-query "SELECT 1")))
+            ;; Stale output was reset before send.
+            (should (equal (car sent) "SELECT 1;\n"))
+            (should (> poll-count 0))
+            (should (listp result))
+            (should (equal (alist-get 'id (car result)) "x"))))))))
+
+(ert-deftest beads-dolt-sql-test-mysql-query-resets-output-before-send ()
+  "Test `--mysql-query' resets `--mysql-output' before sending."
+  (beads-dolt-sql-test--with-mysql-state
+    (let* ((proc (beads-dolt-sql-test--make-fake-proc))
+           (sent (list nil))
+           (output-at-send nil))
+      (setq beads-dolt-sql--mysql-output "GARBAGE FROM PREVIOUS QUERY")
+      (cl-letf (((symbol-function 'beads-dolt-sql--ensure-mysql-connected)
+                 (lambda () proc))
+                ((symbol-function 'process-send-string)
+                 (lambda (_p s)
+                   (setq output-at-send beads-dolt-sql--mysql-output)
+                   (setcar sent s)))
+                ((symbol-function 'accept-process-output)
+                 (lambda (&rest _)
+                   (setq beads-dolt-sql--mysql-output "[]\n"))))
+        (beads-dolt-sql--mysql-query "SELECT 2")
+        (should (equal output-at-send ""))
+        (should (equal (car sent) "SELECT 2;\n"))))))
+
+(ert-deftest beads-dolt-sql-test-mysql-query-times-out-cleanly ()
+  "Test `--mysql-query' exits the polling loop without spinning.
+When no newline ever arrives the buffered output (here empty) is
+handed to the JSON parser, which raises `beads-backend-error' for
+empty input.  The externally observable behaviour is: an error is
+signalled quickly, never an infinite loop."
+  (beads-dolt-sql-test--with-mysql-state
+    (let* ((proc (beads-dolt-sql-test--make-fake-proc))
+           (sent (list nil))
+           ;; First call returns 0 (start), all later calls return a
+           ;; value past the 5s timeout so the loop exits immediately.
+           (first-call t)
+           (poll-count 0))
+      (beads-dolt-sql-test--with-mysql-query-stubs proc sent
+        (cl-letf (((symbol-function 'float-time)
+                   (lambda (&rest _)
+                     (if first-call (progn (setq first-call nil) 0.0) 100.0)))
+                  ((symbol-function 'accept-process-output)
+                   (lambda (&rest _)
+                     (cl-incf poll-count)
+                     ;; Never set output — simulating no data arriving.
+                     nil)))
+          ;; If the loop spun on the real wall-clock the test would
+          ;; hang for 5s; instead `should-error' returns immediately
+          ;; because our mocked `float-time' makes the loop guard
+          ;; false on its very first re-check.
+          (should-error (beads-dolt-sql--mysql-query "SELECT 3")
+                        :type 'beads-backend-error)
+          ;; Loop body must not have run more than once given our
+          ;; mocked clock jump.
+          (should (<= poll-count 1))
+          (should (equal (car sent) "SELECT 3;\n")))))))
+
+(ert-deftest beads-dolt-sql-test-mysql-query-signals-on-error-prefix ()
+  "Test `--mysql-query' signals when output starts with ERROR."
+  (beads-dolt-sql-test--with-mysql-state
+    (let* ((proc (beads-dolt-sql-test--make-fake-proc))
+           (sent (list nil)))
+      (beads-dolt-sql-test--with-mysql-query-stubs proc sent
+        (cl-letf (((symbol-function 'accept-process-output)
+                   (lambda (&rest _)
+                     (setq beads-dolt-sql--mysql-output
+                           "ERROR 1146 (42S02): Table doesn't exist\n"))))
+          (should-error (beads-dolt-sql--mysql-query "SELECT bogus")
+                        :type 'beads-backend-error))))))
+
+;; --- Integration with --execute-sql ---
+
+(ert-deftest beads-dolt-sql-test-execute-sql-uses-persistent-mysql ()
+  "Test `--execute-sql' uses `--mysql-query' when `mysql' client is found."
+  (beads-dolt-sql-test--with-mysql-state
+    (let ((called-sql nil))
+      (cl-letf (((symbol-function 'executable-find)
+                 (lambda (cmd)
+                   (cond ((equal cmd "mysql") "/usr/bin/mysql")
+                         ((equal cmd "mariadb") "/usr/bin/mariadb")
+                         ((equal cmd "bd") "/usr/bin/bd")
+                         (t nil))))
+                ((symbol-function 'beads-dolt-sql--native-mysql-available-p)
+                 (lambda () nil))
+                ((symbol-function 'beads-dolt-sql--mysql-query)
+                 (lambda (sql)
+                   (setq called-sql sql)
+                   (beads-dolt-sql--parse-json-output
+                    "[{\"id\":\"persistent-1\",\"title\":\"p\"}]")))
+                ((symbol-function 'beads-backend-dolt-sql--fetch-dolt-params)
+                 (lambda () '((host . "127.0.0.1") (port . 3310)
+                              (user . "root") (database . "testdb")))))
+        (let ((result (beads-backend-dolt-sql--execute-sql "SELECT 1")))
+          (should (equal called-sql "SELECT 1"))
+          (should (equal (alist-get 'id (car result)) "persistent-1")))))))
+
+(ert-deftest beads-dolt-sql-test-execute-sql-falls-back-on-persistent-error ()
+  "Test `--execute-sql' falls back to `--one-shot-mariadb' on persistent error."
+  (beads-dolt-sql-test--with-mysql-state
+    (let ((one-shot-called nil))
+      (cl-letf (((symbol-function 'executable-find)
+                 (lambda (cmd)
+                   (cond ((equal cmd "mysql") "/usr/bin/mysql")
+                         ((equal cmd "mariadb") "/usr/bin/mariadb")
+                         ((equal cmd "bd") "/usr/bin/bd")
+                         (t nil))))
+                ((symbol-function 'beads-dolt-sql--native-mysql-available-p)
+                 (lambda () nil))
+                ((symbol-function 'beads-dolt-sql--mysql-query)
+                 (lambda (_sql)
+                   (signal 'beads-backend-error '("persistent client died"))))
+                ((symbol-function 'beads-backend-dolt-sql--one-shot-mariadb)
+                 (lambda (sql _dolt)
+                   (setq one-shot-called sql)
+                   (beads-dolt-sql--parse-json-output
+                    "[{\"id\":\"shot-1\",\"title\":\"s\"}]")))
+                ((symbol-function 'beads-backend-dolt-sql--fetch-dolt-params)
+                 (lambda () '((host . "127.0.0.1") (port . 3310)
+                              (user . "root") (database . "testdb")))))
+        (let ((result (beads-backend-dolt-sql--execute-sql "SELECT 1")))
+          (should (equal one-shot-called "SELECT 1"))
+          (should (equal (alist-get 'id (car result)) "shot-1")))))))
+
 ;;; Integration tests (only when live Dolt server is available)
 
 (ert-deftest beads-dolt-sql-test-integration-list ()
