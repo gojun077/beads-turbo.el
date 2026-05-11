@@ -724,6 +724,7 @@ CAPTURE is a list-cell whose car is set to an alist of call args:
                                 (cons 'buffer buffer)
                                 (cons 'program program)
                                 (cons 'args args)
+                                (cons 'connection-type process-connection-type)
                                 (cons 'proc proc)))
                   proc)))
              ((symbol-function 'set-process-filter)
@@ -761,9 +762,19 @@ CAPTURE is a list-cell whose car is set to an alist of call args:
           (let ((c (car capture)))
             (should (equal (alist-get 'name c) "beads-mysql"))
             (should (equal (alist-get 'program c) "/usr/bin/mariadb"))
+            ;; Pipe (not pty) is required: mariadb on a pty echoes BEL
+            ;; characters and never delivers the sentinel marker (bdel-dgy).
+            (should (null (alist-get 'connection-type c)))
             (let ((args (alist-get 'args c)))
               (should (member "--batch" args))
               (should (member "--skip-column-names" args))
+              ;; --force keeps the batch alive after a SQL error so the
+              ;; trailing sentinel SELECT (see bdel-dgy) still runs.
+              (should (member "--force" args))
+              ;; --unbuffered flushes after every query so small results
+              ;; (count, stats, the sentinel itself) reach us without
+              ;; sitting in mariadb's stdout block buffer (bdel-dgy).
+              (should (member "--unbuffered" args))
               (should (member "--host" args))
               (should (member "127.0.0.1" args))
               (should (member "--port" args))
@@ -834,21 +845,27 @@ SENT-STORE is a list-cell whose car captures the SQL string sent."
      ,@body))
 
 (ert-deftest beads-dolt-sql-test-mysql-query-sends-sql-and-parses-json ()
-  "Test `--mysql-query' sends \"<sql>;\\n\" and parses JSON output."
+  "Test `--mysql-query' sends \"<sql>;\\nSELECT '<marker>';\\n\".
+The polling loop must wait for the sentinel marker (bdel-dgy) and
+the marker line must be stripped before JSON parsing."
   (beads-dolt-sql-test--with-mysql-state
     (let* ((proc (beads-dolt-sql-test--make-fake-proc))
            (sent (list nil))
-           (poll-count 0))
+           (poll-count 0)
+           (marker beads-dolt-sql--mysql-end-marker))
       (setq beads-dolt-sql--mysql-output "stale-leftover")
       (beads-dolt-sql-test--with-mysql-query-stubs proc sent
         (cl-letf (((symbol-function 'accept-process-output)
                    (lambda (&rest _)
                      (cl-incf poll-count)
                      (setq beads-dolt-sql--mysql-output
-                           "[{\"id\":\"x\",\"title\":\"t\"}]\n"))))
+                           (concat "[{\"id\":\"x\",\"title\":\"t\"}]\n"
+                                   marker "\n")))))
           (let ((result (beads-dolt-sql--mysql-query "SELECT 1")))
-            ;; Stale output was reset before send.
-            (should (equal (car sent) "SELECT 1;\n"))
+            ;; Stale output was reset before send and both the real
+            ;; query and the sentinel SELECT were sent in one batch.
+            (should (equal (car sent)
+                           (concat "SELECT 1;\nSELECT '" marker "';\n")))
             (should (> poll-count 0))
             (should (listp result))
             (should (equal (alist-get 'id (car result)) "x"))))))))
@@ -858,7 +875,8 @@ SENT-STORE is a list-cell whose car captures the SQL string sent."
   (beads-dolt-sql-test--with-mysql-state
     (let* ((proc (beads-dolt-sql-test--make-fake-proc))
            (sent (list nil))
-           (output-at-send nil))
+           (output-at-send nil)
+           (marker beads-dolt-sql--mysql-end-marker))
       (setq beads-dolt-sql--mysql-output "GARBAGE FROM PREVIOUS QUERY")
       (cl-letf (((symbol-function 'beads-dolt-sql--ensure-mysql-connected)
                  (lambda () proc))
@@ -868,24 +886,27 @@ SENT-STORE is a list-cell whose car captures the SQL string sent."
                    (setcar sent s)))
                 ((symbol-function 'accept-process-output)
                  (lambda (&rest _)
-                   (setq beads-dolt-sql--mysql-output "[]\n"))))
+                   (setq beads-dolt-sql--mysql-output
+                         (concat "[]\n" marker "\n")))))
         (beads-dolt-sql--mysql-query "SELECT 2")
         (should (equal output-at-send ""))
-        (should (equal (car sent) "SELECT 2;\n"))))))
+        (should (equal (car sent)
+                       (concat "SELECT 2;\nSELECT '" marker "';\n")))))))
 
 (ert-deftest beads-dolt-sql-test-mysql-query-times-out-cleanly ()
   "Test `--mysql-query' exits the polling loop without spinning.
-When no newline ever arrives the buffered output (here empty) is
-handed to the JSON parser, which raises `beads-backend-error' for
-empty input.  The externally observable behaviour is: an error is
-signalled quickly, never an infinite loop."
+When the sentinel marker never arrives the buffered output (here
+empty) is handed to the JSON parser, which raises
+`beads-backend-error' for empty input.  The externally observable
+behaviour is: an error is signalled quickly, never an infinite loop."
   (beads-dolt-sql-test--with-mysql-state
     (let* ((proc (beads-dolt-sql-test--make-fake-proc))
            (sent (list nil))
            ;; First call returns 0 (start), all later calls return a
            ;; value past the 5s timeout so the loop exits immediately.
            (first-call t)
-           (poll-count 0))
+           (poll-count 0)
+           (marker beads-dolt-sql--mysql-end-marker))
       (beads-dolt-sql-test--with-mysql-query-stubs proc sent
         (cl-letf (((symbol-function 'float-time)
                    (lambda (&rest _)
@@ -904,20 +925,74 @@ signalled quickly, never an infinite loop."
           ;; Loop body must not have run more than once given our
           ;; mocked clock jump.
           (should (<= poll-count 1))
-          (should (equal (car sent) "SELECT 3;\n")))))))
+          (should (equal (car sent)
+                         (concat "SELECT 3;\nSELECT '" marker "';\n"))))))))
 
 (ert-deftest beads-dolt-sql-test-mysql-query-signals-on-error-prefix ()
-  "Test `--mysql-query' signals when output starts with ERROR."
+  "Test `--mysql-query' signals when output starts with ERROR.
+With `--force' the sentinel SELECT runs even after a SQL error, so
+the marker arrives after the error text; the marker and trailing
+output are stripped before the ERROR check fires."
   (beads-dolt-sql-test--with-mysql-state
     (let* ((proc (beads-dolt-sql-test--make-fake-proc))
-           (sent (list nil)))
+           (sent (list nil))
+           (marker beads-dolt-sql--mysql-end-marker))
       (beads-dolt-sql-test--with-mysql-query-stubs proc sent
         (cl-letf (((symbol-function 'accept-process-output)
                    (lambda (&rest _)
                      (setq beads-dolt-sql--mysql-output
-                           "ERROR 1146 (42S02): Table doesn't exist\n"))))
+                           (concat "ERROR 1146 (42S02): Table doesn't exist\n"
+                                   marker "\n")))))
           (should-error (beads-dolt-sql--mysql-query "SELECT bogus")
                         :type 'beads-backend-error))))))
+
+(ert-deftest beads-dolt-sql-test-mysql-query-strips-marker-from-result ()
+  "Test `--mysql-query' strips the sentinel marker (and anything after
+it) from the output before JSON parsing.  Regression test for bdel-dgy."
+  (beads-dolt-sql-test--with-mysql-state
+    (let* ((proc (beads-dolt-sql-test--make-fake-proc))
+           (sent (list nil))
+           (marker beads-dolt-sql--mysql-end-marker))
+      (beads-dolt-sql-test--with-mysql-query-stubs proc sent
+        (cl-letf (((symbol-function 'accept-process-output)
+                   (lambda (&rest _)
+                     (setq beads-dolt-sql--mysql-output
+                           (concat "[{\"id\":\"abc\",\"title\":\"t\"}]\n"
+                                   marker "\nextra trailing junk\n")))))
+          (let ((result (beads-dolt-sql--mysql-query "SELECT 1")))
+            (should (listp result))
+            (should (equal (alist-get 'id (car result)) "abc"))))))))
+
+(ert-deftest beads-dolt-sql-test-mysql-query-tolerates-mid-chunk-newlines ()
+  "Test `--mysql-query' does NOT terminate the polling loop when an
+intermediate chunk happens to end with a newline.  This is the
+correctness bug fixed alongside the performance fix in bdel-dgy."
+  (beads-dolt-sql-test--with-mysql-state
+    (let* ((proc (beads-dolt-sql-test--make-fake-proc))
+           (sent (list nil))
+           (marker beads-dolt-sql--mysql-end-marker)
+           ;; Simulate the output arriving in three chunks.  The first
+           ;; two chunks end with \n but do NOT contain the marker;
+           ;; the loop must keep polling until the marker appears.
+           (chunks (list "[{\"id\":\"a\"},\n"
+                         "{\"id\":\"b\"}]\n"
+                         (concat marker "\n")))
+           (chunk-idx 0))
+      (beads-dolt-sql-test--with-mysql-query-stubs proc sent
+        (cl-letf (((symbol-function 'accept-process-output)
+                   (lambda (&rest _)
+                     (when (< chunk-idx (length chunks))
+                       (setq beads-dolt-sql--mysql-output
+                             (concat (or beads-dolt-sql--mysql-output "")
+                                     (nth chunk-idx chunks)))
+                       (cl-incf chunk-idx)))))
+          (let ((result (beads-dolt-sql--mysql-query "SELECT 1")))
+            ;; All three chunks must have been consumed, not just the
+            ;; first one with its dangling \n.
+            (should (= chunk-idx 3))
+            (should (= (length result) 2))
+            (should (equal (alist-get 'id (car result)) "a"))
+            (should (equal (alist-get 'id (cadr result)) "b"))))))))
 
 ;; --- Integration with --execute-sql ---
 

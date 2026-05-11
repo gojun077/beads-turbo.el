@@ -83,6 +83,16 @@ Set back to t periodically so we retry after transient failures.")
 (defvar beads-dolt-sql--mysql-output nil)
 (defvar beads-dolt-sql--mysql-params nil)
 
+(defconst beads-dolt-sql--mysql-end-marker "__BEADS_QUERY_END__"
+  "Sentinel string emitted after each persistent-client query.
+A `SELECT '<marker>'` statement is appended to every batch sent to
+the persistent `mysql'/`mariadb' subprocess so the polling loop in
+`beads-dolt-sql--mysql-query' can detect end-of-response
+deterministically (instead of guessing from a trailing newline).
+This both eliminates the original polling overhead for large
+payloads — see issue bdel-dgy — and the latent correctness bug
+where an intermediate chunk happened to end with \\n.")
+
 (defconst beads-dolt-sql--list-sql
   "SELECT JSON_ARRAYAGG(\
 JSON_OBJECT(\
@@ -429,7 +439,26 @@ ORDER BY i.priority ASC, i.created_at DESC"
          (database (alist-get 'database dolt "beads_bdel"))
          (client (or (executable-find "mariadb") (executable-find "mysql") "mariadb"))
          (buf (generate-new-buffer " *beads-mysql*"))
-         (proc (start-process "beads-mysql" buf client "--batch" "--skip-column-names" "--raw" "--skip-ssl" "--host" host "--port" port "--user" user database)))
+         ;; --force keeps the batch session alive after a SQL error so
+         ;; the trailing sentinel SELECT still runs and unblocks the
+         ;; polling loop in `beads-dolt-sql--mysql-query'.
+         ;;
+         ;; `process-connection-type' = nil forces a real pipe instead
+         ;; of a pty for subprocess stdin/stdout.  With a pty the
+         ;; mariadb client treats stdin as a terminal: it emits BEL
+         ;; characters on every input byte (echo mode) and never
+         ;; delivers the sentinel marker promptly — making the polling
+         ;; loop wait the full 5s timeout for every query.
+         ;;
+         ;; `--unbuffered' (-n) flushes after every query.  Without it
+         ;; small results (count, stats, the sentinel SELECT itself)
+         ;; sit in mariadb's stdout block buffer until ~4KB accumulate
+         ;; or the connection closes, so the marker never reaches us
+         ;; and the polling loop times out.  This is essential for
+         ;; correctness on a pipe; pty-mode masked it because ptys are
+         ;; line-buffered.
+         (process-connection-type nil)
+         (proc (start-process "beads-mysql" buf client "--batch" "--skip-column-names" "--raw" "--skip-ssl" "--force" "--unbuffered" "--host" host "--port" port "--user" user database)))
     (set-process-filter proc #'beads-dolt-sql--mysql-filter)
     (set-process-sentinel proc #'beads-dolt-sql--mysql-sentinel)
     (setq beads-dolt-sql--mysql-proc proc)
@@ -459,14 +488,28 @@ or ssl-verify-server-cert warnings, which are not SQL errors."
     (string-trim (buffer-string))))
 
 (defun beads-dolt-sql--mysql-query (sql)
-  (let ((proc (beads-dolt-sql--ensure-mysql-connected)))
+  "Send SQL to the persistent mysql/mariadb subprocess and parse the JSON.
+Appends a sentinel `SELECT '<marker>'' query so the polling loop can
+detect end-of-response by matching `beads-dolt-sql--mysql-end-marker'
+in the buffered output, instead of guessing from a trailing newline.
+This is both faster (no 50ms pad after the last chunk) and more
+correct (intermediate chunks ending with \\n no longer terminate the
+loop early)."
+  (let* ((proc (beads-dolt-sql--ensure-mysql-connected))
+         (marker beads-dolt-sql--mysql-end-marker))
     (setq beads-dolt-sql--mysql-output "")
-    (process-send-string proc (concat sql ";\n"))
+    (process-send-string proc
+                         (concat sql ";\nSELECT '" marker "';\n"))
     (let ((timeout 5.0) (start (float-time)))
-      (while (and (< (- (float-time) start) timeout) (not (string-suffix-p "\n" (or beads-dolt-sql--mysql-output ""))))
-        (accept-process-output proc 0.05)))
-    (let* ((raw (beads-dolt-sql--strip-banner
-                 (string-trim (or beads-dolt-sql--mysql-output "")))))
+      (while (and (< (- (float-time) start) timeout)
+                  (not (string-match-p
+                        (regexp-quote marker)
+                        (or beads-dolt-sql--mysql-output ""))))
+        (accept-process-output proc 0.01)))
+    (let* ((output (or beads-dolt-sql--mysql-output ""))
+           (marker-pos (string-match (regexp-quote marker) output))
+           (body (if marker-pos (substring output 0 marker-pos) output))
+           (raw (beads-dolt-sql--strip-banner (string-trim body))))
       (when (string-match-p "\\`ERROR" raw)
         (signal 'beads-backend-error (list raw)))
       (beads-dolt-sql--parse-json-output raw))))
