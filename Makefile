@@ -1,6 +1,7 @@
 # Makefile
 #
 # Created on: Mon 21 Apr 2026
+# Last Updated: Mon 11 May 2026
 #
 # Makefile for 'beads.el' Emacs client for beads issue tracker
 
@@ -14,7 +15,7 @@ DOLT_PORT   := 3310
 MAIN_REPO   := $(shell git rev-parse --git-common-dir | sed 's|/\.git$$||')
 IS_WORKTREE := $(shell [ "$$(git rev-parse --git-common-dir)" = ".git" ] && echo no || echo yes)
 
-.PHONY: setup lint test build check clean interactive docs docs-view new-test check-parens lint-defun
+.PHONY: setup push lint test build check clean interactive docs docs-view new-test check-parens lint-defun
 
 help:
 	@echo "beads.el Makefile targets:"
@@ -108,6 +109,18 @@ endif
 	@echo ""
 	@echo "Setup complete! You can now use 'bd' commands."
 	@echo "Run 'bd ready --json' to see available tasks."
+
+push:
+	@echo "==> git pull --rebase..."
+	@git pull --rebase
+	@echo "==> bd dolt pull (with BEADS_DOLT_CLI_DIR=$(DOLT_DIR)/$(DOLT_DB))..."
+	BEADS_DOLT_CLI_DIR=$(DOLT_DIR)/$(DOLT_DB) bd dolt pull
+	@echo "==> bd dolt push (with BEADS_DOLT_CLI_DIR=$(DOLT_DIR)/$(DOLT_DB))..."
+	BEADS_DOLT_CLI_DIR=$(DOLT_DIR)/$(DOLT_DB) bd dolt push
+	@echo "==> git push..."
+	@git push
+	@echo "==> git status..."
+	@git status
 
 # --- Elisp tooling (modeled after ~/dotfiles/bin/ patterns) ---
 
