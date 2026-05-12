@@ -407,6 +407,15 @@ Returns alist with `results' and `total' keys."
 Returns list of orphan objects."
   (beads-client-request "orphans" nil))
 
+(defun beads-client-epic-status (&optional eligible-only)
+  "Fetch epic status: list of non-closed epics with at least one child.
+When ELIGIBLE-ONLY is non-nil, return only epics where all children
+are closed (mirrors `bd epic status --eligible-only').
+Returns list of objects with `epic', `total_children',
+`closed_children', and `eligible_for_close' fields."
+  (let ((args (when eligible-only '((eligible_only . t)))))
+    (beads-client-request "epic_status" args)))
+
 (defun beads-client-stale (&optional days status)
   "Fetch stale issues with optional DAYS threshold and STATUS filter.
 Returns list of stale issue objects."

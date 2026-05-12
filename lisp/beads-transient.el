@@ -330,6 +330,7 @@ Press `q' to close the stats window."
 
 (autoload 'beads-orphans "beads-orphans" nil t)
 (autoload 'beads-stale "beads-stale" nil t)
+(autoload 'beads-epics "beads-epics" nil t)
 (autoload 'beads-activity "beads-activity" nil t)
 (autoload 'beads-duplicates "beads-duplicates" nil t)
 (autoload 'beads-conflicts "beads-conflicts" nil t)
@@ -759,6 +760,7 @@ See `beads-backend-dolt-sql-activate' and
   [["Views"
     ("o" "Orphaned issues" beads-orphans)
     ("s" "Stale issues" beads-stale)
+    ("e" "Epic status" beads-epics)
     ("a" "Activity feed" beads-activity)
     ("d" "Duplicates" beads-duplicates)
     ("l" "Lint report" beads-lint)

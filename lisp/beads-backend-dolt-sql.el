@@ -295,6 +295,63 @@ FROM issues i \
 WHERE i.ephemeral = 0"
   "SQL query for the `count' operation.")
 
+(defconst beads-dolt-sql--epic-status-sql
+  "SELECT JSON_ARRAYAGG(payload) AS epics FROM (\
+SELECT JSON_OBJECT(\
+'epic', JSON_OBJECT(\
+  'id', i.id, \
+  'title', i.title, \
+  'description', i.description, \
+  'status', i.status, \
+  'priority', i.priority, \
+  'issue_type', i.issue_type, \
+  'owner', COALESCE(NULLIF(i.owner, ''), i.created_by), \
+  'assignee', i.assignee, \
+  'created_at', DATE_FORMAT(i.created_at, '%Y-%m-%dT%H:%i:%sZ'), \
+  'created_by', i.created_by, \
+  'updated_at', DATE_FORMAT(i.updated_at, '%Y-%m-%dT%H:%i:%sZ')\
+), \
+'total_children', \
+  (SELECT COUNT(*) FROM dependencies d \
+   INNER JOIN issues c ON c.id = d.issue_id \
+   WHERE d.depends_on_id = i.id AND d.type = 'parent-child' \
+     AND c.ephemeral = 0), \
+'closed_children', \
+  (SELECT COUNT(*) FROM dependencies d \
+   INNER JOIN issues c ON c.id = d.issue_id \
+   WHERE d.depends_on_id = i.id AND d.type = 'parent-child' \
+     AND c.ephemeral = 0 AND c.status = 'closed'), \
+'eligible_for_close', \
+  JSON_EXTRACT(\
+    IF((SELECT COUNT(*) FROM dependencies d \
+        INNER JOIN issues c ON c.id = d.issue_id \
+        WHERE d.depends_on_id = i.id AND d.type = 'parent-child' \
+          AND c.ephemeral = 0) > 0 AND \
+       (SELECT COUNT(*) FROM dependencies d \
+        INNER JOIN issues c ON c.id = d.issue_id \
+        WHERE d.depends_on_id = i.id AND d.type = 'parent-child' \
+          AND c.ephemeral = 0 AND c.status != 'closed') = 0, \
+       'true', 'false'), '$')\
+) AS payload, \
+i.priority AS priority, \
+i.created_at AS created_at, \
+(SELECT COUNT(*) FROM dependencies d \
+ INNER JOIN issues c ON c.id = d.issue_id \
+ WHERE d.depends_on_id = i.id AND d.type = 'parent-child' \
+   AND c.ephemeral = 0) AS child_count \
+FROM issues i \
+WHERE i.issue_type = 'epic' \
+  AND i.status != 'closed' \
+  AND i.ephemeral = 0 \
+HAVING child_count > 0 \
+ORDER BY priority ASC, created_at DESC\
+) t"
+  "SQL query for the `epic_status' operation.
+Mirrors `bd epic status': returns all non-closed epics that have at
+least one child, with `total_children', `closed_children', and an
+`eligible_for_close' boolean computed as
+`total_children > 0 AND closed_children == total_children'.")
+
 (defconst beads-dolt-sql--stale-sql
   "SELECT JSON_ARRAYAGG(\
 JSON_OBJECT(\
@@ -637,6 +694,10 @@ Caches result for 60 seconds."
     (beads-backend-dolt-sql--execute-sql beads-dolt-sql--stale-sql
                                          (list days))))
 
+(defun beads-backend-dolt-sql--execute-epic-status (_args _project-root)
+  "Execute `epic_status' operation via direct SQL."
+  (beads-backend-dolt-sql--execute-sql beads-dolt-sql--epic-status-sql))
+
 (defun beads-backend-dolt-sql--operation-to-sql-fn (operation)
   "Return the SQL executor function for OPERATION, or nil."
   (pcase operation
@@ -645,7 +706,8 @@ Caches result for 60 seconds."
     ("stats" #'beads-backend-dolt-sql--execute-stats)
     ("ready" #'beads-backend-dolt-sql--execute-ready)
     ("count" #'beads-backend-dolt-sql--execute-count)
-    ("stale" #'beads-backend-dolt-sql--execute-stale)))
+    ("stale" #'beads-backend-dolt-sql--execute-stale)
+    ("epic_status" #'beads-backend-dolt-sql--execute-epic-status)))
 
 (defun beads-backend-dolt-sql--check ()
   "Check if Dolt SQL transport is available and operational.
@@ -733,8 +795,8 @@ PREVIOUS-ERROR is the error from the failed SQL attempt, for context."
                      "label_add" "label_remove" "types"
                      "config_get" "config_set" "config_unset"
                      "duplicates" "duplicate"
-                     "comments-add" "lint" "orphans" "stale")
-   :op-to-cli-args #'beads-backend-bd--operation-to-cli-args
+                     "comments-add" "lint" "orphans" "stale" "epic_status")
+                     :op-to-cli-args #'beads-backend-bd--operation-to-cli-args
    :cli-extra-flags #'beads-backend-bd--cli-extra-flags
    :executor #'beads-backend-dolt-sql--executor)
   "Backend for direct Dolt SQL transport with bd CLI fallback.")

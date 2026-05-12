@@ -134,6 +134,10 @@
      '("orphans"))
     ("stale"
      (beads-backend--build-cli-args "stale" args '(days status)))
+    ("epic_status"
+     (let ((eligible-only (alist-get 'eligible_only args)))
+       (append (list "epic" "status")
+               (when eligible-only '("--eligible-only")))))
     (_
      (signal 'beads-backend-error
              (list (format "Unknown operation for bd backend: %s" operation))))))
@@ -152,7 +156,7 @@
                       "label_add" "label_remove" "types"
                      "config_get" "config_set" "config_unset"
                       "duplicates" "duplicate"
-                      "comments-add" "lint" "orphans" "stale")
+                      "comments-add" "lint" "orphans" "stale" "epic_status")
    :op-to-cli-args #'beads-backend-bd--operation-to-cli-args
    :cli-extra-flags #'beads-backend-bd--cli-extra-flags))
 
