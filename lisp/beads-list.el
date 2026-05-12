@@ -345,19 +345,62 @@ Used to ensure refresh uses the correct project context.")
             (propertize (number-to-string blocked) 'face 'beads-list-header-count)
             (propertize (number-to-string ready) 'face 'beads-list-header-count))))
 
-(defun beads-list--update-mode-line ()
+(defun beads-list--compute-stats (issues)
+  "Compute stats alist from ISSUES list.
+
+Returns an alist matching the shape consumed by
+`beads-list--format-header-line': `total_issues', `open_issues',
+`in_progress_issues', `blocked_issues', `closed_issues' and
+`ready_issues'.
+
+In beads, an issue's `status' can be \"open\" while it is also
+considered blocked.  A blocked issue is reported by `bd' with
+`dependency_count' > 0 (i.e. one or more incomplete blocking
+dependencies).  Therefore `blocked_issues' counts entries whose
+`dependency_count' is positive, and `ready_issues' counts open
+entries with no incomplete blocking deps.
+
+Note: counts reflect the issues currently fetched into the list
+view.  Because `bd list' excludes closed issues by default,
+`closed_issues' will typically be 0 and `total_issues' will
+reflect only the active issues in the list."
+  (let ((total (length issues))
+        (open 0) (in-progress 0) (blocked 0)
+        (closed 0) (ready 0))
+    (dolist (issue issues)
+      (let ((status (alist-get 'status issue))
+            (dep-count (or (alist-get 'dependency_count issue) 0)))
+        (pcase status
+          ("open"
+           (cl-incf open)
+           (if (> dep-count 0)
+               (cl-incf blocked)
+             (cl-incf ready)))
+          ("in_progress" (cl-incf in-progress))
+          ("blocked" (cl-incf blocked))
+          ("closed" (cl-incf closed)))))
+    `((total_issues . ,total)
+      (open_issues . ,open)
+      (in_progress_issues . ,in-progress)
+      (blocked_issues . ,blocked)
+      (closed_issues . ,closed)
+      (ready_issues . ,ready))))
+
+(defun beads-list--update-mode-line (&optional stats)
   "Update the mode line with current stats.
+
+When STATS is non-nil, use it directly (an alist matching the
+shape produced by `beads-list--compute-stats').  Otherwise
+compute stats from `beads-list--issues'.
+
 Respects `beads-list-show-header-stats'."
   (if beads-list-show-header-stats
-      (condition-case nil
-          (let ((stats (beads-client-stats)))
-            (setq mode-line-format
-                  `(" "
-                    mode-line-buffer-identification
-                    "  "
-                    ,(beads-list--format-header-line stats))))
-        (beads-client-error
-         (setq mode-line-format (default-value 'mode-line-format))))
+      (let ((stats (or stats (beads-list--compute-stats beads-list--issues))))
+        (setq mode-line-format
+              `(" "
+                mode-line-buffer-identification
+                "  "
+                ,(beads-list--format-header-line stats))))
     (setq mode-line-format (default-value 'mode-line-format))))
 
 (define-derived-mode beads-list-mode tabulated-list-mode "Beads-List"
@@ -416,7 +459,8 @@ Applies `beads-list--filter' if set, and `beads-list--show-only-marked' filter."
             (goto-char (point-min)))
           (when-let ((win (get-buffer-window (current-buffer))))
             (set-window-start win (min saved-start (point-max))))
-          (beads-list--update-mode-line)
+          (beads-list--update-mode-line
+           (beads-list--compute-stats all-issues))
           (unless silent
             (let ((filter-msg (if beads-list--filter
                                   (format " [%s]" (beads-filter-name beads-list--filter))
@@ -484,7 +528,8 @@ top of the buffer (see bdel-efx)."
              (when-let ((win (get-buffer-window buffer))
                         (start saved-start))
                (set-window-start win (min start (point-max))))
-             (beads-list--update-mode-line)
+             (beads-list--update-mode-line
+              (beads-list--compute-stats all-issues))
              (unless silent
                (let ((filter-msg (if beads-list--filter
                                      (format " [%s]" (beads-filter-name beads-list--filter))

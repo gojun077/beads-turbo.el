@@ -723,5 +723,98 @@ depend on whatever the daemon currently advertises."
     (should (null (get-text-property 0 'face
                     (beads--format-type '((issue_type . "my-custom-type"))))))))
 
+;;; beads-list--compute-stats tests
+
+(ert-deftest beads-list-test-compute-stats-empty ()
+  "Empty issue list yields all zero counts."
+  (let ((stats (beads-list--compute-stats nil)))
+    (should (= 0 (alist-get 'total_issues stats)))
+    (should (= 0 (alist-get 'open_issues stats)))
+    (should (= 0 (alist-get 'in_progress_issues stats)))
+    (should (= 0 (alist-get 'blocked_issues stats)))
+    (should (= 0 (alist-get 'closed_issues stats)))
+    (should (= 0 (alist-get 'ready_issues stats)))))
+
+(ert-deftest beads-list-test-compute-stats-mixed-statuses ()
+  "Counts are split correctly across known statuses."
+  (let* ((issues '(((id . "a") (status . "open")        (dependency_count . 0))
+                   ((id . "b") (status . "open")        (dependency_count . 0))
+                   ((id . "c") (status . "in_progress") (dependency_count . 0))
+                   ((id . "d") (status . "closed")      (dependency_count . 0))))
+         (stats (beads-list--compute-stats issues)))
+    (should (= 4 (alist-get 'total_issues stats)))
+    (should (= 2 (alist-get 'open_issues stats)))
+    (should (= 1 (alist-get 'in_progress_issues stats)))
+    (should (= 1 (alist-get 'closed_issues stats)))
+    (should (= 0 (alist-get 'blocked_issues stats)))
+    (should (= 2 (alist-get 'ready_issues stats)))))
+
+(ert-deftest beads-list-test-compute-stats-blocked-from-dep-count ()
+  "Open issues with dependency_count > 0 count as blocked, not ready."
+  (let* ((issues '(((id . "a") (status . "open") (dependency_count . 0))
+                   ((id . "b") (status . "open") (dependency_count . 2))
+                   ((id . "c") (status . "open") (dependency_count . 1))))
+         (stats (beads-list--compute-stats issues)))
+    (should (= 3 (alist-get 'open_issues stats)))
+    (should (= 2 (alist-get 'blocked_issues stats)))
+    (should (= 1 (alist-get 'ready_issues stats)))))
+
+(ert-deftest beads-list-test-compute-stats-explicit-blocked-status ()
+  "Issues with status=blocked also contribute to blocked_issues."
+  (let* ((issues '(((id . "a") (status . "blocked") (dependency_count . 0))
+                   ((id . "b") (status . "open")    (dependency_count . 0))))
+         (stats (beads-list--compute-stats issues)))
+    (should (= 1 (alist-get 'blocked_issues stats)))
+    (should (= 1 (alist-get 'open_issues stats)))
+    (should (= 1 (alist-get 'ready_issues stats)))))
+
+(ert-deftest beads-list-test-compute-stats-missing-dependency-count ()
+  "Missing dependency_count is treated as 0."
+  (let* ((issues '(((id . "a") (status . "open"))))
+         (stats (beads-list--compute-stats issues)))
+    (should (= 1 (alist-get 'open_issues stats)))
+    (should (= 0 (alist-get 'blocked_issues stats)))
+    (should (= 1 (alist-get 'ready_issues stats)))))
+
+(ert-deftest beads-list-test-update-mode-line-uses-passed-stats ()
+  "When STATS is passed, do not call beads-client-stats."
+  (with-temp-buffer
+    (beads-list-mode)
+    (let ((beads-list-show-header-stats t)
+          (called nil))
+      (cl-letf (((symbol-function 'beads-client-stats)
+                 (lambda () (setq called t) '())))
+        (beads-list--update-mode-line
+         '((total_issues . 7) (open_issues . 5) (in_progress_issues . 1)
+           (blocked_issues . 1) (closed_issues . 0) (ready_issues . 4)))
+        (should-not called)
+        ;; mode-line was set to a list (not the default symbol).
+        (should (listp mode-line-format))))))
+
+(ert-deftest beads-list-test-update-mode-line-computes-from-issues ()
+  "Without STATS arg, compute from beads-list--issues without subprocess."
+  (with-temp-buffer
+    (beads-list-mode)
+    (let ((beads-list-show-header-stats t)
+          (called nil))
+      (setq beads-list--issues
+            '(((id . "a") (status . "open") (dependency_count . 0))
+              ((id . "b") (status . "in_progress") (dependency_count . 0))))
+      (cl-letf (((symbol-function 'beads-client-stats)
+                 (lambda () (setq called t) '())))
+        (beads-list--update-mode-line)
+        (should-not called)
+        (should (listp mode-line-format))))))
+
+(ert-deftest beads-list-test-update-mode-line-disabled ()
+  "When header stats are disabled, mode-line falls back to default."
+  (with-temp-buffer
+    (beads-list-mode)
+    (let ((beads-list-show-header-stats nil))
+      (beads-list--update-mode-line
+       '((total_issues . 1) (open_issues . 1) (in_progress_issues . 0)
+         (blocked_issues . 0) (closed_issues . 0) (ready_issues . 1)))
+      (should (equal mode-line-format (default-value 'mode-line-format))))))
+
 (provide 'beads-list-test)
 ;;; beads-list-test.el ends here
