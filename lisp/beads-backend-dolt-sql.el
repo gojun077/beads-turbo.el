@@ -25,8 +25,13 @@
 ;; serializes, and exits), this module sends SELECT queries directly
 ;; to the Dolt SQL server.  When Lucius Chen's mysql.el package is
 ;; installed, it uses mysql.el's native wire-protocol client.  Otherwise
-;; it falls back to a long-lived `mysql'/`mariadb' CLI subprocess, then
-;; to one-shot `mariadb -e'.
+;; it falls back to a long-lived `mariadb' CLI subprocess, then to
+;; one-shot `mariadb -e'.
+;;
+;; The Oracle MySQL client (`mysql') is intentionally not supported.
+;; mysql 9.x dropped both `--skip-ssl' and the `mysql_native_password'
+;; authentication plugin Dolt's server still uses, so the handshake
+;; fails before any query runs.  See issue bdel-11f for details.
 ;;
 ;; Benchmarks (mariadb 11.8.6, bd 1.0.3, 88 issues):
 ;;
@@ -37,8 +42,8 @@
 ;;   ready     | 47ms             | 7ms        | 6.7x
 ;;   stats     | 210ms            | 8ms        | 26.3x
 ;;
-;; Tier 1: `mariadb -e` subprocess → ~10ms overhead.
-;; Tier 1.5: persistent `mysql'/`mariadb' subprocess → ~1-2ms.
+;; Tier 1: `mariadb -e' subprocess → ~10ms overhead.
+;; Tier 1.5: persistent `mariadb' subprocess → ~1-2ms.
 ;; Tier 2: mysql.el native MySQL wire protocol → sub-ms expected.
 ;;
 ;; Writes always go through `bd` CLI — SQL transport is a read-only
@@ -437,7 +442,9 @@ ORDER BY i.priority ASC, i.created_at DESC"
          (port (number-to-string (alist-get 'port dolt 3310)))
          (user (alist-get 'user dolt "root"))
          (database (alist-get 'database dolt "beads_bdel"))
-         (client (or (executable-find "mariadb") (executable-find "mysql") "mariadb"))
+         (client (or (executable-find "mariadb")
+                     (signal 'beads-backend-error
+                             '("mariadb client not found on PATH; install it (e.g. `brew install mariadb' or your distro's mariadb-client package)"))))
          (buf (generate-new-buffer " *beads-mysql*"))
          ;; --force keeps the batch session alive after a SQL error so
          ;; the trailing sentinel SELECT still runs and unblocks the
@@ -552,8 +559,7 @@ Caches result for 60 seconds."
   (unless beads-dolt-sql--available
     (cl-return-from beads-backend-dolt-sql--available-p nil))
   (unless (or (beads-dolt-sql--native-mysql-available-p)
-              (executable-find "mariadb")
-              (executable-find "mysql"))
+              (executable-find "mariadb"))
     (cl-return-from beads-backend-dolt-sql--available-p nil))
   (and (beads-backend-dolt-sql--fetch-dolt-params) t))
 
@@ -586,24 +592,20 @@ Caches result for 60 seconds."
           (error
            (beads-dolt-sql--native-mysql-disconnect)
            (cond
-            ((executable-find "mysql")
+            ((executable-find "mariadb")
              (condition-case _fallback-err
                  (beads-dolt-sql--mysql-query sql-str)
                (error (beads-backend-dolt-sql--one-shot-mariadb sql-str dolt))))
-            ((executable-find "mariadb")
-             (beads-backend-dolt-sql--one-shot-mariadb sql-str dolt))
             (t
              (signal 'beads-backend-error
-                     '("mysql.el query failed and no CLI fallback is available")))))))
-       ((executable-find "mysql")
+                     '("mysql.el query failed and the mariadb client is not on PATH; install it (e.g. `brew install mariadb')")))))))
+       ((executable-find "mariadb")
         (condition-case _err
             (beads-dolt-sql--mysql-query sql-str)
           (error (beads-backend-dolt-sql--one-shot-mariadb sql-str dolt))))
-       ((executable-find "mariadb")
-        (beads-backend-dolt-sql--one-shot-mariadb sql-str dolt))
        (t
         (signal 'beads-backend-error
-                '("mysql.el and mariadb/mysql executables are not available")))))))
+                '("Neither mysql.el nor the mariadb client is available; install mariadb (e.g. `brew install mariadb')")))))))
 
 (defun beads-backend-dolt-sql--execute-list (_args _project-root)
   "Execute `list' operation via direct SQL."
@@ -654,12 +656,11 @@ Returns t if ready, signals an error otherwise."
         (message "Dolt SQL transport is disabled (beads-dolt-sql-enabled is nil)")
       (signal 'beads-backend-error '("Dolt SQL transport is disabled"))))
   (unless (or (beads-dolt-sql--native-mysql-available-p)
-              (executable-find "mariadb")
-              (executable-find "mysql"))
+              (executable-find "mariadb"))
     (if (called-interactively-p 'any)
-        (message "mysql.el or mariadb/mysql executable not found")
+        (message "mysql.el or mariadb client not found; install mariadb (e.g. `brew install mariadb')")
       (signal 'beads-backend-error
-              '("mysql.el or mariadb/mysql executable not found"))))
+              '("mysql.el or mariadb client not found; install mariadb (e.g. `brew install mariadb')"))))
   (let ((params (beads-backend-dolt-sql--fetch-dolt-params)))
     (unless params
       (if (called-interactively-p 'any)

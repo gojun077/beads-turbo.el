@@ -67,9 +67,9 @@ targeting \"mariadb\".  Calls targeting \"bd\" pass through."
   "Call BODY-FN with Dolt SQL state clean (enabled, available, fresh cache).
 Pre-populates `beads-dolt-sql--params' so `--fetch-dolt-params' returns
 from cache and never invokes the real `bd dolt show'.  Mocks
-`executable-find' to report mariadb+bd present and mysql absent so
-`--execute-sql' takes the one-shot mariadb branch (which uses
-`call-process', easy to mock)."
+`executable-find' to report mariadb+bd present so `--execute-sql'
+takes the one-shot mariadb branch (which uses `call-process',
+easy to mock)."
   (let ((beads-dolt-sql--params '((backend . "dolt")
                                   (connection_ok . t)
                                   (database . "testdb")
@@ -997,13 +997,12 @@ correctness bug fixed alongside the performance fix in bdel-dgy."
 ;; --- Integration with --execute-sql ---
 
 (ert-deftest beads-dolt-sql-test-execute-sql-uses-persistent-mysql ()
-  "Test `--execute-sql' uses `--mysql-query' when `mysql' client is found."
+  "Test `--execute-sql' uses `--mysql-query' when the `mariadb' client is found."
   (beads-dolt-sql-test--with-mysql-state
     (let ((called-sql nil))
       (cl-letf (((symbol-function 'executable-find)
                  (lambda (cmd)
-                   (cond ((equal cmd "mysql") "/usr/bin/mysql")
-                         ((equal cmd "mariadb") "/usr/bin/mariadb")
+                   (cond ((equal cmd "mariadb") "/usr/bin/mariadb")
                          ((equal cmd "bd") "/usr/bin/bd")
                          (t nil))))
                 ((symbol-function 'beads-dolt-sql--native-mysql-available-p)
@@ -1026,8 +1025,7 @@ correctness bug fixed alongside the performance fix in bdel-dgy."
     (let ((one-shot-called nil))
       (cl-letf (((symbol-function 'executable-find)
                  (lambda (cmd)
-                   (cond ((equal cmd "mysql") "/usr/bin/mysql")
-                         ((equal cmd "mariadb") "/usr/bin/mariadb")
+                   (cond ((equal cmd "mariadb") "/usr/bin/mariadb")
                          ((equal cmd "bd") "/usr/bin/bd")
                          (t nil))))
                 ((symbol-function 'beads-dolt-sql--native-mysql-available-p)
