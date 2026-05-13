@@ -289,6 +289,18 @@ Returns deletion result."
 Returns stats object with counts and breakdowns."
   (beads-client-request "stats" nil))
 
+(defun beads-client-freshness ()
+  "Return a lightweight freshness token for the current project.
+The token is a small alist of counts and max-timestamps across the
+issues, labels, dependencies, and comments tables.  Two tokens that
+`equal' indicate the database has not changed in a way that affects
+the issue list display.  Used by `beads-cache' to avoid redundant
+list re-fetches.
+
+Requires backend support for the `freshness' operation (Dolt SQL
+transport).  Signals `beads-client-error' otherwise."
+  (beads-client-request "freshness" nil))
+
 (defun beads-client-count (&optional filters)
   "Count issues with optional FILTERS.
 FILTERS is a plist with keys like :status, :group-by.

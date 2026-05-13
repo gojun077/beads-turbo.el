@@ -25,6 +25,7 @@
 ;;; Code:
 
 (require 'beads-client)
+(require 'beads-cache)
 (require 'beads-detail)
 
 (declare-function beads-client-types "beads-client")
@@ -430,7 +431,7 @@ Applies `beads-list--filter' if set, and `beads-list--show-only-marked' filter."
         (saved-line (line-number-at-pos))
         (saved-start (window-start)))
     (condition-case err
-        (let* ((all-issues (beads-client-list))
+        (let* ((all-issues (cdr (beads-cache-refresh)))
                (issues (if beads-list--filter
                            (beads-filter-apply beads-list--filter all-issues)
                          all-issues))
@@ -472,7 +473,7 @@ Applies `beads-list--filter' if set, and `beads-list--show-only-marked' filter."
       (beads-client-error
        (message "Failed to fetch issues: %s" (error-message-string err))))))
 
-(defun beads-list-refresh-async (&optional silent)
+(cl-defun beads-list-refresh-async (&optional silent)
   "Fetch issues asynchronously and refresh the display.
 
 When SILENT is non-nil, suppress the refresh message.
@@ -482,12 +483,46 @@ and background updates where the user isn't waiting for the result.
 
 Preserves point and window-start across the rebuild so an auto-refresh
 fired while the user is scrolling does not yank the cursor back to the
-top of the buffer (see bdel-efx)."
-  (let ((buffer (current-buffer)))
+top of the buffer (see bdel-efx).
+
+When the cache is enabled and the active backend supports the
+`freshness' check, runs a sub-10ms freshness query first.  If the
+freshness token is unchanged, returns immediately without fetching
+the list or touching the buffer — eliminating both the async list
+RPC and the redundant rebuild for the common no-change case.
+
+When the token has changed, the freshness value captured here is
+stored on the cache after the async list returns, preserving the
+token-before-list ordering invariant (see `beads-cache.el')."
+  (let* ((buffer (current-buffer))
+         (cache (and beads-cache-enabled
+                     (beads-cache-supported-p)
+                     (beads-cache-for-project)))
+         (cached-token (and cache (beads-cache-freshness-token cache)))
+         ;; Fetch the token only when the cache could possibly use it:
+         ;; either to short-circuit (cached-token present) or to store
+         ;; alongside the result (cache present, token absent).  Skip
+         ;; the round-trip entirely when the cache isn't usable.
+         (current-token
+          (and cache
+               (condition-case nil
+                   (beads-client-freshness)
+                 (beads-client-error nil)
+                 (beads-backend-error nil)))))
+    ;; Fast path: cache hot AND token unchanged → no list fetch, no
+    ;; UI churn.  Primary win for the 30s auto-refresh timer.
+    (when (and cached-token current-token
+               (equal cached-token current-token))
+      (cl-return-from beads-list-refresh-async nil))
     (beads-client-list-async
      (lambda (err all-issues)
        (unless (buffer-live-p buffer)
          (cl-return-from nil))
+       ;; Update the cache with the result we just fetched so future
+       ;; calls (sync or async) can short-circuit.
+       (when (and cache (null err))
+         (setf (beads-cache-issues cache) all-issues)
+         (setf (beads-cache-freshness-token cache) current-token))
        (with-current-buffer buffer
           (if err
               (message "Auto-refresh failed: %s" (if (> (length err) 200) (concat (substring err 0 197) "...") err))

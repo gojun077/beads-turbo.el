@@ -352,6 +352,32 @@ least one child, with `total_children', `closed_children', and an
 `eligible_for_close' boolean computed as
 `total_children > 0 AND closed_children == total_children'.")
 
+(defconst beads-dolt-sql--freshness-sql
+  "SELECT JSON_OBJECT(\
+'issues_count', \
+  (SELECT COUNT(*) FROM issues WHERE ephemeral = 0), \
+'issues_max_updated', \
+  (SELECT DATE_FORMAT(MAX(updated_at), '%Y-%m-%dT%H:%i:%sZ') \
+   FROM issues WHERE ephemeral = 0), \
+'labels_count', (SELECT COUNT(*) FROM labels), \
+'deps_count', (SELECT COUNT(*) FROM dependencies), \
+'deps_max_created', \
+  (SELECT DATE_FORMAT(MAX(created_at), '%Y-%m-%dT%H:%i:%sZ') \
+   FROM dependencies), \
+'comments_count', (SELECT COUNT(*) FROM comments), \
+'comments_max_created', \
+  (SELECT DATE_FORMAT(MAX(created_at), '%Y-%m-%dT%H:%i:%sZ') FROM comments)\
+) AS freshness"
+  "Lightweight freshness token query for the `freshness' operation.
+Returns counts and max timestamps across the four tables that drive
+list-view display: issues, labels, dependencies, comments.  The
+combination of count + max(timestamp) detects inserts, updates, and
+deletes across each table at ~1 second precision, in a single round
+trip.
+
+Used by `beads-cache' to decide whether a cached issue list is still
+valid without re-fetching the full list payload.")
+
 (defconst beads-dolt-sql--stale-sql
   "SELECT JSON_ARRAYAGG(\
 JSON_OBJECT(\
@@ -698,6 +724,11 @@ Caches result for 60 seconds."
   "Execute `epic_status' operation via direct SQL."
   (beads-backend-dolt-sql--execute-sql beads-dolt-sql--epic-status-sql))
 
+(defun beads-backend-dolt-sql--execute-freshness (_args _project-root)
+  "Execute `freshness' operation via direct SQL.
+Returns a small alist (counts + max timestamps) used as a cache token."
+  (beads-backend-dolt-sql--execute-sql beads-dolt-sql--freshness-sql))
+
 (defun beads-backend-dolt-sql--operation-to-sql-fn (operation)
   "Return the SQL executor function for OPERATION, or nil."
   (pcase operation
@@ -707,7 +738,8 @@ Caches result for 60 seconds."
     ("ready" #'beads-backend-dolt-sql--execute-ready)
     ("count" #'beads-backend-dolt-sql--execute-count)
     ("stale" #'beads-backend-dolt-sql--execute-stale)
-    ("epic_status" #'beads-backend-dolt-sql--execute-epic-status)))
+    ("epic_status" #'beads-backend-dolt-sql--execute-epic-status)
+    ("freshness" #'beads-backend-dolt-sql--execute-freshness)))
 
 (defun beads-backend-dolt-sql--check ()
   "Check if Dolt SQL transport is available and operational.
@@ -795,7 +827,8 @@ PREVIOUS-ERROR is the error from the failed SQL attempt, for context."
                      "label_add" "label_remove" "types"
                      "config_get" "config_set" "config_unset"
                      "duplicates" "duplicate"
-                     "comments-add" "lint" "orphans" "stale" "epic_status")
+                     "comments-add" "lint" "orphans" "stale" "epic_status"
+                     "freshness")
                      :op-to-cli-args #'beads-backend-bd--operation-to-cli-args
    :cli-extra-flags #'beads-backend-bd--cli-extra-flags
    :executor #'beads-backend-dolt-sql--executor)
