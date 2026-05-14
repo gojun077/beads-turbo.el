@@ -422,56 +422,87 @@ Respects `beads-list-show-header-stats'."
   (evil-set-initial-state 'beads-list-mode 'normal)
   (evil-make-overriding-map beads-list-mode-map 'normal))
 
+(defun beads-list--rebuild-from-issues (all-issues &optional silent message-prefix)
+  "Rebuild the tabulated-list display from ALL-ISSUES.
+
+When SILENT is non-nil, suppress the refresh message.
+MESSAGE-PREFIX (default \"Refreshed\") is the verb used in the message.
+
+Saves point/line/window-start before rebuilding and restores them after,
+so refreshes never yank the cursor back to the top of the buffer.
+
+Applies `beads-list--filter' if set, and the `beads-list--show-only-marked'
+filter.  Updates `beads-list--issues' to the filtered set, but computes
+mode-line stats from the unfiltered ALL-ISSUES.
+
+Shared by `beads-list-refresh' (sync) and `beads-list-refresh-async'
+(async).  Must be called with the list buffer current."
+  (let* ((saved-id (tabulated-list-get-id))
+         (saved-line (line-number-at-pos))
+         (saved-start (when-let ((win (get-buffer-window (current-buffer))))
+                        (window-start win)))
+         (issues (if beads-list--filter
+                     (beads-filter-apply beads-list--filter all-issues)
+                   all-issues))
+         (display-issues (if beads-list--show-only-marked
+                             (seq-filter (lambda (issue)
+                                           (member (alist-get 'id issue) beads-list--marked))
+                                         issues)
+                           issues))
+         (effective-sort-mode (beads-list--effective-sort-mode))
+         (sorted-issues (if (eq effective-sort-mode 'sectioned)
+                            (beads-list--sectioned-sort display-issues)
+                          display-issues))
+         (id-width (beads-list--max-id-width display-issues)))
+    (setq beads-list--issues (append issues nil))
+    (setq tabulated-list-format (beads-list--build-format id-width))
+    (tabulated-list-init-header)
+    (when (eq effective-sort-mode 'sectioned)
+      (setq tabulated-list-sort-key nil))
+    (setq tabulated-list-entries (beads-list-entries sorted-issues))
+    (tabulated-list-print t)
+    (beads-list--add-section-separators)
+    ;; Restore point: prefer matching the issue id, then the line
+    ;; number, then top-of-buffer as a last resort.
+    (if saved-id
+        (unless (beads-list-goto-id saved-id)
+          (goto-char (point-min))
+          (forward-line (1- (min saved-line
+                                 (line-number-at-pos (point-max))))))
+      (goto-char (point-min)))
+    ;; Restore window-start so the visible region doesn't jump.
+    (when-let ((win (get-buffer-window (current-buffer)))
+               (start saved-start))
+      (set-window-start win (min start (point-max))))
+    (beads-list--update-mode-line
+     (beads-list--compute-stats all-issues))
+    (unless silent
+      (let ((filter-msg (if beads-list--filter
+                            (format " [%s]" (beads-filter-name beads-list--filter))
+                          ""))
+            (sort-msg (if (eq effective-sort-mode 'sectioned)
+                          " (sectioned)"
+                        "")))
+        (message "%s %d issues%s%s"
+                 (or message-prefix "Refreshed")
+                 (length beads-list--issues) filter-msg sort-msg)))))
+
 (defun beads-list-refresh (&optional silent)
   "Fetch issues from daemon and refresh the display.
 When SILENT is non-nil, don't show message.
-Applies `beads-list--filter' if set, and `beads-list--show-only-marked' filter."
+Applies `beads-list--filter' if set, and `beads-list--show-only-marked' filter.
+
+Synchronous: blocks until the fetch completes and always rebuilds the
+display.  Use this for interactive refreshes and after writes where the
+user expects to see the new state immediately.  For background/timer
+refreshes that may safely no-op when nothing has changed, use
+`beads-list-refresh-async' instead."
   (interactive)
-  (let ((saved-id (tabulated-list-get-id))
-        (saved-line (line-number-at-pos))
-        (saved-start (window-start)))
-    (condition-case err
-        (let* ((all-issues (cdr (beads-cache-refresh)))
-               (issues (if beads-list--filter
-                           (beads-filter-apply beads-list--filter all-issues)
-                         all-issues))
-               (display-issues (if beads-list--show-only-marked
-                                   (seq-filter (lambda (issue)
-                                                 (member (alist-get 'id issue) beads-list--marked))
-                                               issues)
-                                 issues))
-               (effective-sort-mode (beads-list--effective-sort-mode))
-               (sorted-issues (if (eq effective-sort-mode 'sectioned)
-                                  (beads-list--sectioned-sort display-issues)
-                                display-issues))
-               (id-width (beads-list--max-id-width display-issues)))
-          (setq beads-list--issues (append issues nil))
-          (setq tabulated-list-format (beads-list--build-format id-width))
-          (tabulated-list-init-header)
-          (when (eq effective-sort-mode 'sectioned)
-            (setq tabulated-list-sort-key nil))
-          (setq tabulated-list-entries (beads-list-entries sorted-issues))
-          (tabulated-list-print t)
-          (beads-list--add-section-separators)
-          (if saved-id
-              (unless (beads-list-goto-id saved-id)
-                (goto-char (point-min))
-                (forward-line (1- (min saved-line (line-number-at-pos (point-max))))))
-            (goto-char (point-min)))
-          (when-let ((win (get-buffer-window (current-buffer))))
-            (set-window-start win (min saved-start (point-max))))
-          (beads-list--update-mode-line
-           (beads-list--compute-stats all-issues))
-          (unless silent
-            (let ((filter-msg (if beads-list--filter
-                                  (format " [%s]" (beads-filter-name beads-list--filter))
-                                ""))
-                  (sort-msg (if (eq effective-sort-mode 'sectioned)
-                                " (sectioned)"
-                              "")))
-              (message "Refreshed %d issues%s%s" (length beads-list--issues) filter-msg sort-msg))))
-      (beads-client-error
-       (message "Failed to fetch issues: %s" (error-message-string err))))))
+  (condition-case err
+      (let ((all-issues (cdr (beads-cache-refresh))))
+        (beads-list--rebuild-from-issues all-issues silent "Refreshed"))
+    (beads-client-error
+     (message "Failed to fetch issues: %s" (error-message-string err)))))
 
 (cl-defun beads-list-refresh-async (&optional silent)
   "Fetch issues asynchronously and refresh the display.
@@ -489,7 +520,11 @@ When the cache is enabled and the active backend supports the
 `freshness' check, runs a sub-10ms freshness query first.  If the
 freshness token is unchanged, returns immediately without fetching
 the list or touching the buffer — eliminating both the async list
-RPC and the redundant rebuild for the common no-change case.
+RPC and the redundant rebuild for the common no-change case.  This
+short-circuit is intentional and is why `beads-list-refresh-async'
+is NOT a drop-in replacement for `beads-list-refresh': callers that
+mutate purely client-side state (sort mode, marked-only filter, …)
+need the unconditional rebuild that the sync version provides.
 
 When the token has changed, the freshness value captured here is
 stored on the cache after the async list returns, preserving the
@@ -524,56 +559,12 @@ token-before-list ordering invariant (see `beads-cache.el')."
          (setf (beads-cache-issues cache) all-issues)
          (setf (beads-cache-freshness-token cache) current-token))
        (with-current-buffer buffer
-          (if err
-              (message "Auto-refresh failed: %s" (if (> (length err) 200) (concat (substring err 0 197) "...") err))
-            (let* ((saved-id (tabulated-list-get-id))
-                   (saved-line (line-number-at-pos))
-                   (saved-start (when-let ((win (get-buffer-window buffer)))
-                                  (window-start win)))
-                   (issues (if beads-list--filter
-                              (beads-filter-apply beads-list--filter all-issues)
-                            all-issues))
-                  (display-issues (if beads-list--show-only-marked
-                                      (seq-filter (lambda (issue)
-                                                    (member (alist-get 'id issue) beads-list--marked))
-                                                  issues)
-                                    issues))
-                  (effective-sort-mode (beads-list--effective-sort-mode))
-                  (sorted-issues (if (eq effective-sort-mode 'sectioned)
-                                     (beads-list--sectioned-sort display-issues)
-                                   display-issues))
-                  (id-width (beads-list--max-id-width display-issues)))
-             (setq beads-list--issues (append issues nil))
-             (setq tabulated-list-format (beads-list--build-format id-width))
-             (tabulated-list-init-header)
-             (when (eq effective-sort-mode 'sectioned)
-               (setq tabulated-list-sort-key nil))
-             (setq tabulated-list-entries (beads-list-entries sorted-issues))
-             (tabulated-list-print t)
-             (beads-list--add-section-separators)
-             ;; Restore point: prefer matching the issue id, then the
-             ;; line number, then top-of-buffer as a last resort.
-             (if saved-id
-                 (unless (beads-list-goto-id saved-id)
-                   (goto-char (point-min))
-                   (forward-line (1- (min saved-line
-                                          (line-number-at-pos (point-max))))))
-               (goto-char (point-min)))
-             ;; Restore window-start so the visible region doesn't jump.
-             (when-let ((win (get-buffer-window buffer))
-                        (start saved-start))
-               (set-window-start win (min start (point-max))))
-             (beads-list--update-mode-line
-              (beads-list--compute-stats all-issues))
-             (unless silent
-               (let ((filter-msg (if beads-list--filter
-                                     (format " [%s]" (beads-filter-name beads-list--filter))
-                                   ""))
-                     (sort-msg (if (eq effective-sort-mode 'sectioned)
-                                   " (sectioned)"
-                                 "")))
-                 (message "Auto-refreshed %d issues%s%s"
-                          (length beads-list--issues) filter-msg sort-msg))))))))))
+         (if err
+             (message "Auto-refresh failed: %s"
+                      (if (> (length err) 200)
+                          (concat (substring err 0 197) "...")
+                        err))
+           (beads-list--rebuild-from-issues all-issues silent "Auto-refreshed")))))))
 
 (defun beads-list-goto-id (id)
   "Move point to the line with issue ID.
