@@ -82,9 +82,14 @@ the cache is silently bypassed regardless of this setting."
 
 `issues' is the list of issue alists last returned by the backend.
 `freshness-token' is the lightweight token captured immediately
-before that list was fetched (see commentary for ordering rationale)."
+before that list was fetched (see commentary for ordering rationale).
+`full-issues' is a hash table mapping issue ID to the full
+`beads-client-show' result (including long-form fields like
+description, design, notes, acceptance_criteria, comments) for
+zero-subprocess detail navigation."
   issues
-  freshness-token)
+  freshness-token
+  (full-issues (make-hash-table :test 'equal)))
 
 (defvar beads-cache--registry (make-hash-table :test 'equal)
   "Hash table mapping project-root -> `beads-cache' instance.")
@@ -181,6 +186,39 @@ falls through to a plain `beads-client-list' with no caching."
   "Return the cached list of issues for CACHE (default: current project)."
   (when-let ((cache (or cache (beads-cache-for-project))))
     (beads-cache-issues cache)))
+
+;;; Full-issue cache (for list -> detail navigation)
+
+(defun beads-cache-get-full-issue (id &optional cache)
+  "Return the cached full-issue alist for ID, or nil if missing.
+CACHE defaults to the current project's cache."
+  (when-let* ((cache (or cache (beads-cache-for-project)))
+              (table (beads-cache-full-issues cache)))
+    (gethash id table)))
+
+(defun beads-cache-put-full-issue (id issue &optional cache)
+  "Store ISSUE as the cached full record for ID in CACHE.
+CACHE defaults to the current project's cache.
+Returns ISSUE for convenience."
+  (when-let* ((cache (or cache (beads-cache-for-project)))
+              (table (beads-cache-full-issues cache)))
+    (puthash id issue table))
+  issue)
+
+(defun beads-cache-show (id)
+  "Return the full issue for ID, consulting the project cache first.
+
+On a cache hit, returns immediately with no subprocess call.  On a
+miss, falls back to `beads-client-show' and stores the result for
+subsequent calls.
+
+When `beads-cache-enabled' is nil or no project root resolves, this
+is equivalent to `beads-client-show' (no caching)."
+  (or (and beads-cache-enabled (beads-cache-get-full-issue id))
+      (let ((issue (beads-client-show id)))
+        (when beads-cache-enabled
+          (beads-cache-put-full-issue id issue))
+        issue)))
 
 ;;; Write-invalidation advice
 

@@ -204,5 +204,69 @@ Verified by the call order: freshness first, then list."
       (beads-client-create "T" :dry-run t))
     (should (beads-cache-get-issues))))
 
+;;; Full-issue cache (list -> detail navigation)
+
+(ert-deftest beads-cache-test-full-issue-empty-on-cold-cache ()
+  "A fresh cache has no full-issue entries."
+  (beads-cache-test--with-mocks "/tmp/proj/" '() '(nil) t
+    (should-not (beads-cache-get-full-issue "x"))))
+
+(ert-deftest beads-cache-test-full-issue-put-then-get ()
+  "Storing then retrieving a full issue round-trips by ID."
+  (beads-cache-test--with-mocks "/tmp/proj/" '() '(nil) t
+    (beads-cache-put-full-issue "x" '((id . "x") (description . "hello")))
+    (should (equal (beads-cache-get-full-issue "x")
+                   '((id . "x") (description . "hello"))))
+    (should-not (beads-cache-get-full-issue "y"))))
+
+(ert-deftest beads-cache-test-show-cache-hit-no-subprocess ()
+  "`beads-cache-show' returns cached issue with no `beads-client-show' call."
+  (beads-cache-test--with-mocks "/tmp/proj/" '() '(nil) t
+    (let ((show-calls 0))
+      (cl-letf (((symbol-function 'beads-client-show)
+                 (lambda (_id) (cl-incf show-calls) '((id . "x")))))
+        (beads-cache-put-full-issue "x" '((id . "x") (cached . t)))
+        (let ((result (beads-cache-show "x")))
+          (should (equal result '((id . "x") (cached . t))))
+          (should (= show-calls 0)))))))
+
+(ert-deftest beads-cache-test-show-cache-miss-fetches-and-stores ()
+  "`beads-cache-show' falls back to `beads-client-show' on miss and caches."
+  (beads-cache-test--with-mocks "/tmp/proj/" '() '(nil) t
+    (let ((show-calls 0))
+      (cl-letf (((symbol-function 'beads-client-show)
+                 (lambda (_id) (cl-incf show-calls)
+                   '((id . "x") (description . "fresh")))))
+        ;; First call: miss, fetches.
+        (let ((r1 (beads-cache-show "x")))
+          (should (equal r1 '((id . "x") (description . "fresh"))))
+          (should (= show-calls 1)))
+        ;; Second call: hit, no subprocess.
+        (let ((r2 (beads-cache-show "x")))
+          (should (equal r2 '((id . "x") (description . "fresh"))))
+          (should (= show-calls 1)))))))
+
+(ert-deftest beads-cache-test-show-disabled-passthrough ()
+  "When the cache is disabled, every `beads-cache-show' fetches."
+  (beads-cache-test--with-mocks "/tmp/proj/" '() '(nil) t
+    (let ((show-calls 0)
+          (beads-cache-enabled nil))
+      (cl-letf (((symbol-function 'beads-client-show)
+                 (lambda (_id) (cl-incf show-calls) '((id . "x")))))
+        (beads-cache-show "x")
+        (beads-cache-show "x")
+        (should (= show-calls 2))))))
+
+(ert-deftest beads-cache-test-write-invalidates-full-issue-cache ()
+  "Successful writes drop full-issue entries along with the list cache."
+  (beads-cache-test--with-mocks "/tmp/proj/" '(((id . "a"))) '(token-1) t
+    (beads-cache-put-full-issue "a" '((id . "a") (cached . t)))
+    (should (beads-cache-get-full-issue "a"))
+    (cl-letf (((symbol-function 'beads-backend-cli-execute)
+               (lambda (&rest _) '((id . "a")))))
+      (beads-client-update "a" :status "closed"))
+    ;; Write-invalidator drops the whole cache; full-issues come back empty.
+    (should-not (beads-cache-get-full-issue "a"))))
+
 (provide 'beads-cache-test)
 ;;; beads-cache-test.el ends here

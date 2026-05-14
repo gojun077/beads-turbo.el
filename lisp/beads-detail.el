@@ -222,6 +222,31 @@ Uses a single reusable buffer in a side window without focusing."
                              (side . right)
                              (window-width . 0.4)))))
 
+(defun beads-detail-rerender-if-current (id issue)
+  "Re-render ISSUE in its detail buffer iff that buffer still shows ID.
+
+Used by the lazy-load path in `beads-list-goto-issue': the buffer is
+opened immediately with the partial list-level data, then the full
+issue arrives asynchronously and is rendered here.  The ID guard
+prevents stomping on the user if they have already navigated away."
+  (let* ((buffer-name (format "*Beads Detail: %s*" id))
+         (buffer (get-buffer buffer-name)))
+    (when (and buffer (buffer-live-p buffer))
+      (with-current-buffer buffer
+        (when (equal beads-detail--current-issue-id id)
+          (let* ((window (get-buffer-window buffer))
+                 (saved-point (point))
+                 (saved-start (and window (window-start window))))
+            (setq beads-detail--current-issue issue)
+            (if (derived-mode-p 'beads-detail-vui-mode)
+                (beads-detail--render-vui buffer issue)
+              (let ((inhibit-read-only t))
+                (erase-buffer)
+                (beads-detail--render issue)))
+            (goto-char (min saved-point (point-max)))
+            (when (and window saved-start)
+              (set-window-start window (min saved-start (point-max))))))))))
+
 (defun beads-detail--refresh-list-buffers ()
   "Refresh all beads-list-mode buffers."
   (dolist (buf (buffer-list))

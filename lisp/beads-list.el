@@ -1085,15 +1085,33 @@ With completion for known assignees from current issues."
     (beads-list-quick-assign user)))
 
 (defun beads-list-goto-issue ()
-  "Navigate to or display details for issue at point."
+  "Navigate to or display details for issue at point.
+
+Cache hit (full issue already cached): renders immediately with no
+subprocess call.  Cache miss: renders the partial list-level data
+immediately, then asynchronously fetches the full issue and
+re-renders the detail buffer when the data arrives."
   (interactive)
   (if-let ((issue (beads-list--get-issue-at-point)))
-      (condition-case err
-          (let ((id (alist-get 'id issue)))
-            (let ((full-issue (beads-client-show id)))
-              (beads-detail-open full-issue)))
-        (beads-client-error
-         (message "Failed to fetch issue details: %s" (error-message-string err))))
+      (let ((id (alist-get 'id issue)))
+        (if-let ((full-issue (beads-cache-get-full-issue id)))
+            (beads-detail-open full-issue)
+          ;; Cache miss: instant partial render, async fill-in.
+          (beads-detail-open issue)
+          (condition-case err
+              (beads-client-show-async
+               id
+               (lambda (err full-issue)
+                 (cond
+                  (err
+                   (message "Failed to fetch issue details: %s"
+                            (error-message-string err)))
+                  (full-issue
+                   (beads-cache-put-full-issue id full-issue)
+                   (beads-detail-rerender-if-current id full-issue)))))
+            (beads-client-error
+             (message "Failed to fetch issue details: %s"
+                      (error-message-string err))))))
     (message "No issue at point")))
 
 (defun beads-list-edit-form ()
@@ -1102,7 +1120,7 @@ With completion for known assignees from current issues."
   (if-let ((issue (beads-list--get-issue-at-point)))
       (condition-case err
           (let ((id (alist-get 'id issue)))
-            (let ((full-issue (beads-client-show id)))
+            (let ((full-issue (beads-cache-show id)))
               (require 'beads-form)
               (beads-form-open full-issue)))
         (beads-client-error
@@ -1172,7 +1190,7 @@ With completion for known assignees from current issues."
   (if-let ((issue (beads-list--get-issue-at-point)))
       (condition-case err
           (let* ((id (alist-get 'id issue))
-                 (full-issue (beads-client-show id))
+                 (full-issue (beads-cache-show id))
                  (description (alist-get 'description full-issue)))
             (require 'beads-edit)
             (beads-edit-field-markdown id :description description))
