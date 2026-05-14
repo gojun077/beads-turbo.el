@@ -68,6 +68,21 @@ to the `bd' CLI subprocess."
   :type 'boolean
   :group 'beads-dolt-sql)
 
+(defcustom beads-dolt-sql-list-lite t
+  "When non-nil, the `list' SQL operation omits heavy fields.
+The lightweight query drops the per-issue `description' string
+and the full `dependencies' array (the cheap `dependency_count',
+`dependent_count' and `parent' fields are preserved).  This
+matches what the issue-list UI actually renders and shrinks the
+JSON payload from ~149KB to ~12KB on a ~100-issue project,
+substantially cutting Elisp JSON parse time (see bdel-057).
+
+Set to nil to keep returning the full payload — useful if a
+custom caller depends on `description' or full `dependencies'
+in `list' results."
+  :type 'boolean
+  :group 'beads-dolt-sql)
+
 (defvar beads-dolt-sql--params nil
   "Cached Dolt connection params from `bd dolt show --json'.")
 
@@ -157,6 +172,62 @@ ORDER BY i.priority ASC, i.created_at DESC"
   "SQL query for the `list' operation.
 Produces a single-row JSON_ARRAYAGG of issue objects matching
 the `bd list --json' format.")
+
+(defconst beads-dolt-sql--list-lite-sql
+  "SELECT JSON_ARRAYAGG(\
+JSON_OBJECT(\
+'id', i.id, \
+'title', i.title, \
+'status', i.status, \
+'priority', i.priority, \
+'issue_type', i.issue_type, \
+'owner', COALESCE(NULLIF(i.owner, ''), i.created_by), \
+'assignee', i.assignee, \
+'estimated_minutes', i.estimated_minutes, \
+'created_at', DATE_FORMAT(i.created_at, '%Y-%m-%dT%H:%i:%sZ'), \
+'created_by', i.created_by, \
+'updated_at', DATE_FORMAT(i.updated_at, '%Y-%m-%dT%H:%i:%sZ'), \
+'started_at', IF(i.started_at IS NOT NULL, \
+  DATE_FORMAT(i.started_at, '%Y-%m-%dT%H:%i:%sZ'), NULL), \
+'closed_at', IF(i.closed_at IS NOT NULL, \
+  DATE_FORMAT(i.closed_at, '%Y-%m-%dT%H:%i:%sZ'), NULL), \
+'closed_by_session', i.closed_by_session, \
+'close_reason', i.close_reason, \
+'external_ref', i.external_ref, \
+'spec_id', i.spec_id, \
+'source_system', i.source_system, \
+'source_repo', i.source_repo, \
+'labels', COALESCE(\
+  (SELECT JSON_ARRAYAGG(l.label) FROM labels l WHERE l.issue_id = i.id), \
+  JSON_ARRAY()), \
+'dependency_count', \
+  (SELECT COUNT(*) FROM dependencies d1 \
+   WHERE d1.issue_id = i.id AND d1.type != 'parent-child'), \
+'dependent_count', \
+  (SELECT COUNT(*) FROM dependencies d2 \
+   WHERE d2.depends_on_id = i.id AND d2.type != 'parent-child'), \
+'comment_count', \
+  (SELECT COUNT(*) FROM comments c WHERE c.issue_id = i.id), \
+'parent', \
+  (SELECT d3.issue_id FROM dependencies d3 \
+   WHERE d3.depends_on_id = i.id AND d3.type = 'parent-child' LIMIT 1)\
+)\
+) AS issues \
+FROM issues i \
+WHERE i.ephemeral = 0 \
+ORDER BY i.priority ASC, i.created_at DESC"
+  "Lightweight SQL query for the `list' operation (see bdel-057).
+Same shape as `beads-dolt-sql--list-sql' but omits the per-row
+`description' field and the full `dependencies' array (the cheap
+`dependency_count' / `dependent_count' / `parent' fields are
+preserved).  This is what the issue-list UI actually renders, and
+it shrinks the JSON payload from ~149KB to ~12KB on a
+~100-issue project, dramatically cutting Elisp JSON parse time.
+
+Callers needing the full description or full dependency objects
+(e.g. `beads-list-edit-description', the detail view) fetch a
+single issue via the `show' operation, which still returns the
+complete record.")
 
 (defconst beads-dolt-sql--show-sql
   "SELECT JSON_OBJECT(\
@@ -691,8 +762,14 @@ Caches result for 60 seconds."
                 '("Neither mysql.el nor the mariadb client is available; install mariadb (e.g. `brew install mariadb')")))))))
 
 (defun beads-backend-dolt-sql--execute-list (_args _project-root)
-  "Execute `list' operation via direct SQL."
-  (beads-backend-dolt-sql--execute-sql beads-dolt-sql--list-sql))
+  "Execute `list' operation via direct SQL.
+Uses `beads-dolt-sql--list-lite-sql' when `beads-dolt-sql-list-lite'
+is non-nil (the default), otherwise falls back to the full
+`beads-dolt-sql--list-sql' that mirrors `bd list --json' exactly."
+  (beads-backend-dolt-sql--execute-sql
+   (if beads-dolt-sql-list-lite
+       beads-dolt-sql--list-lite-sql
+     beads-dolt-sql--list-sql)))
 
 (defun beads-backend-dolt-sql--execute-show (args _project-root)
   "Execute `show' operation via direct SQL."

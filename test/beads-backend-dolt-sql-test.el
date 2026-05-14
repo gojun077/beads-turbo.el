@@ -379,6 +379,37 @@ easy to mock)."
         (should (equal (alist-get 'id (car result)) "a"))
         (should (equal (alist-get 'id (cadr result)) "b")))))))
 
+(ert-deftest beads-dolt-sql-test-list-lite-sql-omits-heavy-fields ()
+  "The lite list query must omit description and the dependencies array,
+but keep dependency_count, dependent_count, comment_count, and parent
+(see bdel-057)."
+  (let ((sql beads-dolt-sql--list-lite-sql))
+    (should (stringp sql))
+    ;; Heavy fields removed.
+    (should-not (string-match-p "'description'" sql))
+    (should-not (string-match-p "'dependencies'" sql))
+    ;; Cheap counts and parent retained.
+    (should (string-match-p "'dependency_count'" sql))
+    (should (string-match-p "'dependent_count'" sql))
+    (should (string-match-p "'comment_count'" sql))
+    (should (string-match-p "'parent'" sql))
+    (should (string-match-p "'labels'" sql))))
+
+(ert-deftest beads-dolt-sql-test-execute-list-selects-lite-by-default ()
+  "`beads-backend-dolt-sql--execute-list' uses the lite SQL when
+`beads-dolt-sql-list-lite' is non-nil and the full SQL otherwise."
+  (let (captured)
+    (cl-letf (((symbol-function 'beads-backend-dolt-sql--execute-sql)
+               (lambda (sql &rest _)
+                 (setq captured sql)
+                 nil)))
+      (let ((beads-dolt-sql-list-lite t))
+        (beads-backend-dolt-sql--execute-list nil nil)
+        (should (eq captured beads-dolt-sql--list-lite-sql)))
+      (let ((beads-dolt-sql-list-lite nil))
+        (beads-backend-dolt-sql--execute-list nil nil)
+        (should (eq captured beads-dolt-sql--list-sql))))))
+
 (ert-deftest beads-dolt-sql-test-execute-stats-returns-summary ()
   "Test stats returns summary alist."
   (beads-dolt-sql-test--with-mocks
