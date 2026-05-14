@@ -18,6 +18,7 @@
 (require 'ert)
 (require 'beads-list)
 (require 'beads-test-helpers)
+(require 'beads-backend-dolt-sql)
 
 ;;; Formatter tests (no daemon needed)
 
@@ -701,6 +702,55 @@ depend on whatever the daemon currently advertises."
     (let ((types (beads-list-available-types)))
       (should (member "my-custom-type" types))
       (should (member "bug" types)))))
+
+(ert-deftest beads-list-test-available-types-from-dolt-sql ()
+  "Validate `beads-list-available-types' against the real Dolt DB.
+
+Issues a SQL query (via the Dolt SQL FFI in
+`beads-backend-dolt-sql--execute-sql') to fetch the canonical set of
+issue type names actually present in the beads Dolt database — both
+declared custom types in the `custom_types' table and any in-use
+types observed in the `issues.issue_type' column.
+
+Asserts that every name returned by SQL is exposed by
+`beads-list-available-types'.  Acts as a drift detector between:
+  - elisp-side `beads-builtin-types'
+  - daemon `types' RPC response (via `beads-get-types')
+  - the Dolt backend's stored type names.
+
+Skipped cleanly when integration mode is not enabled, no beads
+database is reachable, or the mariadb client is unavailable."
+  :tags '(:integration)
+  (skip-unless (beads-test-integration-enabled-p))
+  (skip-unless (beads-client--find-database))
+  (skip-unless (executable-find "mariadb"))
+  (skip-unless (beads-backend-dolt-sql--fetch-dolt-params))
+  (let* ((custom-types
+          (or (ignore-errors
+                (beads-backend-dolt-sql--execute-sql
+                 "SELECT JSON_ARRAYAGG(name) FROM custom_types;"))
+              '()))
+         (in-use-types
+          (or (ignore-errors
+                (beads-backend-dolt-sql--execute-sql
+                 "SELECT JSON_ARRAYAGG(issue_type) FROM \
+(SELECT DISTINCT issue_type FROM issues \
+WHERE issue_type IS NOT NULL AND issue_type <> '') t;"))
+              '()))
+         (sql-types (delete-dups (append custom-types in-use-types)))
+         (available (beads-list-available-types)))
+    ;; Sanity: SQL must return at least one type, otherwise the test is
+    ;; not actually exercising anything.
+    (should (> (length sql-types) 0))
+    ;; Drift check: every type the DB knows about must be exposed by
+    ;; `beads-list-available-types'.  Include the offending name in the
+    ;; failure message so diffs are obvious.
+    (dolist (type sql-types)
+      (unless (member type available)
+        (ert-fail
+         (format "Type %S is in the Dolt DB but not in \
+`beads-list-available-types' %S (builtin: %S)"
+                 type available beads-builtin-types))))))
 
 (ert-deftest beads-list-test-format-type-custom ()
   "Test that custom types are formatted without error."
