@@ -292,24 +292,22 @@ Acceptance Criteria, epics need Success Criteria.
 (setq beads-verbose nil)
 ```
 
-### Auto-Refresh (`beads-autoupdate`)
+### Refreshing the List
 
-```elisp
-;; Disable auto-refresh entirely
-(setq beads-autoupdate-enable nil)
+The list view refreshes automatically when:
 
-;; Change refresh interval (default: 30 seconds)
-(setq beads-autoupdate-interval 60)
+- A write happens through any beads.el command (transient menu, edit
+  commands, detail-mode actions, forms).
+- You return to a `beads-list-mode` window from another buffer (e.g.
+  closing a detail view). This event-driven refresh uses an async,
+  cursor-preserving fetch that short-circuits via the cache freshness
+  token when nothing has changed, so it is essentially free in the
+  common case.
 
-;; Disable auto-refresh per-project via .dir-locals.el:
-((beads-list-mode . ((beads-autoupdate-message . nil))))
-```
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `beads-autoupdate-enable` | `t` | Enable auto-refresh in list mode |
-| `beads-autoupdate-interval` | `30` | Seconds between refreshes (nil=disabled) |
-| `beads-autoupdate-message` | `t` | Show message on auto-refresh (dir-local) |
+Press `g` in the list buffer for a manual refresh — useful when an
+external `bd` invocation or another Emacs session has mutated the DB
+and you want to pick up the change without leaving and re-entering
+the buffer.
 
 ### Project Integration (`beads-project`)
 

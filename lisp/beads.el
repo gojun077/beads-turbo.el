@@ -62,7 +62,6 @@
 (require 'beads-list)
 (require 'beads-detail)
 (require 'beads-transient)
-(require 'beads-autoupdate)
 (require 'beads-project)
 
 (autoload 'beads-hierarchy-show "beads-hierarchy" "Display dependency tree." t)

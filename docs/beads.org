@@ -546,17 +546,20 @@ Available: =id=, =date=, =status=, =priority=, =type=, =title=,
 (setq beads-list-show-header-stats t)  ; Show counts (default)
 #+end_src
 
-** Auto-Update
+** Refreshing
 
-#+vindex: beads-autoupdate-enable
-#+vindex: beads-autoupdate-interval
+The list view refreshes automatically after any write performed
+through beads.el (transient menu, edit commands, detail-mode
+actions, forms) and whenever you return to a =beads-list-mode=
+window from another buffer (for example, closing a detail view).
+The on-select refresh is asynchronous, cursor-preserving and
+short-circuits via the cache freshness token when nothing has
+changed, so it is essentially free in the common case.
 
-Beads can automatically refresh to show external changes:
-
-#+begin_src emacs-lisp
-(setq beads-autoupdate-enable t)      ; Enable (default)
-(setq beads-autoupdate-interval 30)   ; Seconds between updates
-#+end_src
+Press =g= for a manual refresh — useful when an external =bd=
+invocation or another Emacs session has mutated the DB and you
+want to pick up the change without leaving and re-entering the
+buffer.
 
 ** Preview
 
@@ -774,7 +777,6 @@ See the Beads documentation for installation.
 For large projects (1000+ issues):
 
 #+begin_src emacs-lisp
-(setq beads-autoupdate-interval 60)    ; Less frequent updates
 (setq beads-list-show-header-stats nil) ; Disable header stats
 #+end_src
 

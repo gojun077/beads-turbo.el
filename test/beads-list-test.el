@@ -866,5 +866,51 @@ WHERE issue_type IS NOT NULL AND issue_type <> '') t;"))
          (blocked_issues . 0) (closed_issues . 0) (ready_issues . 1)))
       (should (equal mode-line-format (default-value 'mode-line-format))))))
 
+(ert-deftest beads-list-test-goto-id-defined ()
+  "Test that beads-list-goto-id is defined."
+  (should (fboundp 'beads-list-goto-id)))
+
+(ert-deftest beads-list-test-refresh-has-silent-arg ()
+  "Test that beads-list-refresh accepts silent argument."
+  (should (member 'silent (help-function-arglist 'beads-list-refresh))))
+
+(ert-deftest beads-list-test-on-select-hook-installed ()
+  "`beads-list-mode' must register the event-driven refresh hook
+buffer-locally on `window-selection-change-functions' (replaces the
+old timer-based auto-refresh — see bdel-lc6)."
+  (with-temp-buffer
+    (cl-letf (((symbol-function 'beads-show-hint) #'ignore))
+      (beads-list-mode))
+    (should (memq #'beads-list--maybe-refresh-on-select
+                  window-selection-change-functions))))
+
+(ert-deftest beads-list-test-on-select-fires-async-on-leading-edge ()
+  "`beads-list--maybe-refresh-on-select' must call
+`beads-list-refresh-async' exactly once when a list buffer's window
+transitions from unselected to selected, and not again while it
+remains selected."
+  (let* ((calls 0)
+         (buf (generate-new-buffer "*beads-list-test*")))
+    (unwind-protect
+        (with-current-buffer buf
+          (cl-letf (((symbol-function 'beads-show-hint) #'ignore)
+                    ((symbol-function 'beads-list-refresh-async)
+                     (lambda (&rest _) (cl-incf calls))))
+            (beads-list-mode)
+            ;; Simulate window selected: leading edge -> 1 call.
+            (let ((win (selected-window)))
+              ;; Force the buffer-into-window association
+              (set-window-buffer win buf)
+              (cl-letf (((symbol-function 'frame-selected-window)
+                         (lambda (&optional _f) win))
+                        ((symbol-function 'window-list)
+                         (lambda (&optional _f _m _w) (list win))))
+                (beads-list--maybe-refresh-on-select (selected-frame))
+                (should (= calls 1))
+                ;; Already selected: no additional call.
+                (beads-list--maybe-refresh-on-select (selected-frame))
+                (should (= calls 1))))))
+      (kill-buffer buf))))
+
 (provide 'beads-list-test)
 ;;; beads-list-test.el ends here

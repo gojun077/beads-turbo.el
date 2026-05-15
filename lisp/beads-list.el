@@ -404,6 +404,42 @@ Respects `beads-list-show-header-stats'."
                 ,(beads-list--format-header-line stats))))
     (setq mode-line-format (default-value 'mode-line-format))))
 
+(defvar-local beads-list--window-selected nil
+  "Non-nil when this list buffer's window was selected last time we
+checked.  Used by `beads-list--maybe-refresh-on-select' to fire
+`beads-list-refresh-async' only on the leading edge of a re-selection
+(e.g. returning from a detail buffer), not on every window-state
+change while the buffer is already selected.")
+
+(defun beads-list--maybe-refresh-on-select (frame-or-window)
+  "Run an async refresh when a `beads-list-mode' buffer becomes selected.
+
+Hooked into `window-selection-change-functions' buffer-locally by
+`beads-list-mode'.  Walks every window on FRAME-OR-WINDOW (a frame
+or a window) and, for each `beads-list-mode' buffer whose window
+just transitioned from unselected to selected, calls
+`beads-list-refresh-async' silently.
+
+The refresh is cheap: when `beads-cache' is active and the
+freshness token is unchanged, the call short-circuits without any
+list fetch or buffer rebuild (see `beads-list-refresh-async').
+This is the event-driven replacement for the old 30s timer-based
+auto-refresh: refresh happens when the user returns to the list
+buffer (e.g. from `beads-detail-mode'), not on a fixed cadence."
+  (let ((frame (cond ((framep frame-or-window) frame-or-window)
+                     ((windowp frame-or-window)
+                      (window-frame frame-or-window))
+                     (t (selected-frame)))))
+    (dolist (win (window-list frame 'no-mini))
+      (when-let ((buf (window-buffer win)))
+        (with-current-buffer buf
+          (when (derived-mode-p 'beads-list-mode)
+            (let ((now-selected (eq win (frame-selected-window frame))))
+              (when (and now-selected
+                         (not beads-list--window-selected))
+                (beads-list-refresh-async t))
+              (setq beads-list--window-selected now-selected))))))))
+
 (define-derived-mode beads-list-mode tabulated-list-mode "Beads-List"
   "Major mode for displaying Beads issues in a table.
 
@@ -413,6 +449,13 @@ Respects `beads-list-show-header-stats'."
   (setq tabulated-list-sort-key (cons "Date" t))
   (setq tabulated-list-printer #'beads-list--print-entry)
   (add-hook 'tabulated-list-revert-hook #'beads-list-refresh nil t)
+  ;; Event-driven refresh: re-fetch when the user returns to this
+  ;; buffer (e.g. from a detail view).  The async refresh short-
+  ;; circuits via the cache freshness token when nothing changed,
+  ;; so this is essentially free in the common case.  Replaces the
+  ;; old timer-based auto-refresh (see bdel-lc6).
+  (add-hook 'window-selection-change-functions
+            #'beads-list--maybe-refresh-on-select nil t)
   (tabulated-list-init-header)
   (hl-line-mode 1)
   (beads-show-hint))
@@ -509,12 +552,14 @@ refreshes that may safely no-op when nothing has changed, use
 
 When SILENT is non-nil, suppress the refresh message.
 Unlike `beads-list-refresh', this uses `make-process' to fetch
-issues without blocking Emacs. Intended for auto-refresh timers
-and background updates where the user isn't waiting for the result.
+issues without blocking Emacs.  Intended for event-driven background
+refreshes (e.g. the on-window-selection hook installed by
+`beads-list-mode'; see `beads-list--maybe-refresh-on-select') where
+the user isn't waiting for the result.
 
-Preserves point and window-start across the rebuild so an auto-refresh
-fired while the user is scrolling does not yank the cursor back to the
-top of the buffer (see bdel-efx).
+Preserves point and window-start across the rebuild so a background
+refresh fired while the user is scrolling does not yank the cursor
+back to the top of the buffer (see bdel-efx).
 
 When the cache is enabled and the active backend supports the
 `freshness' check, runs a sub-10ms freshness query first.  If the
@@ -545,7 +590,9 @@ token-before-list ordering invariant (see `beads-cache.el')."
                  (beads-client-error nil)
                  (beads-backend-error nil)))))
     ;; Fast path: cache hot AND token unchanged → no list fetch, no
-    ;; UI churn.  Primary win for the 30s auto-refresh timer.
+    ;; UI churn.  Primary win for the on-select event-driven refresh:
+    ;; returning to a list buffer after a brief detour costs only the
+    ;; sub-10ms freshness query.
     (when (and cached-token current-token
                (equal cached-token current-token))
       (cl-return-from beads-list-refresh-async nil))

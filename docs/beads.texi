@@ -119,7 +119,7 @@ Customization
 * Type Display::
 * Sorting: Sorting (1). 
 * Header Statistics::
-* Auto-Update::
+* Refreshing::
 * Preview::
 * Project Integration::
 
@@ -955,7 +955,7 @@ These settings are optional.  The defaults work well for most users.
 * Type Display::
 * Sorting: Sorting (1). 
 * Header Statistics::
-* Auto-Update::
+* Refreshing::
 * Preview::
 * Project Integration::
 @end menu
@@ -1013,18 +1013,21 @@ Available: @samp{id}, @samp{date}, @samp{status}, @samp{priority}, @samp{type}, 
 (setq beads-list-show-header-stats t)  ; Show counts (default)
 @end lisp
 
-@node Auto-Update
-@section Auto-Update
+@node Refreshing
+@section Refreshing
 
-@vindex beads-autoupdate-enable
-@vindex beads-autoupdate-interval
+The list view refreshes automatically after any write performed
+through beads.el (transient menu, edit commands, detail-mode
+actions, forms) and whenever you return to a @code{beads-list-mode}
+window from another buffer (for example, closing a detail view).
+The on-select refresh is asynchronous, cursor-preserving and
+short-circuits via the cache freshness token when nothing has
+changed, so it is essentially free in the common case.
 
-Beads can automatically refresh to show external changes:
-
-@lisp
-(setq beads-autoupdate-enable t)      ; Enable (default)
-(setq beads-autoupdate-interval 30)   ; Seconds between updates
-@end lisp
+Press @kbd{g} for a manual refresh --- useful when an external
+@command{bd} invocation or another Emacs session has mutated the DB
+and you want to pick up the change without leaving and re-entering
+the buffer.
 
 @node Preview
 @section Preview
@@ -1320,7 +1323,6 @@ Toggle preview mode off and on with @samp{P}
 For large projects (1000+ issues):
 
 @lisp
-(setq beads-autoupdate-interval 60)    ; Less frequent updates
 (setq beads-list-show-header-stats nil) ; Disable header stats
 @end lisp
 

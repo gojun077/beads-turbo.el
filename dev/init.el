@@ -28,7 +28,7 @@
 (setq beads-form-use-vui t)
 
 (defvar beads-reload--features
-  '(beads beads-transient beads-autoupdate beads-project
+  '(beads beads-transient beads-project
     beads-list beads-preview beads-detail beads-hierarchy
     beads-form beads-edit beads-filter beads-faces beads-client
     beads-state beads-orphans beads-stale beads-activity
