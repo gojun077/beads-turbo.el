@@ -209,6 +209,15 @@ ON-CLICK is called when clicked, defaults to navigation."
 
 ;;; Detail view components
 
+(defun beads-vui--has-parent-child-dep-p (issue)
+  "Return non-nil if ISSUE has a parent-child dependency entry."
+  (let ((deps (alist-get 'dependencies issue))
+        (found nil))
+    (dolist (dep (append deps nil))
+      (when (string= (alist-get 'dependency_type dep) "parent-child")
+        (setq found t)))
+    found))
+
 (vui-defcomponent beads-vui-editable-field (label value &key face on-edit)
   "Display a LABEL: VALUE pair with optional edit button.
 FACE applies to value, ON-EDIT called when edit button clicked."
@@ -227,11 +236,18 @@ When EDITABLE is non-nil, show edit buttons. ON-REFRESH called after edits."
   :render
   (let ((status (alist-get 'status issue))
         (priority (alist-get 'priority issue))
+        (owner (alist-get 'owner issue))
         (assignee (alist-get 'assignee issue))
         (created-by (alist-get 'created_by issue))
         (created (alist-get 'created_at issue))
+        (started (alist-get 'started_at issue))
+        (updated (alist-get 'updated_at issue))
+        (closed (alist-get 'closed_at issue))
+        (close-reason (alist-get 'close_reason issue))
+        (external-ref (alist-get 'external_ref issue))
         (labels (alist-get 'labels issue))
-        (parent-id (alist-get 'parent_id issue)))
+        (parent-id (or (alist-get 'parent issue)
+                       (alist-get 'parent_id issue))))
     (vui-vstack
      (vui-hstack
       :spacing 5
@@ -259,14 +275,43 @@ When EDITABLE is non-nil, show edit buttons. ON-REFRESH called after edits."
                      :value (or assignee "(none)")
                      :on-edit (when editable
                                 (beads-vui-make-edit-handler issue 'assignee on-refresh)))
+      (when owner
+        (vui-component 'beads-vui-labeled-value
+                       :label "Owner" :value owner))
       (when created-by
         (vui-component 'beads-vui-labeled-value
-                       :label "Created by" :value created-by))
+                       :label "Created by" :value created-by)))
+     (vui-hstack
+      :spacing 2
       (when created
         (vui-component 'beads-vui-labeled-value
                        :label "Created"
-                       :value (beads-vui-format-timestamp created))))
-     (when parent-id
+                       :value (beads-vui-format-timestamp created)))
+      (when started
+        (vui-component 'beads-vui-labeled-value
+                       :label "Started"
+                       :value (beads-vui-format-timestamp started)))
+      (when updated
+        (vui-component 'beads-vui-labeled-value
+                       :label "Updated"
+                       :value (beads-vui-format-timestamp updated)))
+      (when closed
+        (vui-component 'beads-vui-labeled-value
+                       :label "Closed"
+                       :value (beads-vui-format-timestamp closed))))
+     (when (and close-reason (not (string-empty-p close-reason)))
+       (vui-component 'beads-vui-labeled-value
+                      :label "Close reason" :value close-reason))
+     (when (and external-ref (not (string-empty-p external-ref)))
+       (vui-component 'beads-vui-editable-field
+                      :label "External ref"
+                      :value external-ref
+                      :on-edit (when editable
+                                 (beads-vui-make-edit-handler issue 'external_ref on-refresh))))
+     ;; Only show simple Parent: <id> link when the parent will NOT be
+     ;; rendered in the relationships section below.
+     (when (and parent-id
+                (not (beads-vui--has-parent-child-dep-p issue)))
        (vui-hstack
         (vui-text "Parent: " :face 'bold)
         (vui-component 'beads-vui-clickable-id :issue-id parent-id)))
@@ -311,7 +356,7 @@ Respects `beads-detail-section-style' for layout."
       (vui-newline)))))
 
 (vui-defcomponent beads-vui-content-sections (issue &key editable on-refresh)
-  "Display all content sections (description, design, acceptance) for ISSUE.
+  "Display all content sections (description, design, acceptance, notes) for ISSUE.
 When EDITABLE is non-nil, show edit buttons. ON-REFRESH called after edits."
   :render
   (vui-fragment
@@ -329,7 +374,12 @@ When EDITABLE is non-nil, show edit buttons. ON-REFRESH called after edits."
                   :title "Acceptance Criteria"
                   :content (alist-get 'acceptance_criteria issue)
                   :on-edit (when editable
-                             (beads-vui-make-edit-handler issue 'acceptance_criteria on-refresh)))))
+                             (beads-vui-make-edit-handler issue 'acceptance_criteria on-refresh)))
+   (vui-component 'beads-vui-content-section
+                  :title "Notes"
+                  :content (alist-get 'notes issue)
+                  :on-edit (when editable
+                             (beads-vui-make-edit-handler issue 'notes on-refresh)))))
 
 (vui-defcomponent beads-vui-dep-link (dep)
   "Display a single dependency/dependent DEP as clickable link."
@@ -348,24 +398,92 @@ When EDITABLE is non-nil, show edit buttons. ON-REFRESH called after edits."
      (when (and dep-type (not (string= dep-type "parent-child")))
        (vui-text (format " (%s)" dep-type) :face 'shadow)))))
 
-(vui-defcomponent beads-vui-relationships (issue)
-  "Display dependencies and dependents for ISSUE."
+(defun beads-vui--bucket-deps (deps)
+  "Bucket DEPS list/vector by `dependency_type'.
+Returns alist of (TYPE . LIST-OF-DEPS) in insertion order."
+  (let ((buckets nil))
+    (dolist (dep (append deps nil))
+      (let* ((type (or (alist-get 'dependency_type dep) "blocks"))
+             (cell (assoc type buckets)))
+        (if cell
+            (setcdr cell (append (cdr cell) (list dep)))
+          (push (cons type (list dep)) buckets))))
+    (nreverse buckets)))
+
+(vui-defcomponent beads-vui-rel-group (label deps)
+  "Render a relationship group with LABEL header and DEPS list."
   :render
-  (let ((deps (append (alist-get 'dependencies issue) nil))
-        (dependents (append (alist-get 'dependents issue) nil)))
+  (when (and deps (> (length deps) 0))
+    (vui-vstack
+     (vui-text (concat label ":") :face 'bold)
+     (vui-list deps
+               (lambda (d) (vui-component 'beads-vui-dep-link :dep d))
+               (lambda (d) (alist-get 'id d))))))
+
+(vui-defcomponent beads-vui-relationships (issue)
+  "Display categorized relationships for ISSUE.
+Groups dependencies and dependents by `dependency_type' into Parent,
+Children, Discovered From, Discovered, Related, Depends on, and
+Dependents sections, matching `bd show' output."
+  :render
+  (let* ((dep-buckets (beads-vui--bucket-deps (alist-get 'dependencies issue)))
+         (dependent-buckets (beads-vui--bucket-deps (alist-get 'dependents issue)))
+         (epic-total (alist-get 'epic_total_children issue))
+         (epic-closed (alist-get 'epic_closed_children issue))
+         (related-in (alist-get "related" dep-buckets nil nil #'string=))
+         (related-out (alist-get "related" dependent-buckets nil nil #'string=))
+         (related-seen (make-hash-table :test 'equal))
+         (related-unique nil))
+    (dolist (dep (append related-in related-out))
+      (let ((id (alist-get 'id dep)))
+        (unless (gethash id related-seen)
+          (puthash id t related-seen)
+          (push dep related-unique))))
     (vui-fragment
-     (when (and deps (> (length deps) 0))
-       (vui-vstack
-        (vui-text "Depends on:" :face 'bold)
-        (vui-list deps
-                  (lambda (d) (vui-component 'beads-vui-dep-link :dep d))
-                  (lambda (d) (alist-get 'id d)))))
-     (when (and dependents (> (length dependents) 0))
-       (vui-vstack
-        (vui-text "Dependents:" :face 'bold)
-        (vui-list dependents
-                  (lambda (d) (vui-component 'beads-vui-dep-link :dep d))
-                  (lambda (d) (alist-get 'id d))))))))
+     (vui-component 'beads-vui-rel-group
+                    :label "Parent"
+                    :deps (alist-get "parent-child" dep-buckets nil nil #'string=))
+     (vui-component 'beads-vui-rel-group
+                    :label "Children"
+                    :deps (alist-get "parent-child" dependent-buckets nil nil #'string=))
+     (when (and epic-total (> epic-total 0))
+       (let ((pct (round (* 100.0 (/ (float (or epic-closed 0))
+                                     (max epic-total 1))))))
+         (vui-text (format "  ◐ %d/%d complete (%d%%)"
+                           (or epic-closed 0) epic-total pct)
+                   :face 'shadow)))
+     (vui-component 'beads-vui-rel-group
+                    :label "Discovered From"
+                    :deps (alist-get "discovered-from" dep-buckets nil nil #'string=))
+     (vui-component 'beads-vui-rel-group
+                    :label "Discovered"
+                    :deps (alist-get "discovered-from" dependent-buckets nil nil #'string=))
+     (vui-component 'beads-vui-rel-group
+                    :label "Related"
+                    :deps (nreverse related-unique))
+     ;; Generic depends-on / dependents (anything else)
+     (vui-fragment
+      (mapcar
+       (lambda (cell)
+         (let ((type (car cell)))
+           (unless (member type '("parent-child" "discovered-from" "related"))
+             (vui-component 'beads-vui-rel-group
+                            :label (if (string= type "blocks")
+                                       "Depends on"
+                                     (capitalize type))
+                            :deps (cdr cell)))))
+       dep-buckets))
+     (vui-fragment
+      (mapcar
+       (lambda (cell)
+         (let ((type (car cell)))
+           (unless (member type '("parent-child" "discovered-from" "related"))
+             (vui-component 'beads-vui-rel-group
+                            :label (if (string= type "blocks")
+                                       "Dependents"
+                                     (capitalize type))
+                            :deps (cdr cell)))))
+       dependent-buckets)))))
 
 (vui-defcomponent beads-vui-comment (comment)
   "Display a single COMMENT with author, timestamp, and text."

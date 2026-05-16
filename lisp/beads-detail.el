@@ -289,7 +289,8 @@ prevents stomping on the user if they have already navigated away."
   "Navigate to the parent issue of the current issue."
   (interactive)
   (let* ((issue (beads-detail--require-issue))
-         (parent-id (alist-get 'parent_id issue)))
+         (parent-id (or (alist-get 'parent issue)
+                        (alist-get 'parent_id issue))))
     (unless parent-id
       (user-error "This issue has no parent"))
     (condition-case err
@@ -525,6 +526,10 @@ Uses CLI fallback since RPC does not support comment_add."
     (unless (string-empty-p acceptance)
       (beads-detail--insert-section "Acceptance Criteria" acceptance)))
 
+  (when-let ((notes (alist-get 'notes issue)))
+    (unless (string-empty-p notes)
+      (beads-detail--insert-section "Notes" notes)))
+
   (when-let ((comments (alist-get 'comments issue)))
     (when (> (length comments) 0)
       (beads-detail--insert-comments comments))))
@@ -537,16 +542,22 @@ Uses CLI fallback since RPC does not support comment_add."
     (insert (propertize title 'face 'beads-detail-title-face))))
 
 (defun beads-detail--insert-metadata (issue)
-  "Insert status, priority, type, assignee, and labels for ISSUE."
+  "Insert status, priority, type, assignee, timestamps, and labels for ISSUE."
   (let ((status (alist-get 'status issue))
         (priority (alist-get 'priority issue))
         (type (alist-get 'issue_type issue))
+        (owner (alist-get 'owner issue))
         (assignee (alist-get 'assignee issue))
         (created-by (alist-get 'created_by issue))
         (created (alist-get 'created_at issue))
+        (started (alist-get 'started_at issue))
         (updated (alist-get 'updated_at issue))
+        (closed (alist-get 'closed_at issue))
+        (close-reason (alist-get 'close_reason issue))
+        (external-ref (alist-get 'external_ref issue))
         (labels (alist-get 'labels issue))
-        (parent-id (alist-get 'parent_id issue)))
+        (parent (or (alist-get 'parent issue)
+                    (alist-get 'parent_id issue))))
 
     (beads-detail--insert-field "Status" status)
     (insert "     ")
@@ -555,22 +566,43 @@ Uses CLI fallback since RPC does not support comment_add."
     (beads-detail--insert-field "Type" type)
     (insert "\n")
 
-    (when assignee
-      (beads-detail--insert-field "Assignee" assignee)
-      (insert "  "))
-    (when created-by
-      (beads-detail--insert-field "Created by" created-by)
-      (insert "  "))
-    (when created
-      (beads-detail--insert-field "Created" (beads-detail--format-timestamp created)))
-    (when updated
-      (when (or assignee created-by created)
-        (insert "  "))
-      (beads-detail--insert-field "Updated" (beads-detail--format-timestamp updated)))
-    (insert "\n")
+    (let ((first t))
+      (dolist (pair (list (cons "Owner" owner)
+                          (cons "Assignee" assignee)
+                          (cons "Created by" created-by)))
+        (when (cdr pair)
+          (unless first (insert "  "))
+          (beads-detail--insert-field (car pair) (cdr pair))
+          (setq first nil)))
+      (unless first (insert "\n")))
 
-    (when parent-id
-      (beads-detail--insert-parent-link parent-id)
+    (let ((first t))
+      (dolist (pair (list (cons "Created" created)
+                          (cons "Started" started)
+                          (cons "Updated" updated)
+                          (cons "Closed" closed)))
+        (when (cdr pair)
+          (unless first (insert "  "))
+          (beads-detail--insert-field (car pair)
+                                      (beads-detail--format-timestamp (cdr pair)))
+          (setq first nil)))
+      (unless first (insert "\n")))
+
+    (when (and close-reason (not (string-empty-p close-reason)))
+      (beads-detail--insert-field "Close reason" close-reason)
+      (insert "\n"))
+
+    (when (and external-ref (not (string-empty-p external-ref)))
+      (beads-detail--insert-field "External ref" external-ref)
+      (insert "\n"))
+
+    ;; Only show simple Parent: <id> link when the parent will NOT be
+    ;; rendered as a richer item in the relationships section below
+    ;; (i.e. when the dependencies array does not include a parent-child
+    ;; entry).
+    (when (and parent
+               (not (beads-detail--has-parent-child-dep-p issue)))
+      (beads-detail--insert-parent-link parent)
       (insert "\n"))
 
     (when (and labels (> (length labels) 0))
@@ -578,8 +610,7 @@ Uses CLI fallback since RPC does not support comment_add."
                                   (mapconcat #'identity (append labels nil) ", "))
       (insert "\n"))
 
-    (beads-detail--insert-dependencies issue)
-    (beads-detail--insert-dependents issue)))
+    (beads-detail--insert-relationships issue)))
 
 (defun beads-detail--insert-field (label value)
   "Insert a LABEL: VALUE pair."
@@ -617,23 +648,98 @@ Uses CLI fallback since RPC does not support comment_add."
       (insert (format " (%s)" type)))
     (insert "\n")))
 
-(defun beads-detail--insert-dependencies (issue)
-  "Insert dependencies section for ISSUE if any exist."
-  (when-let ((deps (alist-get 'dependencies issue)))
-    (when (> (length deps) 0)
-      (insert (propertize "Depends on: " 'face 'beads-detail-label-face))
-      (insert "\n")
-      (seq-doseq (dep deps)
-        (beads-detail--insert-dep-link dep)))))
+(defun beads-detail--has-parent-child-dep-p (issue)
+  "Return non-nil if ISSUE has a parent-child dependency entry."
+  (let ((deps (alist-get 'dependencies issue))
+        (found nil))
+    (seq-doseq (dep deps)
+      (when (string= (alist-get 'dependency_type dep) "parent-child")
+        (setq found t)))
+    found))
 
-(defun beads-detail--insert-dependents (issue)
-  "Insert dependents section for ISSUE if any exist."
-  (when-let ((deps (alist-get 'dependents issue)))
-    (when (> (length deps) 0)
-      (insert (propertize "Dependents: " 'face 'beads-detail-label-face))
-      (insert "\n")
-      (seq-doseq (dep deps)
-        (beads-detail--insert-dep-link dep)))))
+(defun beads-detail--bucket-deps (deps)
+  "Bucket DEPS (vector or list) by `dependency_type'.
+Returns an alist of (TYPE . LIST-OF-DEPS), in stable insertion order."
+  (let ((buckets nil))
+    (seq-doseq (dep deps)
+      (let* ((type (or (alist-get 'dependency_type dep) "blocks"))
+             (cell (assoc type buckets)))
+        (if cell
+            (setcdr cell (append (cdr cell) (list dep)))
+          (push (cons type (list dep)) buckets))))
+    (nreverse buckets)))
+
+(defun beads-detail--insert-rel-group (label deps)
+  "Insert a labeled relationship group with LABEL and DEPS list."
+  (when (and deps (> (length deps) 0))
+    (insert (propertize (concat label ":") 'face 'beads-detail-label-face))
+    (insert "\n")
+    (dolist (dep deps)
+      (beads-detail--insert-dep-link dep))))
+
+(defun beads-detail--insert-relationships (issue)
+  "Insert categorized relationships and epic progress for ISSUE.
+Groups dependencies/dependents by `dependency_type' into Parent,
+Children, Discovered From, Discovered, Related, Depends on, Dependents
+sections, matching `bd show' output."
+  (let* ((deps (alist-get 'dependencies issue))
+         (dependents (alist-get 'dependents issue))
+         (dep-buckets (beads-detail--bucket-deps deps))
+         (dependent-buckets (beads-detail--bucket-deps dependents))
+         (epic-total (alist-get 'epic_total_children issue))
+         (epic-closed (alist-get 'epic_closed_children issue)))
+
+    ;; Parent (from dependencies with type=parent-child)
+    (beads-detail--insert-rel-group
+     "Parent" (alist-get "parent-child" dep-buckets nil nil #'string=))
+
+    ;; Children (from dependents with type=parent-child)
+    (beads-detail--insert-rel-group
+     "Children" (alist-get "parent-child" dependent-buckets nil nil #'string=))
+
+    ;; Epic progress
+    (when (and epic-total (> epic-total 0))
+      (let ((pct (if (and epic-closed (> epic-total 0))
+                     (round (* 100.0 (/ (float (or epic-closed 0)) epic-total)))
+                   0)))
+        (insert (propertize "  ◐ " 'face 'beads-detail-label-face))
+        (insert (format "%d/%d complete (%d%%)\n"
+                        (or epic-closed 0) epic-total pct))))
+
+    ;; Discovered From (deps)
+    (beads-detail--insert-rel-group
+     "Discovered From" (alist-get "discovered-from" dep-buckets nil nil #'string=))
+
+    ;; Discovered (dependents)
+    (beads-detail--insert-rel-group
+     "Discovered" (alist-get "discovered-from" dependent-buckets nil nil #'string=))
+
+    ;; Related (either side, merged & de-duped by id)
+    (let* ((related-in (alist-get "related" dep-buckets nil nil #'string=))
+           (related-out (alist-get "related" dependent-buckets nil nil #'string=))
+           (combined (append related-in related-out))
+           (seen (make-hash-table :test 'equal))
+           (unique nil))
+      (dolist (dep combined)
+        (let ((id (alist-get 'id dep)))
+          (unless (gethash id seen)
+            (puthash id t seen)
+            (push dep unique))))
+      (beads-detail--insert-rel-group "Related" (nreverse unique)))
+
+    ;; Generic depends-on / dependents (anything not parent/discovered/related)
+    (dolist (cell dep-buckets)
+      (let ((type (car cell)))
+        (unless (member type '("parent-child" "discovered-from" "related"))
+          (beads-detail--insert-rel-group
+           (if (string= type "blocks") "Depends on" (capitalize type))
+           (cdr cell)))))
+    (dolist (cell dependent-buckets)
+      (let ((type (car cell)))
+        (unless (member type '("parent-child" "discovered-from" "related"))
+          (beads-detail--insert-rel-group
+           (if (string= type "blocks") "Dependents" (capitalize type))
+           (cdr cell)))))))
 
 (defun beads-detail--fontify-markdown (text)
   "Fontify TEXT with markdown-mode if available and enabled.

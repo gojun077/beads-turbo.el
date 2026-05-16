@@ -253,9 +253,9 @@
                                      ((id . "bd-dep2")
                                       (dependency_type . "related"))]))))
       (beads-detail--render issue)
-      (goto-char (point-min))
-      (should (search-forward "bd-dep1" nil t))
-      (should (search-forward "bd-dep2" nil t)))))
+      (let ((buffer-content (buffer-string)))
+        (should (string-match-p "bd-dep1" buffer-content))
+        (should (string-match-p "bd-dep2" buffer-content))))))
 
 (ert-deftest beads-detail-test-render-dependencies-absent ()
   "Test that beads-detail--render handles missing dependencies gracefully."
@@ -389,6 +389,192 @@
       (beads-detail--render issue)
       (let ((buffer-content (buffer-string)))
         (should-not (string-match-p "Parent:" buffer-content))))))
+
+;;; bdel-91f.9: render parity with `bd show'
+
+(ert-deftest beads-detail-test-render-parent-from-parent-field ()
+  "Parent should be shown when issue uses top-level `parent' string field
+\(as returned by `bd show --json'), not just `parent_id'."
+  (with-temp-buffer
+    (let ((issue '((id . "bd-child")
+                   (title . "Child")
+                   (status . "open")
+                   (priority . 2)
+                   (issue_type . "task")
+                   (parent . "bd-parent"))))
+      (beads-detail--render issue)
+      (let ((buffer-content (buffer-string)))
+        (should (string-match-p "Parent:" buffer-content))
+        (should (string-match-p "bd-parent" buffer-content))))))
+
+(ert-deftest beads-detail-test-render-owner ()
+  "Owner field should be displayed when present."
+  (with-temp-buffer
+    (let ((issue '((id . "bd-test")
+                   (title . "Test")
+                   (status . "open")
+                   (priority . 2)
+                   (issue_type . "task")
+                   (owner . "carol@example.com"))))
+      (beads-detail--render issue)
+      (let ((buffer-content (buffer-string)))
+        (should (string-match-p "Owner:" buffer-content))
+        (should (string-match-p "carol@example.com" buffer-content))))))
+
+(ert-deftest beads-detail-test-render-started-at ()
+  "Started timestamp should be displayed when present."
+  (with-temp-buffer
+    (let ((issue '((id . "bd-test")
+                   (title . "Test")
+                   (status . "in_progress")
+                   (priority . 2)
+                   (issue_type . "task")
+                   (started_at . "2025-03-04T08:00:00Z"))))
+      (beads-detail--render issue)
+      (let ((buffer-content (buffer-string)))
+        (should (string-match-p "Started:" buffer-content))
+        (should (string-match-p "2025-03-04" buffer-content))))))
+
+(ert-deftest beads-detail-test-render-closed-at-and-reason ()
+  "Closed timestamp and close reason should be displayed when present."
+  (with-temp-buffer
+    (let ((issue '((id . "bd-test")
+                   (title . "Test")
+                   (status . "closed")
+                   (priority . 2)
+                   (issue_type . "task")
+                   (closed_at . "2025-04-05T12:00:00Z")
+                   (close_reason . "Done"))))
+      (beads-detail--render issue)
+      (let ((buffer-content (buffer-string)))
+        (should (string-match-p "Closed:" buffer-content))
+        (should (string-match-p "2025-04-05" buffer-content))
+        (should (string-match-p "Close reason:" buffer-content))
+        (should (string-match-p "Done" buffer-content))))))
+
+(ert-deftest beads-detail-test-render-external-ref ()
+  "External ref should be displayed when present."
+  (with-temp-buffer
+    (let ((issue '((id . "bd-test")
+                   (title . "Test")
+                   (status . "open")
+                   (priority . 2)
+                   (issue_type . "task")
+                   (external_ref . "JIRA-1234"))))
+      (beads-detail--render issue)
+      (let ((buffer-content (buffer-string)))
+        (should (string-match-p "External ref:" buffer-content))
+        (should (string-match-p "JIRA-1234" buffer-content))))))
+
+(ert-deftest beads-detail-test-render-notes-section ()
+  "Notes section should render when notes field is present and non-empty
+\(regression test for bdel-91f.8: notes field missing in detail view)."
+  (with-temp-buffer
+    (let ((issue '((id . "bd-test")
+                   (title . "Test")
+                   (status . "open")
+                   (priority . 2)
+                   (issue_type . "task")
+                   (notes . "Implementation notes here"))))
+      (beads-detail--render issue)
+      (let ((buffer-content (buffer-string)))
+        (should (string-match-p "Notes:" buffer-content))
+        (should (string-match-p "Implementation notes here" buffer-content))))))
+
+(ert-deftest beads-detail-test-render-notes-absent ()
+  "Notes section should not appear when notes is missing or empty."
+  (with-temp-buffer
+    (let ((issue '((id . "bd-test")
+                   (title . "Test")
+                   (status . "open")
+                   (priority . 2)
+                   (issue_type . "task"))))
+      (beads-detail--render issue)
+      (let ((buffer-content (buffer-string)))
+        (should-not (string-match-p "^Notes:" buffer-content)))))
+  (with-temp-buffer
+    (let ((issue '((id . "bd-test")
+                   (title . "Test")
+                   (status . "open")
+                   (priority . 2)
+                   (issue_type . "task")
+                   (notes . ""))))
+      (beads-detail--render issue)
+      (let ((buffer-content (buffer-string)))
+        (should-not (string-match-p "^Notes:" buffer-content))))))
+
+(ert-deftest beads-detail-test-render-categorized-relationships ()
+  "Dependencies/dependents should be grouped by `dependency_type' into
+named sections matching `bd show' (Parent, Children, Discovered From,
+Discovered, Related, Depends on, Dependents)."
+  (with-temp-buffer
+    (let ((issue '((id . "bd-epic")
+                   (title . "Epic")
+                   (status . "open")
+                   (priority . 2)
+                   (issue_type . "epic")
+                   (dependencies . [((id . "bd-parent")
+                                     (title . "Parent")
+                                     (dependency_type . "parent-child"))
+                                    ((id . "bd-origin")
+                                     (title . "Origin")
+                                     (dependency_type . "discovered-from"))
+                                    ((id . "bd-blocker")
+                                     (title . "Blocker")
+                                     (dependency_type . "blocks"))])
+                   (dependents . [((id . "bd-child")
+                                    (title . "Child")
+                                    (dependency_type . "parent-child"))
+                                   ((id . "bd-derived")
+                                    (title . "Derived")
+                                    (dependency_type . "discovered-from"))
+                                   ((id . "bd-relative")
+                                    (title . "Relative")
+                                    (dependency_type . "related"))]))))
+      (beads-detail--render issue)
+      (let ((buffer-content (buffer-string)))
+        (should (string-match-p "Parent:" buffer-content))
+        (should (string-match-p "bd-parent" buffer-content))
+        (should (string-match-p "Children:" buffer-content))
+        (should (string-match-p "bd-child" buffer-content))
+        (should (string-match-p "Discovered From:" buffer-content))
+        (should (string-match-p "bd-origin" buffer-content))
+        (should (string-match-p "Discovered:" buffer-content))
+        (should (string-match-p "bd-derived" buffer-content))
+        (should (string-match-p "Related:" buffer-content))
+        (should (string-match-p "bd-relative" buffer-content))
+        (should (string-match-p "Depends on:" buffer-content))
+        (should (string-match-p "bd-blocker" buffer-content))))))
+
+(ert-deftest beads-detail-test-render-epic-progress ()
+  "Epic progress (X/Y complete (Z%)) should be displayed for epics."
+  (with-temp-buffer
+    (let ((issue '((id . "bd-epic")
+                   (title . "Epic")
+                   (status . "open")
+                   (priority . 2)
+                   (issue_type . "epic")
+                   (epic_total_children . 12)
+                   (epic_closed_children . 8))))
+      (beads-detail--render issue)
+      (let ((buffer-content (buffer-string)))
+        (should (string-match-p "8/12 complete" buffer-content))
+        (should (string-match-p "67%" buffer-content))))))
+
+(ert-deftest beads-detail-test-bucket-deps-by-type ()
+  "`beads-detail--bucket-deps' should group deps by `dependency_type'."
+  (let* ((deps [((id . "a") (dependency_type . "parent-child"))
+                ((id . "b") (dependency_type . "blocks"))
+                ((id . "c") (dependency_type . "parent-child"))])
+         (buckets (beads-detail--bucket-deps deps)))
+    (should (= 2 (length buckets)))
+    (let ((pc (alist-get "parent-child" buckets nil nil #'string=))
+          (bl (alist-get "blocks" buckets nil nil #'string=)))
+      (should (= 2 (length pc)))
+      (should (equal "a" (alist-get 'id (car pc))))
+      (should (equal "c" (alist-get 'id (cadr pc))))
+      (should (= 1 (length bl)))
+      (should (equal "b" (alist-get 'id (car bl)))))))
 
 ;;; Parent navigation tests (no daemon)
 
