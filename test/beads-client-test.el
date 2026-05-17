@@ -269,46 +269,48 @@ return the cached path from the other project."
       (should (stringp (alist-get 'status issue))))))
 
 (ert-deftest beads-client-test-create-and-close ()
-  "Test creating and closing an issue via CLI."
+  "Test creating and closing an issue via CLI in an isolated temp project."
   :tags '(:integration :destructive)
   (skip-unless (beads-test-integration-enabled-p))
-  (skip-unless (beads-client--find-database))
-  (let* ((title "Test issue from ERT")
-         (issue (beads-client-create
-                 title
-                 :description "Test description"
-                 :priority 2
-                 :issue-type "task"))
-         (issue-id (alist-get 'id issue)))
-    (should (stringp issue-id))
-    (should (equal (alist-get 'title issue) title))
-    (unwind-protect
-        (progn
-          (let ((show-issue (beads-client-show issue-id)))
-            (should (stringp (alist-get 'id show-issue))))
-          (let ((closed-issue (beads-client-close issue-id "Test cleanup")))
-            (should (equal (alist-get 'status closed-issue) "closed"))))
-      (beads-client-delete (list issue-id) :force t))))
+  (skip-unless (executable-find "bd"))
+  (beads-test-with-temp-project _project-root
+    (let* ((title "Test issue from ERT")
+           (issue (beads-client-create
+                   title
+                   :description "Test description"
+                   :priority 2
+                   :issue-type "task"))
+           (issue-id (alist-get 'id issue)))
+      (should (stringp issue-id))
+      (should (equal (alist-get 'title issue) title))
+      (unwind-protect
+          (progn
+            (let ((show-issue (beads-client-show issue-id)))
+              (should (stringp (alist-get 'id show-issue))))
+            (let ((closed-issue (beads-client-close issue-id "Test cleanup")))
+              (should (equal (alist-get 'status closed-issue) "closed"))))
+        (beads-client-delete (list issue-id) :force t)))))
 
 (ert-deftest beads-client-test-update ()
-  "Test updating an issue via CLI."
+  "Test updating an issue via CLI in an isolated temp project."
   :tags '(:integration :destructive)
   (skip-unless (beads-test-integration-enabled-p))
-  (skip-unless (beads-client--find-database))
-  (let* ((issue (beads-client-create
-                 "Test update issue"
-                 :priority 2))
-         (issue-id (alist-get 'id issue)))
-    (unwind-protect
-        (let* ((updated-issue (beads-client-update
-                               issue-id
-                               :status "in_progress"
-                               :priority 1
-                               :notes "Working on it"))
-               (show-issue (beads-client-show issue-id)))
-          (should (equal (alist-get 'status updated-issue) "in_progress"))
-          (should (equal (alist-get 'priority show-issue) 1)))
-      (beads-client-delete (list issue-id) :force t))))
+  (skip-unless (executable-find "bd"))
+  (beads-test-with-temp-project _project-root
+    (let* ((issue (beads-client-create
+                   "Test update issue"
+                   :priority 2))
+           (issue-id (alist-get 'id issue)))
+      (unwind-protect
+          (let* ((updated-issue (beads-client-update
+                                 issue-id
+                                 :status "in_progress"
+                                 :priority 1
+                                 :notes "Working on it"))
+                 (show-issue (beads-client-show issue-id)))
+            (should (equal (alist-get 'status updated-issue) "in_progress"))
+            (should (equal (alist-get 'priority show-issue) 1)))
+        (beads-client-delete (list issue-id) :force t)))))
 
 (ert-deftest beads-client-test-count ()
   "Test that beads-client-count returns grouped counts."
@@ -319,41 +321,43 @@ return the cached path from the other project."
     (should (listp counts))))
 
 (ert-deftest beads-client-test-dep-add-remove ()
-  "Test adding and removing dependencies via CLI."
+  "Test adding and removing dependencies via CLI in an isolated temp project."
   :tags '(:integration :destructive)
   (skip-unless (beads-test-integration-enabled-p))
-  (skip-unless (beads-client--find-database))
-  (let* ((issue1 (beads-client-create "Dependency test 1"))
-         (issue2 (beads-client-create "Dependency test 2"))
-         (id1 (alist-get 'id issue1))
-         (id2 (alist-get 'id issue2)))
-    (unwind-protect
-        (progn
-          (let ((_add-result (beads-client-dep-add id1 id2 "blocks")))
-            (should t))
-          (let ((_show-issue (beads-client-show id1)))
-            (should t))
-          (let ((_remove-result (beads-client-dep-remove id1 id2)))
-            (should t)))
-      (beads-client-delete (list id1 id2) :force t))))
+  (skip-unless (executable-find "bd"))
+  (beads-test-with-temp-project _project-root
+    (let* ((issue1 (beads-client-create "Dependency test 1"))
+           (issue2 (beads-client-create "Dependency test 2"))
+           (id1 (alist-get 'id issue1))
+           (id2 (alist-get 'id issue2)))
+      (unwind-protect
+          (progn
+            (let ((_add-result (beads-client-dep-add id1 id2 "blocks")))
+              (should t))
+            (let ((_show-issue (beads-client-show id1)))
+              (should t))
+            (let ((_remove-result (beads-client-dep-remove id1 id2)))
+              (should t)))
+        (beads-client-delete (list id1 id2) :force t)))))
 
 (ert-deftest beads-client-test-label-operations ()
-  "Test adding and removing labels via CLI."
+  "Test adding and removing labels via CLI in an isolated temp project."
   :tags '(:integration :destructive)
   (skip-unless (beads-test-integration-enabled-p))
-  (skip-unless (beads-client--find-database))
-  (let* ((issue (beads-client-create "Label test"))
-         (issue-id (alist-get 'id issue)))
-    (unwind-protect
-        (progn
-          (let ((_add-result (beads-client-label-add issue-id "test-label")))
-            (should t))
-          (let* ((show-issue (beads-client-show issue-id))
-                 (labels (alist-get 'labels show-issue)))
-            (should (member "test-label" (append labels nil))))
-          (let ((_remove-result (beads-client-label-remove issue-id "test-label")))
-            (should t)))
-      (beads-client-delete (list issue-id) :force t))))
+  (skip-unless (executable-find "bd"))
+  (beads-test-with-temp-project _project-root
+    (let* ((issue (beads-client-create "Label test"))
+           (issue-id (alist-get 'id issue)))
+      (unwind-protect
+          (progn
+            (let ((_add-result (beads-client-label-add issue-id "test-label")))
+              (should t))
+            (let* ((show-issue (beads-client-show issue-id))
+                   (labels (alist-get 'labels show-issue)))
+              (should (member "test-label" (append labels nil))))
+            (let ((_remove-result (beads-client-label-remove issue-id "test-label")))
+              (should t)))
+        (beads-client-delete (list issue-id) :force t)))))
 
 (ert-deftest beads-client-test-invalid-operation ()
   "Test that invalid operations are handled."

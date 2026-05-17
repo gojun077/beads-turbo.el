@@ -12,6 +12,7 @@
 (require 'beads-backend)
 (require 'beads-backend-bd)
 (require 'beads-backend-dolt-sql)
+(require 'beads-test-helpers)
 
 ;;; Helpers
 
@@ -62,6 +63,15 @@ targeting \"mariadb\".  Calls targeting \"bd\" pass through."
                       0)
                   0))))
      ,@body))
+
+(defun beads-dolt-sql-test--live-dolt-sql-available-p ()
+  "Return non-nil when the current project has live Dolt SQL access."
+  (and (executable-find "mariadb")
+       (ignore-errors
+         (require 'beads-client)
+         (let ((default-directory
+                (or (beads-client--project-root) default-directory)))
+           (zerop (call-process "bd" nil nil nil "dolt" "status"))))))
 
 (defun beads-dolt-sql-test--with-clean-state (body-fn)
   "Call BODY-FN with Dolt SQL state clean (enabled, available, fresh cache).
@@ -1080,14 +1090,9 @@ correctness bug fixed alongside the performance fix in bdel-dgy."
 
 (ert-deftest beads-dolt-sql-test-integration-list ()
   "Integration: list operation returns issues from live Dolt server."
-  (skip-unless (and (executable-find "mariadb")
-                    (ignore-errors
-                      (progn (require 'beads-client)
-                             (let ((default-directory
-                                     (or (beads-client--project-root)
-                                         default-directory)))
-                               (zerop (call-process "bd" nil nil nil
-                                                    "dolt" "status")))))))
+  :tags '(:integration)
+  (skip-unless (beads-test-integration-enabled-p))
+  (skip-unless (beads-dolt-sql-test--live-dolt-sql-available-p))
   (let ((beads-dolt-sql--params nil)
         (beads-dolt-sql--params-time nil)
         (beads-dolt-sql--available t)
@@ -1104,14 +1109,9 @@ correctness bug fixed alongside the performance fix in bdel-dgy."
 
 (ert-deftest beads-dolt-sql-test-integration-show ()
   "Integration: show operation returns a known issue."
-  (skip-unless (and (executable-find "mariadb")
-                    (ignore-errors
-                      (progn (require 'beads-client)
-                             (let ((default-directory
-                                     (or (beads-client--project-root)
-                                         default-directory)))
-                               (zerop (call-process "bd" nil nil nil
-                                                    "dolt" "status")))))))
+  :tags '(:integration)
+  (skip-unless (beads-test-integration-enabled-p))
+  (skip-unless (beads-dolt-sql-test--live-dolt-sql-available-p))
   (let ((beads-dolt-sql--params nil)
         (beads-dolt-sql--params-time nil)
         (beads-dolt-sql--available t)
@@ -1127,14 +1127,9 @@ correctness bug fixed alongside the performance fix in bdel-dgy."
 
 (ert-deftest beads-dolt-sql-test-integration-stats ()
   "Integration: stats operation returns summary."
-  (skip-unless (and (executable-find "mariadb")
-                    (ignore-errors
-                      (progn (require 'beads-client)
-                             (let ((default-directory
-                                     (or (beads-client--project-root)
-                                         default-directory)))
-                               (zerop (call-process "bd" nil nil nil
-                                                    "dolt" "status")))))))
+  :tags '(:integration)
+  (skip-unless (beads-test-integration-enabled-p))
+  (skip-unless (beads-dolt-sql-test--live-dolt-sql-available-p))
   (let ((beads-dolt-sql--params nil)
         (beads-dolt-sql--params-time nil)
         (beads-dolt-sql--available t)
@@ -1149,14 +1144,9 @@ correctness bug fixed alongside the performance fix in bdel-dgy."
 
 (ert-deftest beads-dolt-sql-test-integration-ready ()
   "Integration: ready operation returns ready issues."
-  (skip-unless (and (executable-find "mariadb")
-                    (ignore-errors
-                      (progn (require 'beads-client)
-                             (let ((default-directory
-                                     (or (beads-client--project-root)
-                                         default-directory)))
-                               (zerop (call-process "bd" nil nil nil
-                                                    "dolt" "status")))))))
+  :tags '(:integration)
+  (skip-unless (beads-test-integration-enabled-p))
+  (skip-unless (beads-dolt-sql-test--live-dolt-sql-available-p))
   (let ((beads-dolt-sql--params nil)
         (beads-dolt-sql--params-time nil)
         (beads-dolt-sql--available t)
@@ -1169,14 +1159,9 @@ correctness bug fixed alongside the performance fix in bdel-dgy."
 
 (ert-deftest beads-dolt-sql-test-integration-stale ()
   "Integration: stale operation returns stale issues."
-  (skip-unless (and (executable-find "mariadb")
-                    (ignore-errors
-                      (progn (require 'beads-client)
-                             (let ((default-directory
-                                     (or (beads-client--project-root)
-                                         default-directory)))
-                               (zerop (call-process "bd" nil nil nil
-                                                    "dolt" "status")))))))
+  :tags '(:integration)
+  (skip-unless (beads-test-integration-enabled-p))
+  (skip-unless (beads-dolt-sql-test--live-dolt-sql-available-p))
   (let ((beads-dolt-sql--params nil)
         (beads-dolt-sql--params-time nil)
         (beads-dolt-sql--available t)
@@ -1188,14 +1173,9 @@ correctness bug fixed alongside the performance fix in bdel-dgy."
 
 (ert-deftest beads-dolt-sql-test-integration-count ()
   "Integration: count operation returns count."
-  (skip-unless (and (executable-find "mariadb")
-                    (ignore-errors
-                      (progn (require 'beads-client)
-                             (let ((default-directory
-                                     (or (beads-client--project-root)
-                                         default-directory)))
-                               (zerop (call-process "bd" nil nil nil
-                                                    "dolt" "status")))))))
+  :tags '(:integration)
+  (skip-unless (beads-test-integration-enabled-p))
+  (skip-unless (beads-dolt-sql-test--live-dolt-sql-available-p))
   (let ((beads-dolt-sql--params nil)
         (beads-dolt-sql--params-time nil)
         (beads-dolt-sql--available t)
@@ -1208,14 +1188,9 @@ correctness bug fixed alongside the performance fix in bdel-dgy."
 
 (ert-deftest beads-dolt-sql-test-integration-executor-fallback ()
   "Integration: executor falls back to bd CLI for non-SQL ops."
-  (skip-unless (and (executable-find "mariadb")
-                    (ignore-errors
-                      (progn (require 'beads-client)
-                             (let ((default-directory
-                                     (or (beads-client--project-root)
-                                         default-directory)))
-                               (zerop (call-process "bd" nil nil nil
-                                                    "dolt" "status")))))))
+  :tags '(:integration)
+  (skip-unless (beads-test-integration-enabled-p))
+  (skip-unless (beads-dolt-sql-test--live-dolt-sql-available-p))
   (let ((beads-dolt-sql--params nil)
         (beads-dolt-sql--params-time nil)
         (beads-dolt-sql--available t)
