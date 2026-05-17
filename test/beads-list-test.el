@@ -10,8 +10,9 @@
 ;; 4. Integration tests - test with actual daemon (tagged :integration)
 ;;
 ;; Note on test isolation:
-;; Integration tests connect to the actual beads daemon in this repo.
-;; Tests are read-only and do not modify data.
+;; Read-only integration tests may inspect the current repo when
+;; explicitly enabled.  Write-path coverage belongs in temp-project E2E
+;; tests rather than this file's repo-backed integration tests.
 
 ;;; Code:
 

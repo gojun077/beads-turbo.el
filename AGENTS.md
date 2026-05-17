@@ -57,6 +57,14 @@ Run before every commit when code has changed:
 
 **Testing requirement**: All new functionality must include corresponding ERT tests in the `test/` directory
 
+### E2E / Integration Test Conventions
+
+- Default to hermetic unit tests with mocks for formatting, rendering, dispatch, and error handling.
+- Tag real `bd` / Dolt tests with `:integration` and guard them with `(skip-unless (beads-test-integration-enabled-p))`; they only run when `BEADS_RUN_INTEGRATION_TESTS` is set.
+- Read-only integration tests may inspect the current project after also checking `(skip-unless (beads-client--find-database))`.
+- Write-path E2E tests must be tagged `:integration :destructive` and must use `beads-test-with-temp-project` from `test/beads-test-helpers.el` before any mutating `beads-client-*` call.
+- New integration names should include `integration` or `e2e` (for example, `beads-client-test-e2e-create-close`) so batch failures are easy to identify.
+
 ## Session Completion
 
 Work is NOT complete until `git push` succeeds:

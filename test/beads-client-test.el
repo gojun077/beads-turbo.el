@@ -9,10 +9,10 @@
 ;; 3. Integration tests - actual CLI communication (tagged :integration)
 ;;
 ;; Note on test isolation:
-;; Integration tests connect to the actual beads CLI in this repo.
-;; Tests that create issues are tagged :destructive and MUST delete
-;; their test data via beads-client-delete to avoid polluting the
-;; project issue data.  Read-only integration tests are safe to run.
+;; Read-only integration tests may inspect the current repo when
+;; explicitly enabled.  Tests that create or mutate issues are tagged
+;; :destructive and MUST run inside `beads-test-with-temp-project' so
+;; they cannot pollute the project issue data.
 
 ;;; Code:
 

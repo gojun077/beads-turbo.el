@@ -27,21 +27,43 @@ use the temporary-project helper described below instead.
 
 Use the narrowest test layer that proves the behavior:
 
-- Unit tests: mock subprocesses and backend calls; these run in every
-  `make test` invocation.
-- Read-only integration tests: use the repository's current beads
+- **Unit tests** mock subprocesses and backend calls; these run in
+  every `make test` invocation. Prefer this layer for formatting,
+  buffer rendering, command dispatch, error handling, and cache logic.
+- **Read-only integration tests** use the repository's current beads
   database only for commands that cannot mutate data. Guard them with
   `BEADS_RUN_INTEGRATION_TESTS`, `:integration`, and project/database
   availability checks.
-- Write-path E2E tests: never run against the repository database.
-  Wrap real `bd` writes in `beads-test-with-temp-project` from
-  `beads-test-helpers.el`; the helper creates a temporary `bd init`
-  project, binds `default-directory` there, strips `BEADS_DIR` and
-  `BEADS_DB` from the environment, clears project/backend caches, and
-  deletes the project afterwards.
-- Live Dolt SQL tests: keep them read-only unless they also use a temp
-  project or an explicitly disposable database/server. Prefer result
-  shape and semantic assertions over hard-coded issue IDs.
+- **Write-path E2E tests** exercise real `bd` subprocess writes. Never
+  run them against the repository database. Wrap real `bd` writes in
+  `beads-test-with-temp-project` from `beads-test-helpers.el`; the
+  helper creates a temporary `bd init` project, binds
+  `default-directory` there, strips `BEADS_DIR` and `BEADS_DB` from the
+  environment, clears project/backend caches, and deletes the project
+  afterwards.
+- **Live Dolt SQL tests** exercise direct SQL read transports. Keep
+  them read-only unless they also use a temp project or an explicitly
+  disposable database/server. Prefer result shape and semantic
+  assertions over hard-coded issue IDs.
+
+## Test Taxonomy, Tags, and Naming
+
+| Layer | Uses real `bd` / Dolt? | May mutate data? | Required tags and guards | Naming |
+|-------|------------------------|------------------|--------------------------|--------|
+| Unit | No | No | No `:integration` tag; no environment guard | `beads-<module>-test-<behavior>` |
+| Read-only CLI integration | Yes, via `beads-client-*` / CLI | No | `:integration`; `(skip-unless (beads-test-integration-enabled-p))`; `(skip-unless (beads-client--find-database))` | `beads-<module>-test-integration-<behavior>` for new tests |
+| Write-path E2E | Yes, via real `bd` writes | Yes, but only in temp projects | `:integration :destructive`; integration guard; `(skip-unless (executable-find "bd"))`; `beads-test-with-temp-project` | `beads-<module>-test-e2e-<operation>` |
+| Live SQL integration | Yes, via `mariadb`/`mysql.el` and Dolt SQL | No by default | `:integration`; integration guard; database/server/client availability checks | `beads-<module>-test-integration-sql-<behavior>` |
+
+Existing tests predate the stricter naming scheme, so do not rename
+old tests only for style. New integration/E2E tests should include
+`integration` or `e2e` in the test name so failures are easy to scan in
+batch output.
+
+Use `:destructive` only for tests that create, update, close, delete,
+or otherwise change issue data. A `:destructive` test must be isolated
+with `beads-test-with-temp-project` unless the test itself creates and
+tears down an explicitly disposable database/server.
 
 Example write-path E2E shape:
 
@@ -62,6 +84,23 @@ more coupled to the developer's local database and easier to leak.
 Dedicated ephemeral `dolt sql-server` processes should be introduced
 only for SQL transport CI coverage that cannot be exercised through
 embedded `bd` projects.
+
+## Adding E2E Coverage
+
+Before adding an E2E or live integration test:
+
+1. Add or keep a unit-level test for deterministic edge cases and error
+   handling; use E2E for the real subprocess/storage contract only.
+2. Pick the narrowest integration layer from the taxonomy above.
+3. Add the right ERT tags and `skip-unless` guards before doing any
+   setup that could touch the user's database.
+4. For write tests, call `beads-test-with-temp-project` before any
+   `beads-client-*` operation that can mutate state.
+5. Assert semantics and result shape, not local IDs or data that depend
+   on the developer's current issue graph.
+6. Keep fixtures small and created inside the test body. If a larger
+   fixture is needed, document why and prefer a reusable helper in
+   `beads-test-helpers.el`.
 
 ## Writing Tests
 
