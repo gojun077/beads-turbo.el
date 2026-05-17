@@ -273,7 +273,8 @@ return the cached path from the other project."
   :tags '(:integration :destructive)
   (skip-unless (beads-test-integration-enabled-p))
   (skip-unless (executable-find "bd"))
-  (beads-test-with-temp-project _project-root
+  (beads-test-with-temp-project project-root
+    (should (file-directory-p project-root))
     (let* ((title "Test issue from ERT")
            (issue (beads-client-create
                    title
@@ -296,7 +297,8 @@ return the cached path from the other project."
   :tags '(:integration :destructive)
   (skip-unless (beads-test-integration-enabled-p))
   (skip-unless (executable-find "bd"))
-  (beads-test-with-temp-project _project-root
+  (beads-test-with-temp-project project-root
+    (should (file-directory-p project-root))
     (let* ((issue (beads-client-create
                    "Test update issue"
                    :priority 2))
@@ -325,7 +327,8 @@ return the cached path from the other project."
   :tags '(:integration :destructive)
   (skip-unless (beads-test-integration-enabled-p))
   (skip-unless (executable-find "bd"))
-  (beads-test-with-temp-project _project-root
+  (beads-test-with-temp-project project-root
+    (should (file-directory-p project-root))
     (let* ((issue1 (beads-client-create "Dependency test 1"))
            (issue2 (beads-client-create "Dependency test 2"))
            (id1 (alist-get 'id issue1))
@@ -345,7 +348,8 @@ return the cached path from the other project."
   :tags '(:integration :destructive)
   (skip-unless (beads-test-integration-enabled-p))
   (skip-unless (executable-find "bd"))
-  (beads-test-with-temp-project _project-root
+  (beads-test-with-temp-project project-root
+    (should (file-directory-p project-root))
     (let* ((issue (beads-client-create "Label test"))
            (issue-id (alist-get 'id issue)))
       (unwind-protect
@@ -358,6 +362,64 @@ return the cached path from the other project."
             (let ((_remove-result (beads-client-label-remove issue-id "test-label")))
               (should t)))
         (beads-client-delete (list issue-id) :force t)))))
+
+(ert-deftest beads-client-test-e2e-delete ()
+  "Test deleting an issue via CLI in an isolated temp project."
+  :tags '(:integration :destructive)
+  (skip-unless (beads-test-integration-enabled-p))
+  (skip-unless (executable-find "bd"))
+  (beads-test-with-temp-project project-root
+    (should (file-directory-p project-root))
+    (let* ((issue (beads-client-create "Delete E2E issue"))
+           (issue-id (alist-get 'id issue))
+           (delete-result (beads-client-delete (list issue-id) :force t)))
+      (should (equal (alist-get 'deleted delete-result) issue-id))
+      (should-error (beads-client-show issue-id)
+                    :type 'beads-client-error))))
+
+(ert-deftest beads-client-test-e2e-bulk-update-and-close ()
+  "Test bulk update and close via CLI in an isolated temp project."
+  :tags '(:integration :destructive)
+  (skip-unless (beads-test-integration-enabled-p))
+  (skip-unless (executable-find "bd"))
+  (beads-test-with-temp-project project-root
+    (should (file-directory-p project-root))
+    (let* ((issue1 (beads-client-create "Bulk E2E issue 1" :priority 2))
+           (issue2 (beads-client-create "Bulk E2E issue 2" :priority 2))
+           (ids (list (alist-get 'id issue1)
+                      (alist-get 'id issue2))))
+      (unwind-protect
+          (let ((updated (beads-client-update-bulk
+                          ids
+                          :status "in_progress"
+                          :priority 1)))
+            (should (= (length updated) 2))
+            (dolist (issue updated)
+              (should (member (alist-get 'id issue) ids))
+              (should (equal (alist-get 'status issue) "in_progress"))
+              (should (equal (alist-get 'priority issue) 1)))
+            (let ((closed (beads-client-close-bulk ids "Bulk close E2E")))
+              (should (= (length closed) 2))
+              (dolist (issue closed)
+                (should (member (alist-get 'id issue) ids))
+                (should (equal (alist-get 'status issue) "closed"))
+                (should (equal (alist-get 'close_reason issue)
+                               "Bulk close E2E")))))
+        (beads-client-delete ids :force t)))))
+
+(ert-deftest beads-client-test-e2e-write-path-errors ()
+  "Test real CLI write-path errors are surfaced as client errors."
+  :tags '(:integration :destructive)
+  (skip-unless (beads-test-integration-enabled-p))
+  (skip-unless (executable-find "bd"))
+  (beads-test-with-temp-project project-root
+    (should (file-directory-p project-root))
+    (should-error (beads-client-update "bte-missing" :status "closed")
+                  :type 'beads-client-error)
+    (should-error (beads-client-close "bte-missing" "Missing issue")
+                  :type 'beads-client-error)
+    (should-error (beads-client-delete '("bte-missing") :force t)
+                  :type 'beads-client-error)))
 
 (ert-deftest beads-client-test-invalid-operation ()
   "Test that invalid operations are handled."
