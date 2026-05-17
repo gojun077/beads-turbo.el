@@ -1152,10 +1152,11 @@ Standard hooks are available for each mode:
 @item
 @code{beads-hierarchy-mode-hook}
 @item
-@code{beads-edit-mode-hook}
-@item
 @code{beads-preview-mode-hook}
 @end itemize
+
+Temporary text field edit buffers also run @code{beads-edit-mode-hook} when they are
+opened from a list, detail, or form edit action.
 
 Example:
 
@@ -1459,10 +1460,10 @@ can work on right now.
 @item @samp{E}
 @tab Open form editor
 @item @samp{e *}
-@tab Edit field (* = t/s/p/T/d/D/a/n)
-@item @samp{l a}
+@tab Edit field (* = t/s/p/T/d/D/a/n/A/x)
+@item @samp{e l a}
 @tab Add label
-@item @samp{l r}
+@item @samp{e l r}
 @tab Remove label
 @end multitable
 

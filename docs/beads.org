@@ -641,8 +641,10 @@ Standard hooks are available for each mode:
 - ~beads-detail-mode-hook~
 - ~beads-form-mode-hook~
 - ~beads-hierarchy-mode-hook~
-- ~beads-edit-mode-hook~
 - ~beads-preview-mode-hook~
+
+Temporary text field edit buffers also run ~beads-edit-mode-hook~ when they are
+opened from a list, detail, or form edit action.
 
 Example:
 
@@ -864,9 +866,9 @@ can work on right now.
 | =q=   | Quit                           |
 | =E=   | Open form editor               |
 |-------+--------------------------------|
-| =e *= | Edit field (* = t/s/p/T/d/D/a/n) |
-| =l a= | Add label                      |
-| =l r= | Remove label                   |
+| =e *= | Edit field (* = t/s/p/T/d/D/a/n/A/x) |
+| =e l a= | Add label                    |
+| =e l r= | Remove label                 |
 
 ** Form Editor
 

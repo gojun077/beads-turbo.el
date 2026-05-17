@@ -1,4 +1,4 @@
-;;; beads-edit.el --- Dedicated editing buffers for Beads -*- lexical-binding: t -*-
+;;; beads-edit.el --- Field editing helpers for Beads -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2025 Christian Tietze
 
@@ -20,7 +20,8 @@
 
 ;;; Commentary:
 
-;; Dedicated editing buffers for Beads issue text fields with markdown support.
+;; Shared field editing helpers for Beads issue views.  Short fields edit in
+;; the minibuffer; long text fields use temporary buffers with markdown support.
 
 ;;; Code:
 
@@ -28,7 +29,7 @@
 (require 'beads-core)
 
 (defgroup beads-edit nil
-  "Dedicated editing buffers for Beads issues."
+  "Field editing helpers for Beads issues."
   :group 'beads)
 
 (defvar-local beads-edit--issue-id nil
@@ -54,10 +55,13 @@
     (define-key map (kbd "C-c C-c") #'beads-edit-commit)
     (define-key map (kbd "C-c C-k") #'beads-edit-abort)
     map)
-  "Keymap for beads-edit-mode.")
+  "Keymap for temporary Beads text edit buffers.")
 
 (define-minor-mode beads-edit-mode
-  "Minor mode for editing Beads issue fields in dedicated buffers.
+  "Internal minor mode for temporary Beads text edit buffers.
+
+This mode is not a separate issue editing workflow.  Beads issue views
+call it only for long text fields that need a normal editable buffer.
 
 \\{beads-edit-mode-map}"
   :lighter " BeadsEdit"

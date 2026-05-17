@@ -204,6 +204,12 @@
     (should (eq (lookup-key beads-detail-mode-map (kbd "?")) #'beads-menu))
     (should (eq (lookup-key beads-detail-mode-map (kbd "g")) #'beads-detail-refresh))
     (should (keymapp (lookup-key beads-detail-mode-map (kbd "e"))))
+    (should (eq (lookup-key beads-detail-mode-map (kbd "e d")) #'beads-detail-edit-description))
+    (should (eq (lookup-key beads-detail-mode-map (kbd "e D")) #'beads-detail-edit-design))
+    (should (eq (lookup-key beads-detail-mode-map (kbd "e a")) #'beads-detail-edit-acceptance))
+    (should (eq (lookup-key beads-detail-mode-map (kbd "e n")) #'beads-detail-edit-notes))
+    (should (eq (lookup-key beads-detail-mode-map (kbd "e l a")) #'beads-detail-edit-label-add))
+    (should (eq (lookup-key beads-detail-mode-map (kbd "e l r")) #'beads-detail-edit-label-remove))
     (should (eq (lookup-key beads-detail-mode-map (kbd "q")) #'quit-window))))
 
 ;;; Dolt SQL toggle tests

@@ -817,9 +817,17 @@ See `beads-backend-dolt-sql-activate' and
    ["Edit"
     ("E" "Edit form" beads-detail-edit-form)
     ("e d" "Description" beads-detail-edit-description)
+    ("e D" "Design notes" beads-detail-edit-design)
+    ("e a" "Acceptance criteria" beads-detail-edit-acceptance)
+    ("e n" "Notes" beads-detail-edit-notes)
     ("e s" "Status" beads-detail-edit-status)
     ("e p" "Priority" beads-detail-edit-priority)
-    ("e t" "Title" beads-detail-edit-title)]
+    ("e t" "Title" beads-detail-edit-title)
+    ("e T" "Type" beads-detail-edit-type)
+    ("e A" "Assignee" beads-detail-edit-assignee)
+    ("e x" "External ref" beads-detail-edit-external-ref)
+    ("e l a" "Add label" beads-detail-edit-label-add)
+    ("e l r" "Remove label" beads-detail-edit-label-remove)]
    ["Actions"
     ("c" "Add comment" beads-detail-add-comment)
     ("x" "Close issue" beads-close-issue)

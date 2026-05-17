@@ -181,7 +181,11 @@ With the built-in `:vc` keyword:
 | `C-c C-c` | `beads-form-commit` | Save all changes |
 | `C-c C-k` | `beads-form-cancel` | Discard and close |
 
-### Edit Buffer (`beads-edit-mode`)
+### Text Field Edit Buffers
+
+Long text fields such as descriptions, design notes, acceptance criteria, and
+notes open a temporary editable buffer from the list or detail view.  This is a
+helper for those fields, not a separate issue editing workflow.
 
 | Key | Command | Description |
 |-----|---------|-------------|
