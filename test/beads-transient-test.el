@@ -103,6 +103,31 @@
                                (buffer-substring (line-beginning-position)
                                                 (line-end-position))))))))
 
+(ert-deftest beads-transient-test-create-issue-passes-parent ()
+  "Test that beads-create-issue passes an optional parent to create."
+  (let (created-title created-args)
+    (cl-letf (((symbol-function 'beads-get-types)
+               (lambda () '("task" "bug")))
+              ((symbol-function 'read-string)
+               (lambda (prompt &rest _)
+                 (cond
+                  ((string= prompt "Title: ") "Child issue")
+                  ((string= prompt "Parent issue ID (optional): ") "bd-parent")
+                  (t ""))))
+              ((symbol-function 'completing-read)
+               (lambda (prompt &rest _)
+                 (if (string= prompt "Priority: ") "P2" "task")))
+              ((symbol-function 'beads-client-create)
+               (lambda (title &rest args)
+                 (setq created-title title
+                       created-args args)
+                 '((id . "bd-child")))))
+      (beads-create-issue))
+    (should (equal created-title "Child issue"))
+    (should (equal (plist-get created-args :type) "task"))
+    (should (equal (plist-get created-args :priority) 2))
+    (should (equal (plist-get created-args :parent) "bd-parent"))))
+
 (ert-deftest beads-transient-test-close-issue-defined ()
   "Test that beads-close-issue is defined."
   (should (fboundp 'beads-close-issue)))

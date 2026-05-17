@@ -83,24 +83,60 @@ Shows beginning and end of string with … in the middle."
               ellipsis
               (substring str (- (length str) tail-len))))))
 
+(defun beads-create-issue--optional-string (prompt)
+  "Read PROMPT and return nil when the input is empty."
+  (let ((value (read-string prompt)))
+    (unless (string-empty-p value)
+      value)))
+
+(defun beads-create-issue--read-params ()
+  "Read issue creation parameters and return them as a plist.
+Returns nil when the required title is empty."
+  (let ((title (read-string "Title: ")))
+    (unless (string-empty-p title)
+      (let* ((type (completing-read "Type: "
+                                    (beads-get-types)
+                                    nil t "task"))
+             (priority-str (completing-read "Priority: "
+                                             '("P0" "P1" "P2" "P3" "P4")
+                                             nil t "P2"))
+             (priority (string-to-number (substring priority-str 1)))
+             (description (beads-create-issue--optional-string
+                           "Description (optional): "))
+             (assignee (beads-create-issue--optional-string
+                        "Assignee (optional): "))
+             (labels (beads-create-issue--optional-string
+                      "Labels, comma-separated (optional): "))
+             (parent (beads-create-issue--optional-string
+                      "Parent issue ID (optional): "))
+             (deps (beads-create-issue--optional-string
+                    "Dependencies, comma-separated (optional): "))
+             (params (list :title title
+                           :type type
+                           :priority priority)))
+        (when description
+          (setq params (plist-put params :description description)))
+        (when assignee
+          (setq params (plist-put params :assignee assignee)))
+        (when labels
+          (setq params (plist-put params :labels labels)))
+        (when parent
+          (setq params (plist-put params :parent parent)))
+        (when deps
+          (setq params (plist-put params :deps deps)))
+        params))))
+
 (defun beads-create-issue ()
   "Create a new issue interactively.
-Prompts for title (required), type, and priority."
+Prompts for title (required), type, priority, and common `bd create' options."
   (interactive)
-  (let* ((title (read-string "Title: "))
-         (type (completing-read "Type: "
-                                (beads-get-types)
-                                nil t "task"))
-         (priority-str (completing-read "Priority: "
-                                         '("P0" "P1" "P2" "P3" "P4")
-                                         nil t "P2"))
-         (priority (string-to-number (substring priority-str 1))))
-    (if (string-empty-p title)
+  (let ((params (beads-create-issue--read-params)))
+    (if (not params)
         (message "Title is required")
       (condition-case err
-          (let ((issue (beads-client-create title
-                                         :type type
-                                         :priority priority)))
+          (let ((issue (apply #'beads-client-create
+                              (plist-get params :title)
+                              (beads-transient--plist-remove params :title))))
             (message "Created issue %s" (alist-get 'id issue))
             (when (derived-mode-p 'beads-list-mode)
               (beads-list-refresh)))
@@ -127,25 +163,15 @@ Prompts for title (required), type, and priority."
   "Preview a new issue before creating it.
 Shows what the issue will look like, then press C-c C-c to create."
   (interactive)
-  (let* ((title (read-string "Title: "))
-         (type (completing-read "Type: "
-                                (beads-get-types)
-                                nil t "task"))
-         (priority-str (completing-read "Priority: "
-                                         '("P0" "P1" "P2" "P3" "P4")
-                                         nil t "P2"))
-         (priority (string-to-number (substring priority-str 1))))
-    (if (string-empty-p title)
+  (let ((params (beads-create-issue--read-params)))
+    (if (not params)
         (message "Title is required")
       (condition-case err
-          (let ((preview (beads-client-create title
-                                           :issue-type type
-                                           :priority priority
-                                           :dry-run t)))
-            (beads-create-preview--show preview
-                                        (list :title title
-                                              :issue-type type
-                                              :priority priority)))
+          (let ((preview (apply #'beads-client-create
+                                (plist-get params :title)
+                                (append (beads-transient--plist-remove params :title)
+                                        (list :dry-run t)))))
+            (beads-create-preview--show preview params))
         (beads-client-error
          (message "Failed to preview issue: %s" (error-message-string err)))))))
 
@@ -165,6 +191,11 @@ Shows what the issue will look like, then press C-c C-c to create."
                 (alist-get 'issue_type preview "") "\n")
         (insert (propertize "Priority: " 'face 'bold)
                 (format "P%d" (alist-get 'priority preview 2)) "\n")
+        (when-let ((parent (or (alist-get 'parent preview)
+                               (alist-get 'parent_id preview)
+                               (plist-get params :parent))))
+          (insert (propertize "Parent: " 'face 'bold)
+                  parent "\n"))
         (insert (propertize "Status: " 'face 'bold)
                 (alist-get 'status preview "open") "\n")
         (insert "\n" (make-string 40 ?─) "\n")
@@ -205,7 +236,7 @@ Shows what the issue will look like, then press C-c C-c to create."
   (let ((result nil))
     (while plist
       (unless (eq (car plist) key)
-        (setq result (cons (car plist) (cons (cadr plist) result))))
+        (setq result (cons (cadr plist) (cons (car plist) result))))
       (setq plist (cddr plist)))
     (nreverse result)))
 

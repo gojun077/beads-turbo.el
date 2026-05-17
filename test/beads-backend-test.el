@@ -151,10 +151,29 @@
 (ert-deftest beads-backend-test-bd-create-args ()
   "Test bd backend create operation CLI args."
   (let ((args (beads-backend-bd--operation-to-cli-args
-               "create" '((title . "Test") (priority . 1)))))
+               "create" '((title . "Test")
+                           (priority . 1)
+                           (parent . "bd-parent")))))
     (should (equal (car args) "create"))
     (should (equal (cadr args) "Test"))
-    (should (member "--priority" args))))
+    (should (member "--priority" args))
+    (should (member "--parent" args))
+    (should (member "bd-parent" args))))
+
+(ert-deftest beads-backend-test-bd-create-normalizes-legacy-args ()
+  "Test bd backend create emits current `bd create' flag names."
+  (let ((args (beads-backend-bd--operation-to-cli-args
+               "create" '((title . "Test")
+                           (issue_type . "bug")
+                           (acceptance_criteria . "Done")
+                           (dependencies . "blocks:bd-1")))))
+    (should (member "--type" args))
+    (should (member "bug" args))
+    (should-not (member "--issue-type" args))
+    (should (member "--acceptance" args))
+    (should-not (member "--acceptance-criteria" args))
+    (should (member "--deps" args))
+    (should-not (member "--dependencies" args))))
 
 (ert-deftest beads-backend-test-bd-close-with-reason ()
   "Test bd backend close with reason."

@@ -26,6 +26,24 @@
 
 (require 'beads-backend)
 
+(defconst beads-backend-bd--create-arg-aliases
+  '((issue_type . type)
+    (acceptance_criteria . acceptance)
+    (dependencies . deps))
+  "Backward-compatible create argument aliases for `bd create'.")
+
+(defun beads-backend-bd--normalize-create-args (args)
+  "Return ARGS normalized to flags accepted by `bd create'."
+  (let ((result nil))
+    (dolist (pair args)
+      (let* ((key (car pair))
+             (canonical (alist-get key beads-backend-bd--create-arg-aliases
+                                   key nil #'eq)))
+        (unless (and (not (eq key canonical))
+                     (assq canonical args))
+          (push (cons canonical (cdr pair)) result))))
+    (nreverse result)))
+
 (defun beads-backend-bd--operation-to-cli-args (operation args)
   "Convert RPC OPERATION and ARGS to CLI arguments for bd."
   (pcase operation
@@ -40,8 +58,9 @@
      (beads-backend--build-cli-args "ready" args
                                     '(assignee priority limit sort_policy parent)))
     ("create"
-     (let ((title (alist-get 'title args))
-           (other-args (assq-delete-all 'title (copy-alist args))))
+     (let* ((normalized (beads-backend-bd--normalize-create-args args))
+            (title (alist-get 'title normalized))
+            (other-args (assq-delete-all 'title (copy-alist normalized))))
        (append (list "create" title)
                (beads-backend--alist-to-cli-flags other-args))))
     ("update"

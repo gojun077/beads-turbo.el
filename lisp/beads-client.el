@@ -213,9 +213,11 @@ Returns array of ready issue objects."
 
 (defun beads-client-create (title &rest args)
   "Create new issue with TITLE and additional ARGS.
-ARGS is a plist with keys like :description, :issue-type, :priority,
-:assignee, :labels, :design, :acceptance-criteria, :dependencies, :parent,
-and :dry-run.  When :dry-run is non-nil, returns a preview without creating.
+ARGS is a plist with keys accepted by `bd create', like :description,
+:type, :priority, :assignee, :labels, :design, :acceptance, :deps,
+:parent, and :dry-run.  Backward-compatible aliases such as :issue-type,
+:acceptance-criteria, and :dependencies are normalized by the bd backend.
+When :dry-run is non-nil, returns a preview without creating.
 Returns created (or previewed) issue object."
   (unless title
     (signal 'beads-client-error (list "Title required")))
