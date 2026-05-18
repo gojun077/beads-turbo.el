@@ -462,28 +462,30 @@ Dependents sections, matching `bd show' output."
                     :label "Related"
                     :deps (nreverse related-unique))
      ;; Generic depends-on / dependents (anything else)
-     (vui-fragment
-      (mapcar
-       (lambda (cell)
-         (let ((type (car cell)))
-           (unless (member type '("parent-child" "discovered-from" "related"))
-             (vui-component 'beads-vui-rel-group
-                            :label (if (string= type "blocks")
-                                       "Depends on"
-                                     (capitalize type))
-                            :deps (cdr cell)))))
-       dep-buckets))
-     (vui-fragment
-      (mapcar
-       (lambda (cell)
-         (let ((type (car cell)))
-           (unless (member type '("parent-child" "discovered-from" "related"))
-             (vui-component 'beads-vui-rel-group
-                            :label (if (string= type "blocks")
-                                       "Dependents"
-                                     (capitalize type))
-                            :deps (cdr cell)))))
-       dependent-buckets)))))
+     (apply #'vui-fragment
+            (delq nil
+                  (mapcar
+                   (lambda (cell)
+                     (let ((type (car cell)))
+                       (unless (member type '("parent-child" "discovered-from" "related"))
+                         (vui-component 'beads-vui-rel-group
+                                        :label (if (string= type "blocks")
+                                                   "Depends on"
+                                                 (capitalize type))
+                                        :deps (cdr cell)))))
+                   dep-buckets)))
+     (apply #'vui-fragment
+            (delq nil
+                  (mapcar
+                   (lambda (cell)
+                     (let ((type (car cell)))
+                       (unless (member type '("parent-child" "discovered-from" "related"))
+                         (vui-component 'beads-vui-rel-group
+                                        :label (if (string= type "blocks")
+                                                   "Dependents"
+                                                 (capitalize type))
+                                        :deps (cdr cell)))))
+                   dependent-buckets))))))
 
 (vui-defcomponent beads-vui-comment (comment)
   "Display a single COMMENT with author, timestamp, and text."

@@ -956,6 +956,37 @@ vui on-click refresh handler depends on this var being bound."
       (when (buffer-live-p buffer)
         (kill-buffer buffer)))))
 
+(ert-deftest beads-detail-test-vui-relationships-renders-dependency-lists ()
+  "Regression test for bdel-91f.10: dependency buckets must render vnodes.
+Do not pass raw `mapcar' cons lists as `vui-fragment' children, or
+opening an issue with dependencies from list mode signals an
+unknown-vnode error."
+  (require 'beads-vui)
+  (let ((issue '((id . "bd-vui-deps-1")
+                 (title . "Dependency render regression")
+                 (status . "open")
+                 (priority . 2)
+                 (issue_type . "task")
+                 (dependencies . [((id . "bd-parent")
+                                   (title . "Parent")
+                                   (status . "open")
+                                   (dependency_type . "parent-child"))
+                                  ((id . "bd-blocker")
+                                   (title . "Blocker")
+                                   (status . "open")
+                                   (dependency_type . "blocks"))])
+                 (dependents . [((id . "bd-child")
+                                 (title . "Child")
+                                 (status . "open")
+                                 (dependency_type . "parent-child"))]))))
+    (with-temp-buffer
+      (vui-render (vui-component 'beads-vui-relationships :issue issue)
+                  (current-buffer))
+      (let ((content (buffer-string)))
+        (should (string-match-p "Parent:" content))
+        (should (string-match-p "Depends on:" content))
+        (should (string-match-p "Children:" content))))))
+
 (ert-deftest beads-detail-test-refresh-fn-switches-to-detail-buffer ()
   "Regression test: refresh-fn closure captured by `beads-detail--render-vui'
 must switch to the detail buffer it was created for, even when invoked
