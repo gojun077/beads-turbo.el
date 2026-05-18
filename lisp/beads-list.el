@@ -92,7 +92,7 @@ Only applies when `beads-list-sort-mode' is `sectioned'."
   :type 'boolean
   :group 'beads-list)
 
-(defcustom beads-list-id-column-max-width 15
+(defcustom beads-list-id-column-max-width nil
   "Maximum width for the ID column in beads list view.
 When nil, the column width is unlimited and adjusts to the longest ID.
 When an integer, the column width will not exceed this value."

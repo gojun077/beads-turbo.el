@@ -301,6 +301,17 @@
     (should (equal (car (aref tabulated-list-format 5)) "Type"))
     (should (equal (car (aref tabulated-list-format 6)) "Title"))))
 
+(ert-deftest beads-list-test-id-column-width-shows-long-ids ()
+  "Test that the ID column widens to fit long issue IDs by default."
+  (let* ((long-id "bdel-91f.11-very-long-id")
+         (issues `(((id . ,long-id)
+                    (title . "Long ID issue")
+                    (status . "open")
+                    (priority . 2)
+                    (issue_type . "task")))))
+    (should (null beads-list-id-column-max-width))
+    (should (= (beads-list--max-id-width issues) (length long-id)))))
+
 (ert-deftest beads-list-test-mode-sets-padding ()
   "Test that beads-list-mode sets tabulated-list-padding."
   (with-temp-buffer
