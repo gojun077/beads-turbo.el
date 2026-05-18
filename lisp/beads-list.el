@@ -788,10 +788,24 @@ Shows ↑ for has parents, ↓ for has children, ↕ for both."
       (propertize "↓" 'face 'beads-list-deps-child))
      (t ""))))
 
+(defun beads-list--tabulated-id-at-point ()
+  "Return the tabulated issue ID at point, tolerating trailing blank lines."
+  (or (tabulated-list-get-id)
+      (save-excursion
+        (beginning-of-line)
+        (tabulated-list-get-id))
+      (save-excursion
+        (beginning-of-line)
+        (when (and (not (bobp))
+                   (looking-at-p "[[:space:]]*$"))
+          (forward-line -1)
+          (end-of-line)
+          (tabulated-list-get-id)))))
+
 (defun beads-list--get-issue-at-point ()
   "Get issue data at current line.
 Returns the issue alist or nil if not found."
-  (when-let ((id (tabulated-list-get-id)))
+  (when-let ((id (beads-list--tabulated-id-at-point)))
     (seq-find (lambda (issue)
                 (string= (alist-get 'id issue) id))
               beads-list--issues)))

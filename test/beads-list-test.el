@@ -352,6 +352,27 @@ Use a key that is not overridden by `beads-list-mode-map' (e.g. `n')."
         (should issue)
         (should (member (alist-get 'id issue) '("bd-a1b2" "bd-c3d4")))))))
 
+(ert-deftest beads-list-test-get-issue-at-point-trailing-blank-line ()
+  "Regression test for bdel-3rv: point at table end still finds issue.
+`tabulated-list-print' leaves a trailing newline after the final entry;
+if point lands there, `tabulated-list-get-id' returns nil even though
+the previous line is the intended issue row."
+  (with-temp-buffer
+    (beads-list-mode)
+    (let* ((issues '(((id . "bd-a1b2")
+                      (title . "Test issue")
+                      (status . "open")
+                      (priority . 2)
+                      (issue_type . "task"))))
+           (beads-list--issues issues))
+      (setq tabulated-list-entries (beads-list-entries issues))
+      (tabulated-list-print)
+      (goto-char (point-max))
+      (should-not (tabulated-list-get-id))
+      (let ((issue (beads-list--get-issue-at-point)))
+        (should issue)
+        (should (equal (alist-get 'id issue) "bd-a1b2"))))))
+
 (ert-deftest beads-list-test-get-issue-at-point-not-found ()
   "Test that beads-list--get-issue-at-point returns nil when no issue at point."
   (with-temp-buffer
