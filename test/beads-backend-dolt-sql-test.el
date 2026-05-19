@@ -111,6 +111,10 @@ easy to mock)."
   (should (equal (beads-backend-cli-program beads-backend-dolt-sql) "bd"))
   (should (functionp (beads-backend-executor beads-backend-dolt-sql))))
 
+(ert-deftest beads-dolt-sql-test-enabled-by-default ()
+  "Test Dolt SQL transport is enabled by default."
+  (should (eval (car (get 'beads-dolt-sql-enabled 'standard-value)) t)))
+
 (ert-deftest beads-dolt-sql-test-registered-after-activate ()
   "Test backend is registered after activate."
   (let ((beads-backend--registry beads-backend--registry))
@@ -520,11 +524,11 @@ but keep dependency_count, dependent_count, comment_count, and parent
 ;;; Auto-detect advice tests
 
 (ert-deftest beads-dolt-sql-test-auto-detect-prefers-sql-when-available ()
-  "Test auto-detect returns bd-dolt-sql when SQL transport available."
+  "Test auto-detect returns bd-dolt-sql by default when bd is available."
   (let ((beads-backend--registry beads-backend--registry))
     (beads-backend-register beads-backend-dolt-sql)
-    (cl-letf (((symbol-function 'beads-backend-dolt-sql--available-p)
-               (lambda () t)))
+    (cl-letf (((symbol-function 'executable-find)
+               (lambda (cmd) (when (equal cmd "bd") "/usr/bin/bd"))))
       (let ((beads-dolt-sql-enabled t))
         (should (equal (beads-backend-name
                         (beads-backend-dolt-sql--auto-detect-advice
@@ -536,8 +540,8 @@ but keep dependency_count, dependent_count, comment_count, and parent
   "Test auto-detect passes through when SQL transport disabled."
   (let ((beads-backend--registry beads-backend--registry))
     (beads-backend-register beads-backend-dolt-sql)
-    (cl-letf (((symbol-function 'beads-backend-dolt-sql--available-p)
-               (lambda () t)))
+    (cl-letf (((symbol-function 'executable-find)
+               (lambda (cmd) (when (equal cmd "bd") "/usr/bin/bd"))))
       (let ((beads-dolt-sql-enabled nil))
         (should (equal (beads-backend-name
                         (beads-backend-dolt-sql--auto-detect-advice

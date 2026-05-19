@@ -61,10 +61,12 @@
   :group 'beads
   :prefix "beads-dolt-sql-")
 
-(defcustom beads-dolt-sql-enabled nil
+(defcustom beads-dolt-sql-enabled t
   "When non-nil, use direct Dolt SQL for read operations.
-When the Dolt SQL server is not running, silently falls back
-to the `bd' CLI subprocess."
+This is enabled by default so Dolt workspaces use SQL for supported
+read operations.  When the Dolt SQL server is not running, or the
+current workspace is not backed by Dolt, operations silently fall
+back to the `bd' CLI subprocess."
   :type 'boolean
   :group 'beads-dolt-sql)
 
@@ -920,13 +922,21 @@ PREVIOUS-ERROR is the error from the failed SQL attempt, for context."
 
 (defun beads-backend-dolt-sql--auto-detect-advice (orig-fun &rest args)
   "Advice for `beads-backend--auto-detect' to prefer SQL transport.
-When `beads-dolt-sql-enabled' is non-nil and the Dolt SQL transport
-is available, returns the bd-dolt-sql backend."
-  (if (and beads-dolt-sql-enabled
-           (beads-backend-dolt-sql--available-p))
+When `beads-dolt-sql-enabled' is non-nil and `bd' is available,
+returns the bd-dolt-sql backend.  The backend itself validates SQL
+availability per operation and falls back to `bd' when needed."
+  (if (and beads-dolt-sql-enabled (executable-find "bd"))
       (or (beads-backend--lookup "bd-dolt-sql")
           (apply orig-fun args))
     (apply orig-fun args)))
+
+(defun beads-backend-dolt-sql--install-default ()
+  "Register Dolt SQL backend and install auto-detect advice."
+  (beads-backend-register beads-backend-dolt-sql)
+  (unless (advice-member-p #'beads-backend-dolt-sql--auto-detect-advice
+                           'beads-backend--auto-detect)
+    (advice-add 'beads-backend--auto-detect
+                :around #'beads-backend-dolt-sql--auto-detect-advice)))
 
 ;;;###autoload
 (defun beads-backend-dolt-sql-activate ()
@@ -941,9 +951,7 @@ is available, returns the bd-dolt-sql backend."
   (setq beads-dolt-sql--mysql-proc nil)
   (setq beads-dolt-sql--mysql-output nil)
   (setq beads-dolt-sql--mysql-params nil)
-  (beads-backend-register beads-backend-dolt-sql)
-  (advice-add 'beads-backend--auto-detect
-              :around #'beads-backend-dolt-sql--auto-detect-advice)
+  (beads-backend-dolt-sql--install-default)
   (beads-backend-clear-cache)
   (message "Dolt SQL transport activated (beads-dolt-sql)"))
 
@@ -959,6 +967,8 @@ is available, returns the bd-dolt-sql backend."
                  #'beads-backend-dolt-sql--auto-detect-advice)
   (beads-backend-clear-cache)
   (message "Dolt SQL transport deactivated"))
+
+(beads-backend-dolt-sql--install-default)
 
 (provide 'beads-backend-dolt-sql)
 

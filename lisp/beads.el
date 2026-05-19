@@ -59,6 +59,7 @@
 (require 'beads-core)
 
 (require 'beads-client)
+(require 'beads-backend-dolt-sql)
 (require 'beads-list)
 (require 'beads-detail)
 (require 'beads-transient)

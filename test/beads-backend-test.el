@@ -11,6 +11,8 @@
 (require 'beads-backend-bd)
 (require 'beads-backend-br)
 
+(defvar beads-dolt-sql-enabled)
+
 ;;; Registry tests
 
 (ert-deftest beads-backend-test-bd-registered ()
@@ -83,6 +85,7 @@
             ((symbol-function 'beads-client--project-root)
              (lambda () nil)))
     (let ((beads-cli-program nil)
+          (beads-dolt-sql-enabled nil)
           (beads-backend--project-cache (make-hash-table :test 'equal)))
       (should (equal (beads-backend-name (beads-backend-for-project)) "bd")))))
 
@@ -93,6 +96,7 @@
             ((symbol-function 'beads-client--project-root)
              (lambda () nil)))
     (let ((beads-cli-program nil)
+          (beads-dolt-sql-enabled nil)
           (beads-backend--project-cache (make-hash-table :test 'equal)))
       (should (equal (beads-backend-name (beads-backend-for-project)) "br")))))
 
@@ -102,6 +106,7 @@
             ((symbol-function 'beads-client--project-root)
              (lambda () nil)))
     (let ((beads-cli-program nil)
+          (beads-dolt-sql-enabled nil)
           (beads-backend--project-cache (make-hash-table :test 'equal)))
       (should-error (beads-backend-for-project)
                     :type 'beads-backend-error))))
@@ -127,6 +132,7 @@
               ((symbol-function 'beads-client--project-root)
                (lambda () "/fake/project/")))
       (let ((beads-cli-program nil)
+            (beads-dolt-sql-enabled nil)
             (beads-backend--project-cache (make-hash-table :test 'equal)))
         (beads-backend-for-project)
         (beads-backend-for-project)
