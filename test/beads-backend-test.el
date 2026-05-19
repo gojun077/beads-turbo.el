@@ -140,7 +140,15 @@
                "list" '((status . "open") (priority . 1)))))
     (should (equal (car args) "list"))
     (should (member "--status" args))
-    (should (member "open" args))))
+    (should (member "open" args))
+    (should (member "--limit" args))
+    (should (member "0" args))))
+
+(ert-deftest beads-backend-test-bd-list-preserves-explicit-limit ()
+  "Test bd backend list operation preserves caller-supplied limits."
+  (let ((args (beads-backend-bd--operation-to-cli-args
+               "list" '((limit . 25)))))
+    (should (equal args '("list" "--limit" "25")))))
 
 (ert-deftest beads-backend-test-bd-show-args ()
   "Test bd backend show operation CLI args."

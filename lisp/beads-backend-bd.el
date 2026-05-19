@@ -48,9 +48,15 @@
   "Convert RPC OPERATION and ARGS to CLI arguments for bd."
   (pcase operation
     ("list"
-     (beads-backend--build-cli-args "list" args
-                                    '(status priority issue_type assignee
-                                      labels limit title_contains parent)))
+     ;; `bd list' defaults to --limit 50.  The Emacs list view is the
+     ;; canonical full issue list, so request an unlimited result set
+     ;; unless a caller explicitly supplies its own limit.
+     (let ((effective-args (if (assq 'limit args)
+                               args
+                             (append args '((limit . 0))))))
+       (beads-backend--build-cli-args "list" effective-args
+                                      '(status priority issue_type assignee
+                                        labels limit title_contains parent))))
     ("show"
      (let ((id (alist-get 'id args)))
        (list "show" id)))
