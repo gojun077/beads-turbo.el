@@ -129,7 +129,7 @@ Only applies when `beads-detail-use-vui' is non-nil."
 (defvar beads-detail-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "g") #'beads-detail-refresh)
-    (define-key map (kbd "q") #'quit-window)
+    (define-key map (kbd "q") #'beads-core-quit-window-kill-buffer)
     (define-key map (kbd "e") beads-detail-edit-map)
     (define-key map (kbd "E") #'beads-detail-edit-form)
     (define-key map (kbd "H") #'beads-hierarchy-show)

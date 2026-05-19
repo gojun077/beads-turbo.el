@@ -54,7 +54,7 @@
     (define-key map (kbd "m") #'beads-duplicates-merge-at-point)
     (define-key map (kbd "M") #'beads-duplicates-merge-group)
     (define-key map (kbd "g") #'beads-duplicates-refresh)
-    (define-key map (kbd "q") #'quit-window)
+    (define-key map (kbd "q") #'beads-core-quit-window-kill-buffer)
     map)
   "Keymap for beads-duplicates-mode.")
 

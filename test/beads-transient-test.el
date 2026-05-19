@@ -235,7 +235,7 @@
     (should (eq (lookup-key beads-detail-mode-map (kbd "e n")) #'beads-detail-edit-notes))
     (should (eq (lookup-key beads-detail-mode-map (kbd "e l a")) #'beads-detail-edit-label-add))
     (should (eq (lookup-key beads-detail-mode-map (kbd "e l r")) #'beads-detail-edit-label-remove))
-    (should (eq (lookup-key beads-detail-mode-map (kbd "q")) #'quit-window))))
+    (should (eq (lookup-key beads-detail-mode-map (kbd "q")) #'beads-core-quit-window-kill-buffer))))
 
 ;;; Dolt SQL toggle tests
 

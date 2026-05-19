@@ -62,7 +62,7 @@ When nil, show all statuses.  Otherwise, filter to this status."
     (define-key map (kbd "g") #'beads-stale-refresh)
     (define-key map (kbd "d") #'beads-stale-set-days)
     (define-key map (kbd "f") #'beads-stale-set-filter)
-    (define-key map (kbd "q") #'quit-window)
+    (define-key map (kbd "q") #'beads-core-quit-window-kill-buffer)
     map)
   "Keymap for beads-stale-mode.")
 

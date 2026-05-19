@@ -816,7 +816,7 @@ Returns the issue alist or nil if not found."
 
 (defun beads-list-quit ()
   "Quit beads list, clearing filters progressively.
-First clears active filters, then closes preview, then quits window."
+First clears active filters, then closes preview, then kills the buffer."
   (interactive)
   (cond
    ((beads-list--has-active-filter)
@@ -827,7 +827,7 @@ First clears active filters, then closes preview, then quits window."
    (beads-preview-mode
     (beads-preview-mode -1))
    (t
-    (quit-window))))
+    (beads-core-quit-window-kill-buffer))))
 
 (defun beads-list-toggle-sort-mode ()
   "Toggle between sectioned and column sort modes."

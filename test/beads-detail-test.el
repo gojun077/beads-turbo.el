@@ -663,11 +663,23 @@ Discovered, Related, Depends on, Dependents)."
                 #'beads-detail-refresh))))
 
 (ert-deftest beads-detail-test-mode-keybinding-quit ()
-  "Test that beads-detail-mode binds 'q' to quit-window."
+  "Test that beads-detail-mode binds 'q' to kill-buffer quit."
   (with-temp-buffer
     (beads-detail-mode)
     (should (eq (lookup-key beads-detail-mode-map (kbd "q"))
-                #'quit-window))))
+                #'beads-core-quit-window-kill-buffer))))
+
+(ert-deftest beads-detail-test-mode-quit-kills-buffer ()
+  "Test that the detail quit command kills the detail buffer."
+  (let ((buffer (generate-new-buffer "*beads-detail-test-quit*")))
+    (unwind-protect
+        (progn
+          (switch-to-buffer buffer)
+          (beads-detail-mode)
+          (call-interactively (lookup-key beads-detail-mode-map (kbd "q")))
+          (should-not (buffer-live-p buffer)))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
 
 (ert-deftest beads-detail-test-mode-keybinding-edit ()
   "Test that beads-detail-mode binds 'e' to edit prefix map."

@@ -76,6 +76,13 @@
   (or (gethash id beads-hierarchy-test--mock-issues)
       (signal 'beads-client-error (list (format "Issue not found: %s" id)))))
 
+(ert-deftest beads-hierarchy-test-keybinding-quit ()
+  "Test that q is bound to kill-buffer quit."
+  (with-temp-buffer
+    (beads-hierarchy-mode)
+    (should (eq (lookup-key beads-hierarchy-mode-map (kbd "q"))
+                #'beads-core-quit-window-kill-buffer))))
+
 (ert-deftest beads-hierarchy-test-find-parent-nil-for-root ()
   "Test that root issues have no parent."
   (let ((by-id (make-hash-table :test 'equal))

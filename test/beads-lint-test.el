@@ -72,11 +72,11 @@
                 #'beads-lint-prev-issue))))
 
 (ert-deftest beads-lint-test-keybinding-quit ()
-  "Test that q is bound to quit-window."
+  "Test that q is bound to kill-buffer quit."
   (with-temp-buffer
     (beads-lint-mode)
     (should (eq (lookup-key beads-lint-mode-map (kbd "q"))
-                #'quit-window))))
+                #'beads-core-quit-window-kill-buffer))))
 
 ;;; Command availability tests
 

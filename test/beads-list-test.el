@@ -637,6 +637,20 @@ timer fired."
       (should-not beads-list--filter)
       (should-not beads-list--show-only-marked))))
 
+(ert-deftest beads-list-test-quit-kills-buffer-without-filter ()
+  "Test that beads-list-quit kills the list buffer when no filter is active."
+  (let ((buffer (generate-new-buffer "*beads-list-test-quit*")))
+    (unwind-protect
+        (progn
+          (switch-to-buffer buffer)
+          (beads-list-mode)
+          (setq beads-list--filter nil)
+          (setq beads-list--show-only-marked nil)
+          (beads-list-quit)
+          (should-not (buffer-live-p buffer)))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
 (ert-deftest beads-list-test-quit-command-defined ()
   "Test that beads-list-quit is a command."
   (should (fboundp 'beads-list-quit))

@@ -121,6 +121,18 @@
   (should (fboundp 'beads-activity-quit))
   (should (commandp 'beads-activity-quit)))
 
+(ert-deftest beads-activity-test-quit-kills-buffer ()
+  "Test that beads-activity-quit kills the activity buffer."
+  (let ((buffer (generate-new-buffer "*beads-activity-test-quit*")))
+    (unwind-protect
+        (progn
+          (switch-to-buffer buffer)
+          (beads-activity-mode)
+          (beads-activity-quit)
+          (should-not (buffer-live-p buffer)))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
 ;;; Glyph tests
 
 (ert-deftest beads-activity-test-glyph-create ()

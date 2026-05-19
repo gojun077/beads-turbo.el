@@ -45,7 +45,7 @@
     (define-key map (kbd "RET") #'beads-epics-goto-issue)
     (define-key map (kbd "g") #'beads-epics-refresh)
     (define-key map (kbd "f") #'beads-epics-toggle-eligible-only)
-    (define-key map (kbd "q") #'quit-window)
+    (define-key map (kbd "q") #'beads-core-quit-window-kill-buffer)
     map)
   "Keymap for beads-epics-mode.")
 

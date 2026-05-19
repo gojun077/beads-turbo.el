@@ -36,7 +36,7 @@
     (define-key map (kbd "RET") #'beads-orphans-goto-issue)
     (define-key map (kbd "c") #'beads-orphans-close)
     (define-key map (kbd "g") #'beads-orphans-refresh)
-    (define-key map (kbd "q") #'quit-window)
+    (define-key map (kbd "q") #'beads-core-quit-window-kill-buffer)
     map)
   "Keymap for beads-orphans-mode.")
 

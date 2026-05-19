@@ -64,11 +64,11 @@
                 #'beads-duplicates-refresh))))
 
 (ert-deftest beads-duplicates-test-keybinding-quit ()
-  "Test that q is bound to quit-window."
+  "Test that q is bound to kill-buffer quit."
   (with-temp-buffer
     (beads-duplicates-mode)
     (should (eq (lookup-key beads-duplicates-mode-map (kbd "q"))
-                #'quit-window))))
+                #'beads-core-quit-window-kill-buffer))))
 
 ;;; Command availability tests
 

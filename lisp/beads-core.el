@@ -87,5 +87,10 @@ PROPERTY-NAME should be a symbol like `beads-orphan-id'."
       (beads-client-error
        (user-error "Failed to load issue: %s" (error-message-string err))))))
 
+(defun beads-core-quit-window-kill-buffer ()
+  "Quit the selected window and kill its buffer."
+  (interactive)
+  (quit-window t))
+
 (provide 'beads-core)
 ;;; beads-core.el ends here

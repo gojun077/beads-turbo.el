@@ -27,6 +27,7 @@
 (require 'hierarchy)
 (require 'wid-edit)
 (require 'beads-client)
+(require 'beads-core)
 (require 'beads-faces)
 
 (declare-function beads-detail-open "beads-detail")
@@ -48,7 +49,7 @@
 
 (defvar beads-hierarchy-mode-map
   (let ((map (make-sparse-keymap)))
-    (define-key map (kbd "q") #'quit-window)
+    (define-key map (kbd "q") #'beads-core-quit-window-kill-buffer)
     (define-key map (kbd "g") #'beads-hierarchy-refresh)
     (define-key map (kbd "RET") #'beads-hierarchy-goto-issue)
     (define-key map (kbd "TAB") #'beads-hierarchy-next)

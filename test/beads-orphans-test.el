@@ -56,11 +56,11 @@
                 #'beads-orphans-refresh))))
 
 (ert-deftest beads-orphans-test-keybinding-quit ()
-  "Test that q is bound to quit-window."
+  "Test that q is bound to kill-buffer quit."
   (with-temp-buffer
     (beads-orphans-mode)
     (should (eq (lookup-key beads-orphans-mode-map (kbd "q"))
-                #'quit-window))))
+                #'beads-core-quit-window-kill-buffer))))
 
 ;;; Command availability tests
 

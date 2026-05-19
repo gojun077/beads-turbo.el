@@ -71,11 +71,11 @@
                 #'beads-stale-set-filter))))
 
 (ert-deftest beads-stale-test-keybinding-quit ()
-  "Test that q is bound to quit-window."
+  "Test that q is bound to kill-buffer quit."
   (with-temp-buffer
     (beads-stale-mode)
     (should (eq (lookup-key beads-stale-mode-map (kbd "q"))
-                #'quit-window))))
+                #'beads-core-quit-window-kill-buffer))))
 
 ;;; Command availability tests
 

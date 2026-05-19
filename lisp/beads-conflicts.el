@@ -38,7 +38,7 @@
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "r") #'beads-conflicts-resolve-all)
     (define-key map (kbd "g") #'beads-conflicts-refresh)
-    (define-key map (kbd "q") #'quit-window)
+    (define-key map (kbd "q") #'beads-core-quit-window-kill-buffer)
     map)
   "Keymap for beads-conflicts-mode.")
 

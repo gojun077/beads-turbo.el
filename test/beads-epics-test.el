@@ -59,11 +59,11 @@
                 #'beads-epics-toggle-eligible-only))))
 
 (ert-deftest beads-epics-test-keybinding-quit ()
-  "Test that q is bound to quit-window."
+  "Test that q is bound to kill-buffer quit."
   (with-temp-buffer
     (beads-epics-mode)
     (should (eq (lookup-key beads-epics-mode-map (kbd "q"))
-                #'quit-window))))
+                #'beads-core-quit-window-kill-buffer))))
 
 ;;; Command availability tests
 

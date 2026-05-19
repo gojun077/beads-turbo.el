@@ -337,7 +337,7 @@ This feature is not available with the current beads version."
   "Quit activity buffer, stopping follow mode if active."
   (interactive)
   (beads-activity--stop-polling)
-  (quit-window))
+  (beads-core-quit-window-kill-buffer))
 
 (provide 'beads-activity)
 ;;; beads-activity.el ends here

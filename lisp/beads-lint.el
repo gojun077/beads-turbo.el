@@ -62,7 +62,7 @@
     (define-key map (kbd "f") #'beads-lint-filter-type)
     (define-key map (kbd "n") #'beads-lint-next-issue)
     (define-key map (kbd "p") #'beads-lint-prev-issue)
-    (define-key map (kbd "q") #'quit-window)
+    (define-key map (kbd "q") #'beads-core-quit-window-kill-buffer)
     map)
   "Keymap for beads-lint-mode.")
 
