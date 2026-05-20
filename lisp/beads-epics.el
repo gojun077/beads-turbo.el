@@ -33,6 +33,8 @@
 
 (require 'beads-core)
 (require 'beads-client)
+(require 'beads-cache)
+(require 'beads-detail)
 
 (defvar-local beads-epics--data nil
   "List of epic-status entries in current buffer.")
@@ -162,10 +164,38 @@ whose children are all closed (eligible for closure)."
   "Return epic issue ID at point, or nil."
   (beads-core-id-at-point 'beads-epic-id))
 
+(defun beads-epics--issue-at-point ()
+  "Return the epic issue object at point, or nil."
+  (when-let ((entry (get-text-property (point) 'beads-epic-data)))
+    (alist-get 'epic entry)))
+
 (defun beads-epics-goto-issue ()
-  "Open the epic at point in detail view."
+  "Open the epic at point in the standard detail view.
+
+This mirrors `beads-list-goto-issue': render the epic data already
+present in the status view immediately, then asynchronously hydrate the
+detail buffer with the full issue record."
   (interactive)
-  (beads-core-goto-issue-at-point 'beads-epic-id))
+  (if-let ((issue (beads-epics--issue-at-point)))
+      (let ((id (alist-get 'id issue)))
+        (if-let ((full-issue (beads-cache-get-full-issue id)))
+            (beads-detail-open full-issue)
+          (beads-detail-open issue)
+          (condition-case err
+              (beads-client-show-async
+               id
+               (lambda (err full-issue)
+                 (cond
+                  (err
+                   (message "Failed to fetch issue details: %s"
+                            (error-message-string err)))
+                  (full-issue
+                   (beads-cache-put-full-issue id full-issue)
+                   (beads-detail-rerender-if-current id full-issue)))))
+            (beads-client-error
+             (message "Failed to fetch issue details: %s"
+                      (error-message-string err))))))
+    (user-error "No epic at point")))
 
 (defun beads-epics-refresh ()
   "Refresh the epic status list."
