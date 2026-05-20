@@ -118,6 +118,7 @@ The --no-daemon flag is handled by the backend's cli-extra-flags."
                   (insert (propertize " (merge)" 'face 'beads-duplicates-source)))
                 (insert "\n")
                 (put-text-property start (point) 'beads-duplicate-id id)
+                (put-text-property start (point) 'beads-duplicate-data issue)
                 (put-text-property start (point) 'beads-duplicate-group group)
                 (put-text-property start (point) 'beads-duplicate-target target)
                 (put-text-property start (point) 'beads-duplicate-is-source is-source)))
@@ -155,7 +156,7 @@ Duplicates are issues with identical content that can be merged."
 (defun beads-duplicates-goto-issue ()
   "Open the issue at point in detail view."
   (interactive)
-  (beads-core-goto-issue-at-point 'beads-duplicate-id))
+  (beads-core-goto-issue-at-point 'beads-duplicate-id 'beads-duplicate-data))
 
 (defun beads-duplicates--merge (source-id target-id)
   "Merge SOURCE-ID into TARGET-ID using CLI."

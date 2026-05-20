@@ -140,7 +140,8 @@ Returns alist of (type . issues)."
                                     missing-list ", ")
                          'face 'beads-lint-missing))
                 (insert "\n")
-                (put-text-property start (point) 'beads-lint-id id)))
+                (put-text-property start (point) 'beads-lint-id id)
+                (put-text-property start (point) 'beads-lint-data issue)))
             (insert "\n")))))))
 
 ;;;###autoload
@@ -167,7 +168,7 @@ Shows issues missing required template sections based on their type."
 (defun beads-lint-goto-issue ()
   "Open the issue at point in detail view."
   (interactive)
-  (beads-core-goto-issue-at-point 'beads-lint-id))
+  (beads-core-goto-issue-at-point 'beads-lint-id 'beads-lint-data))
 
 (defun beads-lint-refresh ()
   "Refresh the lint report."

@@ -157,8 +157,5 @@ by checking for these sentinels in order:
 - **Discovery tests** (`beads-client-test.el`): Reflect the Dolt-first priority.
   Legacy `beads.db` fallback is tested separately. The legacy `.db` extension
   scanning test was removed.
-- **Activity tests** (`beads-activity-test.el`): Preserved but documented as
-  testing only the Emacs Lisp rendering layer. The `bd activity` subcommand
-  does not exist in bd 1.0.x (see bdel-a6p).
 - **All other test files**: Storage-backend agnostic. Test Emacs Lisp logic
   only (modes, keybindings, rendering, state management).

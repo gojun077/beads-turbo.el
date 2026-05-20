@@ -30,7 +30,11 @@
 ;;; Code:
 
 (declare-function beads-detail-open "beads-detail")
+(declare-function beads-detail-rerender-if-current "beads-detail")
+(declare-function beads-cache-get-full-issue "beads-cache")
+(declare-function beads-cache-put-full-issue "beads-cache")
 (declare-function beads-client-show "beads-client")
+(declare-function beads-client-show-async "beads-client")
 
 (defcustom beads-verbose t
   "When non-nil, show helpful hints about keybindings in the minibuffer.
@@ -75,17 +79,61 @@ SEPARATOR-WIDTH defaults to 50."
 PROPERTY-NAME should be a symbol like `beads-orphan-id'."
   (get-text-property (point) property-name))
 
-(defun beads-core-goto-issue-at-point (property-name)
-  "Open issue at point in detail view using PROPERTY-NAME for ID.
-PROPERTY-NAME should be a symbol like `beads-orphan-id'."
-  (let ((id (beads-core-id-at-point property-name)))
+(defun beads-core--issue-with-id (id issue)
+  "Return ISSUE with ID in an `id' field.
+When ISSUE is nil, return a minimal detail issue containing only ID."
+  (cond
+   ((null issue) `((id . ,id)))
+   ((alist-get 'id issue nil nil #'equal) issue)
+   (t (cons (cons 'id id) issue))))
+
+(defun beads-core-open-issue-detail (issue-or-id)
+  "Open ISSUE-OR-ID using the standard detail navigation flow.
+
+This mirrors `beads-list-goto-issue': render available list/report data
+immediately, then asynchronously hydrate the detail buffer with the full
+issue record.  A cached full issue opens directly without an extra client
+request."
+  (require 'beads-cache)
+  (require 'beads-client)
+  (require 'beads-detail)
+  (let* ((id (if (stringp issue-or-id)
+                 issue-or-id
+               (alist-get 'id issue-or-id nil nil #'equal)))
+         (issue (if (stringp issue-or-id)
+                    `((id . ,issue-or-id))
+                  issue-or-id)))
     (unless id
       (user-error "No issue at point"))
-    (condition-case err
-        (let ((issue (beads-client-show id)))
-          (beads-detail-open issue))
-      (beads-client-error
-       (user-error "Failed to load issue: %s" (error-message-string err))))))
+    (if-let ((full-issue (beads-cache-get-full-issue id)))
+        (beads-detail-open full-issue)
+      (beads-detail-open issue)
+      (condition-case err
+          (beads-client-show-async
+           id
+           (lambda (err full-issue)
+             (cond
+              (err
+               (message "Failed to fetch issue details: %s"
+                        (error-message-string err)))
+              (full-issue
+               (beads-cache-put-full-issue id full-issue)
+               (beads-detail-rerender-if-current id full-issue)))))
+        (beads-client-error
+         (message "Failed to fetch issue details: %s"
+                  (error-message-string err)))))))
+
+(defun beads-core-goto-issue-at-point (id-property &optional issue-property)
+  "Open issue at point in detail view using ID-PROPERTY.
+When ISSUE-PROPERTY is non-nil, use its value as the partial issue data
+for the initial render."
+  (let ((id (beads-core-id-at-point id-property)))
+    (unless id
+      (user-error "No issue at point"))
+    (beads-core-open-issue-detail
+     (beads-core--issue-with-id
+      id
+      (and issue-property (get-text-property (point) issue-property))))))
 
 (defun beads-core-quit-window-kill-buffer ()
   "Quit the selected window and kill its buffer."

@@ -96,7 +96,6 @@ With the built-in `:vc` keyword:
 
 - `M-x beads` or `M-x beads-list` - Open the issue list
 - `M-x beads-project-list` - Open issue list for current project
-- `M-x beads-activity` - Open the activity feed (unavailable in bd 1.0+)
 - `M-x beads-stale` - Show stale issues (not updated recently)
 - `M-x beads-orphans` - Show orphaned issues (referenced in commits but not closed)
 - `M-x beads-duplicates` - Find and merge duplicate issues
@@ -202,11 +201,6 @@ then confirm to actually create it.
 | `C-c C-c` | `beads-create-preview-confirm` | Create the issue |
 | `C-c C-k` | `beads-create-preview-cancel` | Cancel without creating |
 | `q` | `beads-create-preview-cancel` | Cancel without creating |
-
-### Activity Feed (`beads-activity-mode`)
-
-The `bd activity` command was removed in bd 1.0+. This feature
-is not available with the current beads version.
 
 ### Stale Issues (`beads-stale-mode`)
 
@@ -333,11 +327,6 @@ the buffer.
 | `beads-project-per-project-buffers` | `t` | Create separate buffer per project |
 | `beads-project-add-switch-command` | `t` | Add to project-switch-commands |
 | `beads-project-buffer-name-function` | `beads-project-default-buffer-name` | Function to generate buffer name |
-
-### Activity Feed (`beads-activity`)
-
-The `bd activity` command was removed in bd 1.0+. The activity feed
-is not available with the current beads version.
 
 ### Stale Issues (`beads-stale`)
 

@@ -135,12 +135,7 @@ Format: ID [type] title [status]"
   "Handle activation of issue BUTTON."
   (let ((issue (button-get button 'beads-issue)))
     (when issue
-      (condition-case err
-          (let* ((id (alist-get 'id issue))
-                 (full-issue (beads-client-show id)))
-            (beads-detail-open full-issue))
-        (beads-client-error
-         (message "Failed to fetch issue: %s" (error-message-string err)))))))
+      (beads-core-open-issue-detail issue))))
 
 (defun beads-hierarchy--collect-ancestors (issue by-id)
   "Recursively collect ancestors (dependencies) of ISSUE into BY-ID.
@@ -232,12 +227,7 @@ For ancestors, we look for issues that have this as beads--child-id."
             (let ((id (match-string 1)))
               (setq issue (gethash id beads-hierarchy--by-id)))))))
     (if issue
-        (condition-case err
-            (let* ((id (alist-get 'id issue))
-                   (full-issue (beads-client-show id)))
-              (beads-detail-open full-issue))
-          (beads-client-error
-           (message "Failed to fetch issue: %s" (error-message-string err))))
+        (beads-core-open-issue-detail issue)
       (message "No issue at point"))))
 
 (defun beads-hierarchy--expand-all ()

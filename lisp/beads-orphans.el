@@ -104,7 +104,7 @@ Orphans are issues referenced in commits but not marked as closed."
 (defun beads-orphans-goto-issue ()
   "Open the orphan issue at point in detail view."
   (interactive)
-  (beads-core-goto-issue-at-point 'beads-orphan-id))
+  (beads-core-goto-issue-at-point 'beads-orphan-id 'beads-orphan-data))
 
 (defun beads-orphans-close ()
   "Close the orphan issue at point."

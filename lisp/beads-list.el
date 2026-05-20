@@ -1145,25 +1145,7 @@ immediately, then asynchronously fetches the full issue and
 re-renders the detail buffer when the data arrives."
   (interactive)
   (if-let ((issue (beads-list--get-issue-at-point)))
-      (let ((id (alist-get 'id issue)))
-        (if-let ((full-issue (beads-cache-get-full-issue id)))
-            (beads-detail-open full-issue)
-          ;; Cache miss: instant partial render, async fill-in.
-          (beads-detail-open issue)
-          (condition-case err
-              (beads-client-show-async
-               id
-               (lambda (err full-issue)
-                 (cond
-                  (err
-                   (message "Failed to fetch issue details: %s"
-                            (error-message-string err)))
-                  (full-issue
-                   (beads-cache-put-full-issue id full-issue)
-                   (beads-detail-rerender-if-current id full-issue)))))
-            (beads-client-error
-             (message "Failed to fetch issue details: %s"
-                      (error-message-string err))))))
+      (beads-core-open-issue-detail issue)
     (message "No issue at point")))
 
 (defun beads-list-edit-form ()

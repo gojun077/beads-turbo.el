@@ -31,7 +31,7 @@
   '(beads beads-transient beads-project
     beads-list beads-preview beads-detail beads-hierarchy
     beads-form beads-edit beads-filter beads-faces beads-client
-    beads-state beads-orphans beads-stale beads-activity
+    beads-state beads-orphans beads-stale
     beads-duplicates beads-lint beads-vui)
   "Beads features in reverse dependency order for unloading.")
 

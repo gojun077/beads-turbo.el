@@ -225,10 +225,10 @@ Uses a single reusable buffer in a side window without focusing."
 (defun beads-detail-rerender-if-current (id issue)
   "Re-render ISSUE in its detail buffer iff that buffer still shows ID.
 
-Used by the lazy-load path in `beads-list-goto-issue': the buffer is
-opened immediately with the partial list-level data, then the full
-issue arrives asynchronously and is rendered here.  The ID guard
-prevents stomping on the user if they have already navigated away."
+Used by the standard lazy-load detail navigation path: the buffer is
+opened immediately with partial list/report data, then the full issue
+arrives asynchronously and is rendered here.  The ID guard prevents
+stomping on the user if they have already navigated away."
   (let* ((buffer-name (format "*Beads Detail: %s*" id))
          (buffer (get-buffer buffer-name)))
     (when (and buffer (buffer-live-p buffer))
@@ -293,11 +293,7 @@ prevents stomping on the user if they have already navigated away."
                         (alist-get 'parent_id issue))))
     (unless parent-id
       (user-error "This issue has no parent"))
-    (condition-case err
-        (let ((parent-issue (beads-client-show parent-id)))
-          (beads-detail-open parent-issue))
-      (beads-client-error
-       (user-error "Failed to load parent issue: %s" (error-message-string err))))))
+    (beads-core-open-issue-detail parent-id)))
 
 (defun beads-detail-view-children ()
   "View children of the current issue in a filtered list.
@@ -484,8 +480,7 @@ Uses CLI fallback since RPC does not support comment_add."
                           (with-current-buffer buffer
                             (beads-detail-refresh)))))
         (navigate-fn (lambda (id)
-                       (when-let ((target (beads-client-show id)))
-                         (beads-detail-open target)))))
+                       (beads-core-open-issue-detail id))))
     (with-current-buffer buffer
       (unless (derived-mode-p 'beads-detail-vui-mode)
         (beads-detail-vui-mode))
@@ -635,7 +630,7 @@ Uses CLI fallback since RPC does not support comment_add."
     (insert-text-button id
                         'action (lambda (_button)
                                   (condition-case err
-                                      (beads-detail-open (beads-client-show id))
+                                      (beads-core-open-issue-detail dep)
                                     (beads-client-error
                                      (message "Failed to open %s: %s" id (error-message-string err)))))
                         'follow-link t

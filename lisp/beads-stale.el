@@ -156,7 +156,7 @@ STATUS optionally filters by issue status."
 (defun beads-stale-goto-issue ()
   "Open the stale issue at point in detail view."
   (interactive)
-  (beads-core-goto-issue-at-point 'beads-stale-id))
+  (beads-core-goto-issue-at-point 'beads-stale-id 'beads-stale-data))
 
 (defun beads-stale-claim ()
   "Claim the stale issue at point by setting status to in_progress."

@@ -177,24 +177,7 @@ present in the status view immediately, then asynchronously hydrate the
 detail buffer with the full issue record."
   (interactive)
   (if-let ((issue (beads-epics--issue-at-point)))
-      (let ((id (alist-get 'id issue)))
-        (if-let ((full-issue (beads-cache-get-full-issue id)))
-            (beads-detail-open full-issue)
-          (beads-detail-open issue)
-          (condition-case err
-              (beads-client-show-async
-               id
-               (lambda (err full-issue)
-                 (cond
-                  (err
-                   (message "Failed to fetch issue details: %s"
-                            (error-message-string err)))
-                  (full-issue
-                   (beads-cache-put-full-issue id full-issue)
-                   (beads-detail-rerender-if-current id full-issue)))))
-            (beads-client-error
-             (message "Failed to fetch issue details: %s"
-                      (error-message-string err))))))
+      (beads-core-open-issue-detail issue)
     (user-error "No epic at point")))
 
 (defun beads-epics-refresh ()
