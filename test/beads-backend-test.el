@@ -189,6 +189,16 @@
     (should (member "--deps" args))
     (should-not (member "--dependencies" args))))
 
+(ert-deftest beads-backend-test-bd-update-normalizes-issue-type ()
+  "Test bd backend update emits current `bd update --type' flag name."
+  (let ((args (beads-backend-bd--operation-to-cli-args
+               "update" '((id . "bd-001")
+                           (issue_type . "epic")))))
+    (should (equal (seq-subseq args 0 2) '("update" "bd-001")))
+    (should (member "--type" args))
+    (should (member "epic" args))
+    (should-not (member "--issue-type" args))))
+
 (ert-deftest beads-backend-test-bd-close-with-reason ()
   "Test bd backend close with reason."
   (should (equal (beads-backend-bd--operation-to-cli-args
@@ -223,6 +233,16 @@
     (should (member "1" args))
     (should (member "--assignee" args))
     (should (member "alice" args))))
+
+(ert-deftest beads-backend-test-bd-update-bulk-normalizes-issue-type ()
+  "Test bd backend update_bulk emits current `bd update --type' flag name."
+  (let ((args (beads-backend-bd--operation-to-cli-args
+               "update_bulk" '((ids . ("bd-1" "bd-2"))
+                               (issue_type . "epic")))))
+    (should (equal (seq-subseq args 0 3) '("update" "bd-1" "bd-2")))
+    (should (member "--type" args))
+    (should (member "epic" args))
+    (should-not (member "--issue-type" args))))
 
 (ert-deftest beads-backend-test-bd-update-bulk-registered ()
   "Test bd backend advertises update_bulk support."

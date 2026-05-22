@@ -32,17 +32,32 @@
     (dependencies . deps))
   "Backward-compatible create argument aliases for `bd create'.")
 
-(defun beads-backend-bd--normalize-create-args (args)
-  "Return ARGS normalized to flags accepted by `bd create'."
+(defconst beads-backend-bd--update-arg-aliases
+  '((issue_type . type))
+  "Backward-compatible update argument aliases for `bd update'.")
+
+(defun beads-backend-bd--normalize-args (args aliases)
+  "Return ARGS normalized according to ALIASES.
+ALIASES maps older alist keys to current bd CLI flag keys.  When both
+an old key and its canonical key are present, keep the canonical key."
   (let ((result nil))
     (dolist (pair args)
       (let* ((key (car pair))
-             (canonical (alist-get key beads-backend-bd--create-arg-aliases
-                                   key nil #'eq)))
+             (canonical (alist-get key aliases key nil #'eq)))
         (unless (and (not (eq key canonical))
                      (assq canonical args))
           (push (cons canonical (cdr pair)) result))))
     (nreverse result)))
+
+(defun beads-backend-bd--normalize-create-args (args)
+  "Return ARGS normalized to flags accepted by `bd create'."
+  (beads-backend-bd--normalize-args
+   args beads-backend-bd--create-arg-aliases))
+
+(defun beads-backend-bd--normalize-update-args (args)
+  "Return ARGS normalized to flags accepted by `bd update'."
+  (beads-backend-bd--normalize-args
+   args beads-backend-bd--update-arg-aliases))
 
 (defun beads-backend-bd--operation-to-cli-args (operation args)
   "Convert RPC OPERATION and ARGS to CLI arguments for bd."
@@ -71,14 +86,16 @@
                (beads-backend--alist-to-cli-flags other-args))))
     ("update"
      (let ((id (alist-get 'id args))
-           (other-args (assq-delete-all 'id (copy-alist args))))
+           (other-args (beads-backend-bd--normalize-update-args
+                        (assq-delete-all 'id (copy-alist args)))))
        (append (list "update" id)
                (beads-backend--alist-to-cli-flags other-args))))
     ("update_bulk"
      ;; bd 1.0+: `bd update [id...] --flag value ...` applies the same flags
      ;; to every listed ID in a single subprocess. See bdel-iin.4.
      (let ((ids (alist-get 'ids args))
-           (other-args (assq-delete-all 'ids (copy-alist args))))
+           (other-args (beads-backend-bd--normalize-update-args
+                        (assq-delete-all 'ids (copy-alist args)))))
        (append (list "update")
                (if (listp ids) ids (list ids))
                (beads-backend--alist-to-cli-flags other-args))))
