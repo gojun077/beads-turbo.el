@@ -104,6 +104,8 @@ Set back to t periodically so we retry after transient failures.")
 (defvar beads-dolt-sql--mysql-proc nil)
 (defvar beads-dolt-sql--mysql-output nil)
 (defvar beads-dolt-sql--mysql-params nil)
+(defvar beads-dolt-sql--mysql-shutting-down nil
+  "Non-nil while intentionally stopping the persistent mariadb client.")
 
 (defconst beads-dolt-sql--mysql-end-marker "__BEADS_QUERY_END__"
   "Sentinel string emitted after each persistent-client query.
@@ -591,7 +593,27 @@ ORDER BY i.priority ASC, i.created_at DESC"
     (setq beads-dolt-sql--mysql-proc nil)
     (setq beads-dolt-sql--mysql-output nil)
     (setq beads-dolt-sql--mysql-params nil)
-    (beads-backend-dolt-sql--mark-unavailable)))
+    (unless beads-dolt-sql--mysql-shutting-down
+      (beads-backend-dolt-sql--mark-unavailable))))
+
+(defun beads-dolt-sql--stop-mysql-proc ()
+  "Gracefully stop the persistent mariadb subprocess, if one is live."
+  (let ((proc beads-dolt-sql--mysql-proc)
+        (beads-dolt-sql--mysql-shutting-down t))
+    (when proc
+      (when (process-live-p proc)
+        (ignore-errors (process-send-string proc "\\q\n"))
+        (accept-process-output proc 0.1)
+        (when (process-live-p proc)
+          (delete-process proc)))
+      (setq beads-dolt-sql--mysql-proc nil)
+      (setq beads-dolt-sql--mysql-output nil)
+      (setq beads-dolt-sql--mysql-params nil))))
+
+(defun beads-backend-dolt-sql-stop-idle-session ()
+  "Stop persistent SQL sessions after all beads buffers are closed."
+  (beads-dolt-sql--native-mysql-disconnect)
+  (beads-dolt-sql--stop-mysql-proc))
 
 (defun beads-dolt-sql--start-mysql-proc (dolt)
   (let* ((host (alist-get 'host dolt "127.0.0.1"))

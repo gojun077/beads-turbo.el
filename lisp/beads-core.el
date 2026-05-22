@@ -35,6 +35,7 @@
 (declare-function beads-cache-put-full-issue "beads-cache")
 (declare-function beads-client-show "beads-client")
 (declare-function beads-client-show-async "beads-client")
+(declare-function beads-backend-dolt-sql-stop-idle-session "beads-backend-dolt-sql")
 
 (defcustom beads-verbose t
   "When non-nil, show helpful hints about keybindings in the minibuffer.
@@ -139,6 +140,32 @@ for the initial render."
   "Quit the selected window and kill its buffer."
   (interactive)
   (quit-window t))
+
+(defun beads-core--beads-buffer-p (&optional buffer)
+  "Return non-nil when BUFFER is owned by beads.el."
+  (with-current-buffer (or buffer (current-buffer))
+    (or (string-prefix-p "beads-" (symbol-name major-mode))
+        (bound-and-true-p beads-edit-mode))))
+
+(defun beads-core--other-beads-buffer-live-p ()
+  "Return non-nil when another live beads.el buffer exists."
+  (let ((current (current-buffer))
+        found)
+    (dolist (buffer (buffer-list) found)
+      (when (and (not (eq buffer current))
+                 (buffer-live-p buffer)
+                 (beads-core--beads-buffer-p buffer))
+        (setq found t)))))
+
+(defun beads-core--maybe-stop-idle-backend ()
+  "Stop persistent backend sessions when the last beads.el buffer closes."
+  (when (and (beads-core--beads-buffer-p)
+             (not (beads-core--other-beads-buffer-live-p))
+             (fboundp 'beads-backend-dolt-sql-stop-idle-session))
+    (ignore-errors
+      (beads-backend-dolt-sql-stop-idle-session))))
+
+(add-hook 'kill-buffer-hook #'beads-core--maybe-stop-idle-backend)
 
 (provide 'beads-core)
 ;;; beads-core.el ends here

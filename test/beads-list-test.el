@@ -17,11 +17,51 @@
 ;;; Code:
 
 (require 'ert)
+(require 'cl-lib)
 (require 'beads-list)
+(require 'beads-core)
 (require 'beads-test-helpers)
 (require 'beads-backend-dolt-sql)
 
 ;;; Formatter tests (no daemon needed)
+
+(ert-deftest beads-list-test-core-idle-backend-keeps-session-with-other-buffer ()
+  "Test idle backend cleanup is skipped while another beads buffer exists."
+  (let ((buffer-a (generate-new-buffer " *beads-idle-a*"))
+        (buffer-b (generate-new-buffer " *beads-idle-b*"))
+        (stop-count 0))
+    (unwind-protect
+        (progn
+          (with-current-buffer buffer-a
+            (beads-list-mode))
+          (with-current-buffer buffer-b
+            (beads-list-mode))
+          (cl-letf (((symbol-function 'buffer-list)
+                     (lambda (&optional _frame) (list buffer-a buffer-b)))
+                    ((symbol-function 'beads-backend-dolt-sql-stop-idle-session)
+                     (lambda () (cl-incf stop-count))))
+            (with-current-buffer buffer-a
+              (beads-core--maybe-stop-idle-backend))
+            (should (zerop stop-count))))
+      (when (buffer-live-p buffer-a) (kill-buffer buffer-a))
+      (when (buffer-live-p buffer-b) (kill-buffer buffer-b)))))
+
+(ert-deftest beads-list-test-core-idle-backend-stops-after-last-buffer ()
+  "Test idle backend cleanup runs when the last beads buffer closes."
+  (let ((buffer (generate-new-buffer " *beads-idle-last*"))
+        (stop-count 0))
+    (unwind-protect
+        (progn
+          (with-current-buffer buffer
+            (beads-list-mode))
+          (cl-letf (((symbol-function 'buffer-list)
+                     (lambda (&optional _frame) (list buffer)))
+                    ((symbol-function 'beads-backend-dolt-sql-stop-idle-session)
+                     (lambda () (cl-incf stop-count))))
+            (with-current-buffer buffer
+              (beads-core--maybe-stop-idle-backend))
+            (should (= stop-count 1))))
+      (when (buffer-live-p buffer) (kill-buffer buffer)))))
 
 (ert-deftest beads-list-test-format-id ()
   "Test that beads-list--format-id returns the issue ID."

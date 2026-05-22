@@ -691,6 +691,7 @@ never touch a real subprocess."
   `(let ((beads-dolt-sql--mysql-proc nil)
          (beads-dolt-sql--mysql-output nil)
          (beads-dolt-sql--mysql-params nil)
+         (beads-dolt-sql--mysql-shutting-down nil)
          (beads-dolt-sql--available t))
      ,@body))
 
@@ -782,13 +783,15 @@ CAPTURE is a list-cell whose car is set to an alist of call args:
                 (setcar ,capture
                         (cons (cons 'sentinel (cons proc fn))
                               (car ,capture)))))
-             ((symbol-function 'generate-new-buffer)
-              (lambda (name) (format "<buf:%s>" name)))
              ((symbol-function 'executable-find)
               (lambda (cmd)
                 (cond ((equal cmd "mariadb") "/usr/bin/mariadb")
                       (t nil)))))
-     ,@body))
+     (unwind-protect
+         (progn ,@body)
+       (when-let ((buffer (alist-get 'buffer (car ,capture))))
+         (when (buffer-live-p buffer)
+           (kill-buffer buffer))))))
 
 (ert-deftest beads-dolt-sql-test-start-mysql-proc-sets-state ()
   "Test `--start-mysql-proc' wires up state, filter, and sentinel."
@@ -874,6 +877,52 @@ CAPTURE is a list-cell whose car is set to an alist of call args:
                (lambda () nil)))
       (should-error (beads-dolt-sql--ensure-mysql-connected)
                     :type 'beads-backend-error))))
+
+(ert-deftest beads-dolt-sql-test-stop-mysql-proc-quits-gracefully ()
+  "Test idle cleanup sends mariadb quit and does not mark SQL unavailable."
+  (beads-dolt-sql-test--with-mysql-state
+    (let ((proc (beads-dolt-sql-test--make-fake-proc))
+          (sent nil)
+          (accepted nil)
+          (deleted nil)
+          (marked-unavailable nil)
+          (live t))
+      (setq beads-dolt-sql--mysql-proc proc)
+      (setq beads-dolt-sql--mysql-output "buffered")
+      (setq beads-dolt-sql--mysql-params '((host . "127.0.0.1")))
+      (cl-letf (((symbol-function 'process-live-p) (lambda (_) live))
+                ((symbol-function 'process-send-string)
+                 (lambda (p string)
+                   (setq sent (cons p string))))
+                ((symbol-function 'accept-process-output)
+                 (lambda (p _timeout)
+                   (setq accepted p)
+                   (beads-dolt-sql--mysql-sentinel p "finished\n")
+                   (setq live nil)))
+                ((symbol-function 'delete-process)
+                 (lambda (p) (setq deleted p)))
+                ((symbol-function 'beads-backend-dolt-sql--mark-unavailable)
+                 (lambda () (setq marked-unavailable t))))
+        (beads-dolt-sql--stop-mysql-proc)
+        (should (equal sent (cons proc "\\q\n")))
+        (should (eq accepted proc))
+        (should-not deleted)
+        (should-not marked-unavailable)
+        (should-not beads-dolt-sql--mysql-proc)
+        (should-not beads-dolt-sql--mysql-output)
+        (should-not beads-dolt-sql--mysql-params)))))
+
+(ert-deftest beads-dolt-sql-test-stop-idle-session-disconnects-clients ()
+  "Test idle cleanup disconnects native mysql and persistent mariadb clients."
+  (let ((native-disconnected nil)
+        (mysql-stopped nil))
+    (cl-letf (((symbol-function 'beads-dolt-sql--native-mysql-disconnect)
+               (lambda () (setq native-disconnected t)))
+              ((symbol-function 'beads-dolt-sql--stop-mysql-proc)
+               (lambda () (setq mysql-stopped t))))
+      (beads-backend-dolt-sql-stop-idle-session)
+      (should native-disconnected)
+      (should mysql-stopped))))
 
 ;; --- Query tests ---
 
