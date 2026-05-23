@@ -154,8 +154,8 @@ JSON_OBJECT(\
 'comment_count', \
   (SELECT COUNT(*) FROM comments c WHERE c.issue_id = i.id), \
 'parent', \
-  (SELECT d3.issue_id FROM dependencies d3 \
-   WHERE d3.depends_on_id = i.id AND d3.type = 'parent-child' LIMIT 1), \
+  (SELECT d3.depends_on_id FROM dependencies d3 \
+   WHERE d3.issue_id = i.id AND d3.type = 'parent-child' LIMIT 1), \
 'dependencies', COALESCE(\
   (SELECT JSON_ARRAYAGG(\
     JSON_OBJECT(\
@@ -213,8 +213,8 @@ JSON_OBJECT(\
 'comment_count', \
   (SELECT COUNT(*) FROM comments c WHERE c.issue_id = i.id), \
 'parent', \
-  (SELECT d3.issue_id FROM dependencies d3 \
-   WHERE d3.depends_on_id = i.id AND d3.type = 'parent-child' LIMIT 1)\
+  (SELECT d3.depends_on_id FROM dependencies d3 \
+   WHERE d3.issue_id = i.id AND d3.type = 'parent-child' LIMIT 1)\
 )\
 ) AS issues \
 FROM issues i \
@@ -282,8 +282,8 @@ complete record.")
 'comment_count', \
   (SELECT COUNT(*) FROM comments c WHERE c.issue_id = i.id), \
 'parent', \
-  (SELECT d3.issue_id FROM dependencies d3 \
-   WHERE d3.depends_on_id = i.id AND d3.type = 'parent-child' LIMIT 1), \
+  (SELECT d3.depends_on_id FROM dependencies d3 \
+   WHERE d3.issue_id = i.id AND d3.type = 'parent-child' LIMIT 1), \
 'dependencies', COALESCE(\
   (SELECT JSON_ARRAYAGG(\
     JSON_OBJECT(\
@@ -353,8 +353,8 @@ JSON_OBJECT(\
 'comment_count', \
   (SELECT COUNT(*) FROM comments c WHERE c.issue_id = i.id), \
 'parent', \
-  (SELECT d3.issue_id FROM dependencies d3 \
-   WHERE d3.depends_on_id = i.id AND d3.type = 'parent-child' LIMIT 1)\
+  (SELECT d3.depends_on_id FROM dependencies d3 \
+   WHERE d3.issue_id = i.id AND d3.type = 'parent-child' LIMIT 1)\
 )\
 ) AS issues \
 FROM ready_issues r \
@@ -483,8 +483,8 @@ JSON_OBJECT(\
 'comment_count', \
   (SELECT COUNT(*) FROM comments c WHERE c.issue_id = i.id), \
 'parent', \
-  (SELECT d3.issue_id FROM dependencies d3 \
-   WHERE d3.depends_on_id = i.id AND d3.type = 'parent-child' LIMIT 1)\
+  (SELECT d3.depends_on_id FROM dependencies d3 \
+   WHERE d3.issue_id = i.id AND d3.type = 'parent-child' LIMIT 1)\
 )\
 ) AS issues \
 FROM issues i \

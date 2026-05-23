@@ -409,6 +409,22 @@ but keep dependency_count, dependent_count, comment_count, and parent
     (should (string-match-p "'parent'" sql))
     (should (string-match-p "'labels'" sql))))
 
+(ert-deftest beads-dolt-sql-test-parent-subquery-uses-dependency-source ()
+  "The SQL `parent' field must return the issue this issue depends on.
+For parent-child edges, `issue_id' is the child and `depends_on_id' is
+the parent; reversing that shows a child as an epic's parent."
+  (let ((correct-parent-subquery
+         "SELECT d3\\.depends_on_id FROM dependencies d3[[:space:]]+WHERE d3\\.issue_id = i\\.id AND d3\\.type = 'parent-child'")
+        (reversed-parent-subquery
+         "SELECT d3\\.issue_id FROM dependencies d3[[:space:]]+WHERE d3\\.depends_on_id = i\\.id AND d3\\.type = 'parent-child'"))
+    (dolist (sql (list beads-dolt-sql--list-sql
+                       beads-dolt-sql--list-lite-sql
+                       beads-dolt-sql--show-sql
+                       beads-dolt-sql--ready-sql
+                       beads-dolt-sql--stale-sql))
+      (should (string-match-p correct-parent-subquery sql))
+      (should-not (string-match-p reversed-parent-subquery sql)))))
+
 (ert-deftest beads-dolt-sql-test-execute-list-selects-lite-by-default ()
   "`beads-backend-dolt-sql--execute-list' uses the lite SQL when
 `beads-dolt-sql-list-lite' is non-nil and the full SQL otherwise."
