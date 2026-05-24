@@ -672,6 +672,12 @@ Spaces and punctuation become underscores; empty results are omitted."
       (unless (string= tag "")
         tag))))
 
+(defun beads-list--org-single-line (value)
+  "Return string VALUE normalized for one-line org heading/property use.
+Newlines and tabs are replaced with spaces so issue data cannot escape
+its heading line or property drawer entry."
+  (replace-regexp-in-string "[\n\r\t]+" " " value))
+
 (defun beads-list--org-heading (issue &optional level)
   "Return a compact org heading for ISSUE at LEVEL.
 The heading contains stars, TODO keyword, optional org priority
@@ -680,7 +686,7 @@ reserved for `beads-list--org-properties'."
   (let* ((stars (make-string (or level 1) ?*))
          (todo (beads-list--org-todo-keyword issue))
          (priority (beads-list--org-priority-cookie issue))
-         (title (or (alist-get 'title issue) ""))
+         (title (beads-list--org-single-line (or (alist-get 'title issue) "")))
          (type-tag (beads-list--org-tag (alist-get 'issue_type issue)))
          (parts (delq nil (list stars todo priority title))))
     (concat (mapconcat #'identity parts " ")
@@ -690,7 +696,9 @@ reserved for `beads-list--org-properties'."
   "Return VALUE formatted for an org property drawer, or nil if empty."
   (cond
    ((null value) nil)
-   ((stringp value) (unless (string= value "") value))
+   ((stringp value)
+    (unless (string= value "")
+      (beads-list--org-single-line value)))
    ((vectorp value) (beads-list--org-property-value (append value nil)))
    ((listp value)
     (let ((items (delq nil (mapcar #'beads-list--org-property-value value))))
@@ -723,6 +731,37 @@ Returns an empty string when ISSUE has no non-empty org properties."
                            properties "\n")
                 "\n:END:")
       "")))
+
+(defun beads-list--org-render-node (node level)
+  "Return org text for forest NODE rendered at heading LEVEL."
+  (let* ((issue (alist-get 'issue node))
+         (children (alist-get 'children node))
+         (drawer (beads-list--org-property-drawer issue))
+         (lines (delq nil
+                      (append (list (beads-list--org-heading issue level)
+                                    (unless (string= drawer "") drawer))
+                              (mapcar (lambda (child)
+                                        (beads-list--org-render-node child (1+ level)))
+                                      children)))))
+    (mapconcat #'identity lines "\n")))
+
+(defun beads-list--org-render-forest (forest &optional level)
+  "Return org text for FOREST of beads list model nodes.
+LEVEL defaults to 1.  Parent-child relationships are represented by
+org heading depth."
+  (mapconcat (lambda (node)
+               (beads-list--org-render-node node (or level 1)))
+             forest "\n"))
+
+(defun beads-list-render-org (issues &optional level)
+  "Return deterministic org text rendering ISSUES as nested headings.
+ISSUES is a flat list of issue alists.  Parent-child nesting is built
+with `beads-list-model-flat-issues-to-forest', preserving orphaned
+issues as roots while keeping their parent metadata in the property
+drawer.  LEVEL defaults to 1."
+  (beads-list--org-render-forest
+   (beads-list-model-flat-issues-to-forest issues)
+   level))
 
 (defun beads-list--format-id (issue)
   "Format ID column for ISSUE."
