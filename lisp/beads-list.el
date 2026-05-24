@@ -1759,14 +1759,34 @@ Prompts for confirmation with `yes-or-no-p'."
            (message "Failed to reopen issue: %s" (error-message-string err)))))
     (message "No issue at point")))
 
-(defun beads-org-list--buffer-name ()
-  "Return the buffer name for the org list in this context."
-  (if-let ((root (and (featurep 'beads-project)
-                      (bound-and-true-p beads-project-per-project-buffers)
-                      (beads-project-root))))
-      (format "*Beads Org: %s*"
-              (file-name-nondirectory (directory-file-name root)))
-    "*Beads Org Issues*"))
+(defun beads-org-list--buffer-name (&optional project-root)
+  "Return the buffer name for the org list in PROJECT-ROOT.
+
+When another org list buffer already uses the display name for a
+different beads project, include the abbreviated project path so both
+projects can stay open in the same Emacs session."
+  (let* ((root (and project-root (file-name-as-directory project-root)))
+         (base-name (if root
+                        (format "*Beads Org: %s*"
+                                (file-name-nondirectory
+                                 (directory-file-name root)))
+                      "*Beads Org Issues*"))
+         (existing (and root (get-buffer base-name))))
+    (or (when root
+          (cl-loop for buffer in (buffer-list)
+                   when (with-current-buffer buffer
+                          (and (derived-mode-p 'beads-org-list-mode)
+                               (equal beads-org-list--project-root root)))
+                   return (buffer-name buffer)))
+        (if (and existing
+                 (with-current-buffer existing
+                   (and (local-variable-p 'beads-org-list--project-root)
+                        beads-org-list--project-root
+                        (not (equal beads-org-list--project-root root)))))
+            (format "*Beads Org: %s <%s>*"
+                    (file-name-nondirectory (directory-file-name root))
+                    (abbreviate-file-name (directory-file-name root)))
+          base-name))))
 
 ;;;###autoload
 (defun beads-org-list ()
@@ -1776,9 +1796,16 @@ The buffer is generated from Beads data for the current project and does
 not visit an org file on disk.  This is also the default view opened by
 `beads-list'.  Use `beads-list-legacy' for the old tabulated-list UI."
   (interactive)
-  (let* ((buffer-name (beads-org-list--buffer-name))
-         (buffer (get-buffer-create buffer-name))
-         (project-root default-directory))
+  (let* ((project-root (file-name-as-directory
+                        (or (beads-client--project-root)
+                            (and (featurep 'beads-project)
+                                 (beads-project-root))
+                            default-directory)))
+         (per-project-buffers (or (not (boundp 'beads-project-per-project-buffers))
+                                  (bound-and-true-p beads-project-per-project-buffers)))
+         (buffer-name (beads-org-list--buffer-name
+                       (and per-project-buffers project-root)))
+         (buffer (get-buffer-create buffer-name)))
     (with-current-buffer buffer
       (unless (eq major-mode 'beads-org-list-mode)
         (beads-org-list-mode))

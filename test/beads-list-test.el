@@ -866,7 +866,9 @@ Use a key that is not overridden by `beads-list-mode-map' (e.g. `n')."
     (unwind-protect
         (let ((default-directory project-root))
           (cl-letf (((symbol-function 'beads-org-list--buffer-name)
-                     (lambda () buffer-name))
+                     (lambda (&optional _project-root) buffer-name))
+                    ((symbol-function 'beads-client--project-root)
+                     (lambda () project-root))
                     ((symbol-function 'beads-cache-refresh)
                      (lambda (&rest _args)
                        (setq refreshed default-directory)
@@ -886,6 +888,55 @@ Use a key that is not overridden by `beads-list-mode-map' (e.g. `n')."
       (when (file-directory-p project-root)
         (delete-directory project-root t)))))
 
+(ert-deftest beads-list-test-org-list-command-opens-separate-workspace-buffers ()
+  "Org command keeps same-name beads projects in different roots separate."
+  (let* ((workspace-a (file-name-as-directory
+                       (expand-file-name "beads-workspace-a" temporary-file-directory)))
+         (workspace-b (file-name-as-directory
+                       (expand-file-name "beads-workspace-b" temporary-file-directory)))
+         (project-a (file-name-as-directory (expand-file-name "shared" workspace-a)))
+         (project-b (file-name-as-directory (expand-file-name "shared" workspace-b)))
+         (issues-a '(((id . "bd-a") (title . "From A") (status . "open"))))
+         (issues-b '(((id . "bd-b") (title . "From B") (status . "open"))))
+         (current-root project-a))
+    (make-directory project-a t)
+    (make-directory project-b t)
+    (unwind-protect
+        (cl-letf (((symbol-function 'beads-client--project-root)
+                   (lambda () current-root))
+                  ((symbol-function 'beads-cache-refresh)
+                   (lambda (&rest _args)
+                     (cons t (if (equal default-directory project-a)
+                                 issues-a
+                               issues-b)))))
+          (let ((default-directory project-a))
+            (beads-org-list))
+          (let ((buffer-a (current-buffer)))
+            (setq current-root project-b)
+            (let ((default-directory project-b))
+              (beads-org-list))
+            (let ((buffer-b (current-buffer)))
+              (should-not (eq buffer-a buffer-b))
+              (with-current-buffer buffer-a
+                (should (equal default-directory project-a))
+                (should (equal beads-org-list--project-root project-a))
+                (should (string-match-p "From A" (buffer-string)))
+                (should-not (string-match-p "From B" (buffer-string))))
+              (with-current-buffer buffer-b
+                (should (equal default-directory project-b))
+                (should (equal beads-org-list--project-root project-b))
+                (should (string-match-p "From B" (buffer-string)))
+                (should-not (string-match-p "From A" (buffer-string)))))))
+      (dolist (buffer (buffer-list))
+        (with-current-buffer buffer
+          (when (and (derived-mode-p 'beads-org-list-mode)
+                     (member beads-org-list--project-root (list project-a project-b)))
+            (kill-buffer buffer))))
+      (when (file-directory-p workspace-a)
+        (delete-directory workspace-a t))
+      (when (file-directory-p workspace-b)
+        (delete-directory workspace-b t)))))
+
 (ert-deftest beads-list-test-list-command-opens-org-view-by-default ()
   "The default beads-list command opens beads-org-list-mode."
   (let ((buffer-name "*beads-list-default-org-test*")
@@ -894,7 +945,7 @@ Use a key that is not overridden by `beads-list-mode-map' (e.g. `n')."
       (kill-buffer buffer-name))
     (unwind-protect
         (cl-letf (((symbol-function 'beads-org-list--buffer-name)
-                   (lambda () buffer-name))
+                   (lambda (&optional _project-root) buffer-name))
                   ((symbol-function 'beads-cache-refresh)
                    (lambda (&rest _args) (cons t issues))))
           (beads-list)
