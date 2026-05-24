@@ -277,6 +277,9 @@ When non-nil, overrides the global setting for this buffer.")
 (defvar-local beads-list--section-overlays nil
   "List of overlays used for section separators.")
 
+(defvar-local beads-list--org-mark-overlays nil
+  "Overlays used to visually mark issue headings in org list buffers.")
+
 (defun beads-list--effective-sort-mode ()
   "Return the effective sort mode for this buffer."
   (or beads-list--sort-mode-override beads-list-sort-mode))
@@ -379,6 +382,17 @@ Used to ensure refresh uses the correct project context.")
     (define-key map (kbd "D") #'beads-org-list-delete-issue)
     (define-key map (kbd "R") #'beads-org-list-reopen-issue)
     (define-key map (kbd "s") #'beads-list-toggle-sort-mode)
+    (define-key map (kbd "m") #'beads-list-mark)
+    (define-key map (kbd "u") #'beads-list-unmark)
+    (define-key map (kbd "U") #'beads-list-unmark-all)
+    (define-key map (kbd "t") #'beads-list-toggle-marks)
+    (define-key map (kbd "%") beads-list-mark-map)
+    (define-key map (kbd "* m") #'beads-list-mark-regexp)
+    (define-key map (kbd "* *") #'beads-list-toggle-marked-filter)
+    (define-key map (kbd "B") beads-list-bulk-map)
+    (define-key map (kbd "x") #'beads-list-bulk-close)
+    (define-key map (kbd "a") #'beads-list-quick-assign)
+    (define-key map (kbd "A") #'beads-list-assign-to-me)
     (define-key map (kbd "n") #'org-next-visible-heading)
     (define-key map (kbd "p") #'org-previous-visible-heading)
     (define-key map (kbd "TAB") #'org-cycle)
@@ -651,6 +665,7 @@ Must be called with a `beads-org-list-mode' buffer current."
     (unless (string= org-text "")
       (insert org-text)
       (insert "\n"))
+    (beads-list--org-update-mark-display)
     (beads-list--org-restore-folds folded-ids)
     (cond
      ((and saved-id (beads-list--org-goto-id saved-id)))
@@ -1203,6 +1218,44 @@ previous heading, and finally `point-min' for an empty generated list."
         (when (beads-list--org-goto-id id)
           (org-fold-hide-subtree))))))
 
+(defun beads-list--org-clear-mark-overlays ()
+  "Remove org list mark overlays from the current buffer."
+  (mapc #'delete-overlay beads-list--org-mark-overlays)
+  (setq beads-list--org-mark-overlays nil))
+
+(defun beads-list--org-update-mark-display ()
+  "Update visual mark indicators for generated org issue headings."
+  (beads-list--org-clear-mark-overlays)
+  (when beads-list--marked
+    (save-excursion
+      (dolist (id beads-list--marked)
+        (when (beads-list--org-goto-id id)
+          (let ((overlay (make-overlay (line-beginning-position)
+                                       (line-beginning-position))))
+            (overlay-put overlay 'before-string
+                         (propertize "★ " 'face 'bold))
+            (push overlay beads-list--org-mark-overlays)))))))
+
+(defun beads-list--issue-id-at-point ()
+  "Return the current issue ID in either list view, or nil."
+  (cond
+   ((derived-mode-p 'beads-org-list-mode)
+    (beads-list--org-id-at-point))
+   ((derived-mode-p 'tabulated-list-mode)
+    (tabulated-list-get-id))))
+
+(defun beads-list--forward-after-mark ()
+  "Move to the next issue after a mark command in the current view."
+  (cond
+   ((derived-mode-p 'beads-org-list-mode)
+    (forward-line 1)
+    (unless (re-search-forward org-heading-regexp nil t)
+      (goto-char (point-max)))
+    (when (org-at-heading-p)
+      (beginning-of-line)))
+   ((derived-mode-p 'tabulated-list-mode)
+    (forward-line 1))))
+
 (defun beads-list--refresh-current-view (&optional silent)
   "Refresh the current Beads list view.
 When SILENT is non-nil, suppress the refresh message where supported."
@@ -1283,26 +1336,30 @@ If in sectioned mode, first switches to column mode."
 
 (defun beads-list--update-mark-display ()
   "Update the display after marking changes."
-  (setq tabulated-list-entries (beads-list-entries beads-list--issues))
-  (tabulated-list-print t))
+  (cond
+   ((derived-mode-p 'beads-org-list-mode)
+    (beads-list--org-update-mark-display))
+   ((derived-mode-p 'beads-list-mode)
+    (setq tabulated-list-entries (beads-list-entries beads-list--issues))
+    (tabulated-list-print t))))
 
 (defun beads-list-mark ()
   "Mark issue at point and move to next line."
   (interactive)
-  (when-let ((id (tabulated-list-get-id)))
+  (when-let ((id (beads-list--issue-id-at-point)))
     (unless (member id beads-list--marked)
       (push id beads-list--marked))
     (beads-list--update-mark-display)
-    (forward-line 1)
+    (beads-list--forward-after-mark)
     (message "%d marked" (length beads-list--marked))))
 
 (defun beads-list-unmark ()
   "Unmark issue at point and move to next line."
   (interactive)
-  (when-let ((id (tabulated-list-get-id)))
+  (when-let ((id (beads-list--issue-id-at-point)))
     (setq beads-list--marked (delete id beads-list--marked))
     (beads-list--update-mark-display)
-    (forward-line 1)
+    (beads-list--forward-after-mark)
     (message "%d marked" (length beads-list--marked))))
 
 (defun beads-list-unmark-all ()
@@ -1351,7 +1408,7 @@ If in sectioned mode, first switches to column mode."
   "Return list of marked issue IDs, or ID at point if none marked."
   (if beads-list--marked
       beads-list--marked
-    (when-let ((id (tabulated-list-get-id)))
+    (when-let ((id (beads-list--issue-id-at-point)))
       (list id))))
 
 (cl-defun beads-list--bulk-try-then-loop (ids bulk-fn per-id-fn
@@ -1413,7 +1470,7 @@ errors."
                     (lambda (id)  (beads-client-update id :status status))))
            (count (plist-get result :success))
            (errors (plist-get result :errors)))
-      (beads-list-refresh t)
+      (beads-list--refresh-current-view t)
       (if (> errors 0)
           (message "Updated %d issue(s), %d error(s)" count errors)
         (message "Updated %d issue(s) to %s" count status)))))
@@ -1432,7 +1489,7 @@ errors."
                     (lambda (id)  (beads-client-update id :priority priority))))
            (count (plist-get result :success))
            (errors (plist-get result :errors)))
-      (beads-list-refresh t)
+      (beads-list--refresh-current-view t)
       (if (> errors 0)
           (message "Updated %d issue(s), %d error(s)" count errors)
         (message "Updated %d issue(s) to P%d" count priority)))))
@@ -1454,7 +1511,7 @@ errors."
              (errors (plist-get result :errors))
              (blocked-ids (plist-get result :matched-ids)))
         (setq beads-list--marked nil)
-        (beads-list-refresh t)
+        (beads-list--refresh-current-view t)
         (cond
          (blocked-ids
           (message "Closed %d issue(s), %d blocked (press H on issue to view blockers)"
@@ -1483,7 +1540,7 @@ Prompts for confirmation."
              (count (plist-get result :success))
              (errors (plist-get result :errors)))
         (setq beads-list--marked nil)
-        (beads-list-refresh t)
+        (beads-list--refresh-current-view t)
         (if (> errors 0)
             (message "Deleted %d issue(s), %d error(s)" count errors)
           (message "Deleted %d issue(s)" count))))))
@@ -1533,7 +1590,7 @@ With completion for known assignees from current issues."
            (count (plist-get result :success))
            (errors (plist-get result :errors)))
       (setq beads-list--marked nil)
-      (beads-list-refresh t)
+      (beads-list--refresh-current-view t)
       (if (> errors 0)
           (message "Assigned %d issue(s) to %s, %d error(s)" count assignee errors)
         (message "Assigned %d issue(s) to %s" count assignee)))))
