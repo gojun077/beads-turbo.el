@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# elisp-perf-test: run deterministic ERT performance tests for beads.el.
+# Runs emacs --batch -Q in isolation. Safe for CI.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+export BEADS_PERF_SCALE="${BEADS_PERF_SCALE:-1}"
+export BEADS_PERF_STRICT="${BEADS_PERF_STRICT:-}"
+
+test_files=$(find "$ROOT/test" -name "*-perf-test.el" | sort)
+
+if [ -z "$test_files" ]; then
+    echo "No performance test files found"
+    exit 0
+fi
+
+count=$(echo "$test_files" | wc -l)
+echo "Running $count performance test file(s)..."
+echo "BEADS_PERF_SCALE=$BEADS_PERF_SCALE"
+if [ -n "$BEADS_PERF_STRICT" ]; then
+    echo "BEADS_PERF_STRICT=$BEADS_PERF_STRICT"
+fi
+echo
+
+# Portable mktemp across GNU (Linux) and BSD (macOS).
+# GNU's `--suffix=.el` is not supported by BSD mktemp, so create a base
+# tempfile with the standard XXXXXX template and add the `.el` suffix
+# ourselves.
+tmpbase=$(mktemp -t beads-elisp-perf-test.XXXXXX)
+tmpfile="${tmpbase}.el"
+mv "$tmpbase" "$tmpfile"
+trap 'rm -f "$tmpfile"' EXIT
+
+{
+  echo "(require 'ert)"
+  for tf in $test_files; do
+    echo "(load-file \"$tf\")"
+  done
+  echo
+  echo "(ert-run-tests-batch-and-exit)"
+} >"$tmpfile"
+
+rc=0
+emacs -Q --batch \
+    -L "$ROOT" \
+    -L "$ROOT/lisp" \
+    -L "$ROOT/test" \
+    -L "$ROOT/vendor/vui.el" \
+    -L "$ROOT/vendor/mysql.el" \
+    -l "$tmpfile" 2>&1 || rc=$?
+
+echo
+if [ "$rc" -eq 0 ]; then
+    echo "✓ All performance tests passed"
+else
+    echo "✗ Some performance tests failed"
+fi
+exit "$rc"
