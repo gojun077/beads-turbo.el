@@ -116,6 +116,22 @@ easy to mock)."
   "Test Dolt SQL transport is enabled by default."
   (should (eval (car (get 'beads-dolt-sql-enabled 'standard-value)) t)))
 
+(ert-deftest beads-dolt-sql-test-vendored-mysql-is-discoverable ()
+  "Test the vendored mysql.el dependency is on `load-path'."
+  (beads-dolt-sql--ensure-vendored-mysql-load-path)
+  (should (file-directory-p beads-dolt-sql--vendored-mysql-directory))
+  (should (file-exists-p
+           (expand-file-name "mysql.el" beads-dolt-sql--vendored-mysql-directory)))
+  (should (member beads-dolt-sql--vendored-mysql-directory load-path))
+  (should (locate-library "mysql")))
+
+(ert-deftest beads-dolt-sql-test-native-mysql-loads-vendored-library ()
+  "Test native mysql.el loading does not require a global package install."
+  (let ((load-path (remove beads-dolt-sql--vendored-mysql-directory load-path)))
+    (should (beads-dolt-sql--native-mysql-load))
+    (should (featurep 'mysql))
+    (should (member beads-dolt-sql--vendored-mysql-directory load-path))))
+
 (ert-deftest beads-dolt-sql-test-registered-after-activate ()
   "Test backend is registered after activate."
   (let ((beads-backend--registry beads-backend--registry))
@@ -415,6 +431,29 @@ easy to mock)."
       (should (listp result))
       (should (equal (alist-get 'id (car result)) "native-1"))
       (should (= (alist-get 'priority (car result)) 1)))))
+
+(ert-deftest beads-dolt-sql-test-native-mysql-reconnects-on-database-change ()
+  "Test native mysql.el connections are scoped to Dolt connection params."
+  (let ((beads-dolt-sql--native-mysql-conn 'old-conn)
+        (beads-dolt-sql--native-mysql-params '((database . "db_a")))
+        (disconnected nil)
+        (connected nil))
+    (cl-letf (((symbol-function 'beads-dolt-sql--native-mysql-disconnect)
+               (lambda ()
+                 (setq disconnected t)
+                 (setq beads-dolt-sql--native-mysql-conn nil)
+                 (setq beads-dolt-sql--native-mysql-params nil)))
+              ((symbol-function 'beads-dolt-sql--native-mysql-connect)
+               (lambda (dolt)
+                 (setq connected dolt)
+                 (setq beads-dolt-sql--native-mysql-conn 'new-conn)
+                 (setq beads-dolt-sql--native-mysql-params dolt)
+                 'new-conn)))
+      (should (eq (beads-dolt-sql--ensure-native-mysql-connected
+                   '((database . "db_b")))
+                  'new-conn))
+      (should disconnected)
+      (should (equal connected '((database . "db_b")))))))
 
 ;;; Operation-specific tests
 
@@ -1265,6 +1304,32 @@ correctness bug fixed alongside the performance fix in bdel-dgy."
           (should (equal (alist-get 'id (car issues-a)) "bd-a"))
           (should (equal (alist-get 'id (car issues-b)) "bd-b"))
           (should (equal (nreverse queries) '("db_a" "db_b"))))))))
+
+(ert-deftest beads-dolt-sql-test-native-execute-list-uses-project-root-for-sql-params ()
+  "Regression test: native mysql.el transport switches Dolt databases."
+  (let ((queries nil))
+    (cl-letf (((symbol-function 'beads-dolt-sql--native-mysql-available-p)
+               (lambda () t))
+              ((symbol-function 'beads-backend-dolt-sql--fetch-dolt-params)
+               (lambda (&optional project-root)
+                 `((host . "127.0.0.1")
+                   (port . 3310)
+                   (user . "root")
+                   (database . ,(if (equal project-root "/workspace/a/")
+                                    "db_a"
+                                  "db_b")))))
+              ((symbol-function 'beads-dolt-sql--native-mysql-query)
+               (lambda (_sql dolt)
+                 (push (alist-get 'database dolt) queries)
+                 (beads-dolt-sql--parse-json-output
+                  (if (equal (alist-get 'database dolt) "db_a")
+                      "[{\"id\":\"native-a\",\"title\":\"From A\"}]"
+                    "[{\"id\":\"native-b\",\"title\":\"From B\"}]")))))
+      (let ((issues-a (beads-backend-dolt-sql--execute-list nil "/workspace/a/"))
+            (issues-b (beads-backend-dolt-sql--execute-list nil "/workspace/b/")))
+        (should (equal (alist-get 'id (car issues-a)) "native-a"))
+        (should (equal (alist-get 'id (car issues-b)) "native-b"))
+        (should (equal (nreverse queries) '("db_a" "db_b")))))))
 
 ;;; Integration tests (only when live Dolt server is available)
 

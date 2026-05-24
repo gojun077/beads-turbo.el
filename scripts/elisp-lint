@@ -84,7 +84,7 @@ for f in $el_files; do
     fi
 
     checkdoc_out=$(emacs -Q --batch \
-        -L "$ROOT" -L "$ROOT/lisp" -L "$ROOT/test" -L "$ROOT/vendor/vui.el" \
+        -L "$ROOT" -L "$ROOT/lisp" -L "$ROOT/test" -L "$ROOT/vendor/vui.el" -L "$ROOT/vendor/mysql.el" \
         --eval "(require 'checkdoc)" \
         --eval "(setq checkdoc-autofix-style 'query)" \
         --eval "(checkdoc-file \"$f\")" 2>&1) || true
@@ -96,7 +96,7 @@ for f in $el_files; do
     fi
 
     compile_out=$(emacs -Q --batch \
-        -L "$ROOT" -L "$ROOT/lisp" -L "$ROOT/test" -L "$ROOT/vendor/vui.el" \
+        -L "$ROOT" -L "$ROOT/lisp" -L "$ROOT/test" -L "$ROOT/vendor/vui.el" -L "$ROOT/vendor/mysql.el" \
         --eval "(setq byte-compile-error-on-warn nil)" \
         -f batch-byte-compile "$f" 2>&1) || true
 

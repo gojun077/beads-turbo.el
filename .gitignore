@@ -7,6 +7,7 @@ dev/eln-cache/
 dev/elpa/
 vendor/*
 !vendor/vui.el
+!vendor/mysql.el
 
 # Generated docs (beads.texi is tracked for MELPA)
 docs/beads.info

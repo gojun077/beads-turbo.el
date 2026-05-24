@@ -28,7 +28,7 @@ for f in $el_files; do
     printf "Compiling %s..." "$rel"
 
     compile_out=$(emacs -Q --batch \
-        -L "$ROOT" -L "$ROOT/lisp" -L "$ROOT/vendor/vui.el" \
+        -L "$ROOT" -L "$ROOT/lisp" -L "$ROOT/vendor/vui.el" -L "$ROOT/vendor/mysql.el" \
         -f batch-byte-compile "$f" 2>&1) || compile_rc=$?
 
     if [ "${compile_rc:-0}" -ne 0 ]; then

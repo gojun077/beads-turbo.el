@@ -1,3 +1,6 @@
 [submodule "vendor/vui.el"]
 	path = vendor/vui.el
 	url = https://github.com/d12frosted/vui.el
+[submodule "vendor/mysql.el"]
+	path = vendor/mysql.el
+	url = https://github.com/LuciusChen/mysql.el

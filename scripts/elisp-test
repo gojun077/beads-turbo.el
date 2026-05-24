@@ -40,6 +40,7 @@ emacs -Q --batch \
     -L "$ROOT/lisp" \
     -L "$ROOT/test" \
     -L "$ROOT/vendor/vui.el" \
+    -L "$ROOT/vendor/mysql.el" \
     -l "$tmpfile" 2>&1 || rc=$?
 
 echo

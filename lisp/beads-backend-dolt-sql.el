@@ -56,6 +56,20 @@
 (require 'beads-backend)
 (require 'beads-client)
 
+(defconst beads-dolt-sql--vendored-mysql-directory
+  (let ((repo-root (file-name-directory
+                    (directory-file-name
+                     (file-name-directory (or load-file-name buffer-file-name))))))
+    (expand-file-name "vendor/mysql.el" repo-root))
+  "Directory containing the vendored mysql.el dependency.")
+
+(defun beads-dolt-sql--ensure-vendored-mysql-load-path ()
+  "Add the vendored mysql.el directory to `load-path' when present."
+  (when (file-directory-p beads-dolt-sql--vendored-mysql-directory)
+    (add-to-list 'load-path beads-dolt-sql--vendored-mysql-directory)))
+
+(beads-dolt-sql--ensure-vendored-mysql-load-path)
+
 (defgroup beads-dolt-sql nil
   "Direct Dolt SQL transport for beads.el read operations."
   :group 'beads
@@ -532,11 +546,13 @@ ORDER BY i.priority ASC, i.created_at DESC"
 
 (defun beads-dolt-sql--native-mysql-available-p ()
   "Return non-nil when Lucius Chen's mysql.el package can be loaded."
+  (beads-dolt-sql--ensure-vendored-mysql-load-path)
   (or (featurep 'mysql)
       (locate-library "mysql")))
 
 (defun beads-dolt-sql--native-mysql-load ()
   "Load mysql.el if available."
+  (beads-dolt-sql--ensure-vendored-mysql-load-path)
   (or (featurep 'mysql)
       (require 'mysql nil t)))
 
