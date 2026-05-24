@@ -58,10 +58,10 @@
 
 (defun beads-preview-trigger ()
   "Trigger issue preview after cursor movement.
-Only active when in beads-list-mode with preview mode enabled."
+Only active when in a Beads list view with preview mode enabled."
   (when (and beads-preview-mode
-             (derived-mode-p 'tabulated-list-mode)
-             (eq major-mode 'beads-list-mode))
+             (or (eq major-mode 'beads-list-mode)
+                 (eq major-mode 'beads-org-list-mode)))
     (if-let ((issue (beads-list--get-issue-at-point)))
         (beads-preview--start-timer issue)
       (beads-preview--cancel-timer))))

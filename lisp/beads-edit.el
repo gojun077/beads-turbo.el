@@ -28,6 +28,8 @@
 (require 'beads-client)
 (require 'beads-core)
 
+(declare-function beads-org-list-refresh "beads-list")
+
 (defgroup beads-edit nil
   "Field editing helpers for Beads issues."
   :group 'beads)
@@ -104,7 +106,10 @@ call it only for long text fields that need a normal editable buffer.
                   (beads-detail-refresh))
                  ((and (fboundp 'beads-list-refresh)
                        (derived-mode-p 'beads-list-mode))
-                  (beads-list-refresh))))))
+                  (beads-list-refresh))
+                 ((and (fboundp 'beads-org-list-refresh)
+                       (derived-mode-p 'beads-org-list-mode))
+                  (beads-org-list-refresh))))))
         (beads-client-error
          (message "Failed to update: %s" (error-message-string err)))))
 

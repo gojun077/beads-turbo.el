@@ -562,6 +562,14 @@ Use a key that is not overridden by `beads-list-mode-map' (e.g. `n')."
     (beads-org-list-mode)
     (should (eq (lookup-key beads-org-list-mode-map (kbd "g"))
                 #'beads-org-list-refresh))
+    (should (eq (lookup-key beads-org-list-mode-map (kbd "RET"))
+                #'beads-list-goto-issue))
+    (should (eq (lookup-key beads-org-list-mode-map (kbd "E"))
+                #'beads-list-edit-form))
+    (should (eq (lookup-key beads-org-list-mode-map (kbd "P"))
+                #'beads-preview-mode))
+    (should (eq (lookup-key beads-org-list-mode-map (kbd "H"))
+                #'beads-org-list-hierarchy-show))
     (should (eq (lookup-key beads-org-list-mode-map (kbd "n"))
                 #'org-next-visible-heading))
     (should (eq (lookup-key beads-org-list-mode-map (kbd "p"))
@@ -641,6 +649,83 @@ Use a key that is not overridden by `beads-list-mode-map' (e.g. `n')."
             (should (eq major-mode 'beads-list-mode))))
       (when (get-buffer buffer-name)
         (kill-buffer buffer-name)))))
+
+(ert-deftest beads-list-test-org-get-issue-at-heading-body ()
+  "Org list issue lookup resolves the containing issue heading from body text."
+  (let ((issues '(((id . "bd-parent") (title . "Parent") (status . "open"))
+                  ((id . "bd-child") (title . "Child") (status . "open")))))
+    (with-temp-buffer
+      (beads-org-list-mode)
+      (let ((inhibit-read-only t)
+            (beads-list--issues issues))
+        (insert "* TODO Parent\n:PROPERTIES:\n:BEADS_ID: bd-parent\n:END:\nBody text\n** TODO Child\n:PROPERTIES:\n:BEADS_ID: bd-child\n:END:\nChild body\n")
+        (goto-char (point-min))
+        (search-forward "Body text")
+        (should (equal (alist-get 'id (beads-list--get-issue-at-point)) "bd-parent"))
+        (search-forward "Child body")
+        (should (equal (alist-get 'id (beads-list--get-issue-at-point)) "bd-child"))))))
+
+(ert-deftest beads-list-test-org-get-issue-at-property-drawer ()
+  "Org list issue lookup resolves the current heading from property drawer lines."
+  (let ((issues '(((id . "bd-drawer") (title . "Drawer") (status . "open")))))
+    (with-temp-buffer
+      (beads-org-list-mode)
+      (let ((inhibit-read-only t)
+            (beads-list--issues issues))
+        (insert "* TODO Drawer\n:PROPERTIES:\n:BEADS_ID: bd-drawer\n:BEADS_STATUS: open\n:END:\n")
+        (goto-char (point-min))
+        (search-forward ":BEADS_STATUS:")
+        (should (equal (alist-get 'id (beads-list--get-issue-at-point)) "bd-drawer"))))))
+
+(ert-deftest beads-list-test-org-get-issue-at-no-issue-locations ()
+  "Org list issue lookup returns nil before headings and on metadata-only headings."
+  (let ((issues '(((id . "bd-real") (title . "Real") (status . "open")))))
+    (with-temp-buffer
+      (beads-org-list-mode)
+      (let ((inhibit-read-only t)
+            (beads-list--issues issues))
+        (insert "#+TITLE: Beads Issues\n\n* Section\nSection body\n** TODO Real\n:PROPERTIES:\n:BEADS_ID: bd-real\n:END:\n")
+        (goto-char (point-min))
+        (should (null (beads-list--get-issue-at-point)))
+        (search-forward "Section body")
+        (should (null (beads-list--get-issue-at-point)))))))
+
+(ert-deftest beads-list-test-org-ret-opens-heading-issue ()
+  "RET in org list opens the same detail path using the heading issue."
+  (let ((opened nil)
+        (issues '(((id . "bd-open") (title . "Open") (status . "open")))))
+    (with-temp-buffer
+      (beads-org-list-mode)
+      (let ((inhibit-read-only t)
+            (beads-list--issues issues))
+        (insert "* TODO Open\n:PROPERTIES:\n:BEADS_ID: bd-open\n:END:\n")
+        (cl-letf (((symbol-function 'beads-core-open-issue-detail)
+                   (lambda (issue) (setq opened issue))))
+          (beads-list-goto-issue)
+          (should (equal (alist-get 'id opened) "bd-open")))))))
+
+(ert-deftest beads-list-test-org-edit-title-targets-heading-issue ()
+  "Org edit commands target the issue identified by the current heading."
+  (let ((edited nil)
+        (refreshed nil)
+        (issues '(((id . "bd-parent") (title . "Parent") (status . "open"))
+                  ((id . "bd-child") (title . "Child") (status . "open")))))
+    (with-temp-buffer
+      (beads-org-list-mode)
+      (let ((inhibit-read-only t)
+            (beads-list--issues issues))
+        (insert "* TODO Parent\n:PROPERTIES:\n:BEADS_ID: bd-parent\n:END:\n** TODO Child\n:PROPERTIES:\n:BEADS_ID: bd-child\n:END:\nChild body\n")
+        (goto-char (point-min))
+        (search-forward "Child body")
+        (cl-letf (((symbol-function 'beads-edit-field-minibuffer)
+                   (lambda (id field current prompt)
+                     (setq edited (list id field current prompt))
+                     t))
+                  ((symbol-function 'beads-org-list-refresh)
+                   (lambda (&optional _silent) (setq refreshed t))))
+          (beads-list-edit-title)
+          (should (equal edited '("bd-child" :title "Child" "Title: ")))
+          (should refreshed))))))
 
 (ert-deftest beads-list-test-get-issue-at-point-found ()
   "Test that beads-list--get-issue-at-point returns issue when found."

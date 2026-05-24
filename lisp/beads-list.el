@@ -370,6 +370,13 @@ Used to ensure refresh uses the correct project context.")
   (let ((map (make-sparse-keymap)))
     (set-keymap-parent map org-mode-map)
     (define-key map (kbd "g") #'beads-org-list-refresh)
+    (define-key map (kbd "RET") #'beads-list-goto-issue)
+    (define-key map (kbd "e") beads-list-edit-map)
+    (define-key map (kbd "E") #'beads-list-edit-form)
+    (define-key map (kbd "H") #'beads-org-list-hierarchy-show)
+    (define-key map (kbd "P") #'beads-preview-mode)
+    (define-key map (kbd "D") #'beads-org-list-delete-issue)
+    (define-key map (kbd "R") #'beads-org-list-reopen-issue)
     (define-key map (kbd "n") #'org-next-visible-heading)
     (define-key map (kbd "p") #'org-previous-visible-heading)
     (define-key map (kbd "TAB") #'org-cycle)
@@ -1029,8 +1036,31 @@ Shows ↑ for has parents, ↓ for has children, ↕ for both."
 (defun beads-list--get-issue-at-point ()
   "Get issue data at current line.
 Returns the issue alist or nil if not found."
-  (when-let ((id (beads-list--tabulated-id-at-point)))
+  (when-let ((id (cond
+                  ((derived-mode-p 'beads-org-list-mode)
+                   (beads-list--org-id-at-point))
+                  ((derived-mode-p 'tabulated-list-mode)
+                   (beads-list--tabulated-id-at-point)))))
     (beads-list-model-find-by-id beads-list--issues id)))
+
+(defun beads-list--org-id-at-point ()
+  "Return the BEADS_ID for the org heading at point, or nil.
+
+The lookup is intentionally non-inheriting so commands in generated
+org list buffers do not accidentally target a parent issue when point is
+on a group/section heading or another heading without Beads metadata."
+  (when (and (derived-mode-p 'org-mode)
+             (not (org-before-first-heading-p)))
+    (org-entry-get nil "BEADS_ID" nil)))
+
+(defun beads-list--refresh-current-view (&optional silent)
+  "Refresh the current Beads list view.
+When SILENT is non-nil, suppress the refresh message where supported."
+  (cond
+   ((derived-mode-p 'beads-org-list-mode)
+    (beads-org-list-refresh silent))
+   ((derived-mode-p 'beads-list-mode)
+    (beads-list-refresh silent))))
 
 (defun beads-list--has-active-filter ()
   "Return non-nil if any filter is currently active."
@@ -1391,7 +1421,7 @@ re-renders the detail buffer when the data arrives."
             (title (alist-get 'title issue)))
         (require 'beads-edit)
         (when (beads-edit-field-minibuffer id :title title "Title: ")
-          (beads-list-refresh)))
+          (beads-list--refresh-current-view)))
     (message "No issue at point")))
 
 (defun beads-list-edit-status ()
@@ -1404,7 +1434,7 @@ re-renders the detail buffer when the data arrives."
         (when (beads-edit-field-completing
                id :status status "Status: "
                '("open" "in_progress" "blocked" "hooked" "closed"))
-          (beads-list-refresh)))
+          (beads-list--refresh-current-view)))
     (message "No issue at point")))
 
 (defun beads-list-edit-priority ()
@@ -1422,7 +1452,7 @@ re-renders the detail buffer when the data arrives."
                   (progn
                     (beads-client-update id :priority new-priority)
                     (message "Updated priority for %s" id)
-                    (beads-list-refresh))
+                    (beads-list--refresh-current-view))
                 (beads-client-error
                  (message "Failed to update: %s" (error-message-string err))))))))
     (message "No issue at point")))
@@ -1437,7 +1467,7 @@ re-renders the detail buffer when the data arrives."
         (when (beads-edit-field-completing
                id :issue-type type "Type: "
                (beads-get-types))
-          (beads-list-refresh)))
+          (beads-list--refresh-current-view)))
     (message "No issue at point")))
 
 (defun beads-list-edit-description ()
@@ -1452,6 +1482,50 @@ re-renders the detail buffer when the data arrives."
             (beads-edit-field-markdown id :description description))
         (beads-client-error
          (message "Failed to fetch issue: %s" (error-message-string err))))
+    (message "No issue at point")))
+
+(defun beads-org-list-hierarchy-show ()
+  "Display dependency tree for the org list issue at point."
+  (interactive)
+  (if-let ((issue (beads-list--get-issue-at-point)))
+      (beads-hierarchy-show (alist-get 'id issue))
+    (message "No issue at point")))
+
+(defun beads-org-list-delete-issue ()
+  "Permanently delete the org list issue at point.
+Prompts for confirmation with `yes-or-no-p'."
+  (interactive)
+  (if-let ((issue (beads-list--get-issue-at-point)))
+      (let* ((id (alist-get 'id issue))
+             (title (alist-get 'title issue))
+             (display-title (if (and title (> (length title) 30))
+                                (concat (substring title 0 27) "...")
+                              (or title "")))
+             (prompt (if (string-empty-p display-title)
+                         (format "Permanently delete issue %s? " id)
+                       (format "Permanently delete '%s' (%s)? " display-title id))))
+        (when (yes-or-no-p prompt)
+          (condition-case err
+              (progn
+                (beads-client-delete (list id))
+                (message "Deleted issue %s" id)
+                (beads-org-list-refresh))
+            (beads-client-error
+             (message "Failed to delete issue: %s" (error-message-string err))))))
+    (message "No issue at point")))
+
+(defun beads-org-list-reopen-issue ()
+  "Reopen the org list issue at point."
+  (interactive)
+  (if-let ((issue (beads-list--get-issue-at-point)))
+      (let ((id (alist-get 'id issue)))
+        (condition-case err
+            (progn
+              (beads-client-update id :status "open")
+              (message "Reopened issue %s" id)
+              (beads-org-list-refresh))
+          (beads-client-error
+           (message "Failed to reopen issue: %s" (error-message-string err)))))
     (message "No issue at point")))
 
 (defun beads-org-list--buffer-name ()
