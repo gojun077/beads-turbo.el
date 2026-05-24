@@ -129,6 +129,71 @@ noise in batch runs."
    :show-only-marked nil
    :sort-mode 'sectioned))
 
+(defun beads-perf-test--broad-hierarchy-issues (children-count)
+  "Return one root issue with CHILDREN-COUNT direct children."
+  (let ((issues (list (list (cons 'id "broad-root")
+                            (cons 'title "Broad root")))))
+    (cl-loop for i from 0 below children-count do
+      (push (list (cons 'id (format "broad-child-%05d" i))
+                  (cons 'title (format "Broad child %05d" i))
+                  (cons 'parent "broad-root"))
+            issues))
+    (nreverse issues)))
+
+(defun beads-perf-test--deep-hierarchy-issues (count)
+  "Return COUNT issues in a single parent-child chain."
+  (let (issues)
+    (cl-loop for i from 0 below count do
+      (push (list (cons 'id (format "deep-%05d" i))
+                  (cons 'title (format "Deep issue %05d" i))
+                  (cons 'parent (unless (zerop i)
+                                  (format "deep-%05d" (1- i)))))
+            issues))
+    (nreverse issues)))
+
+(defun beads-perf-test--forest-count (nodes)
+  "Return total node count in forest NODES."
+  (let ((stack (copy-sequence nodes))
+        (count 0))
+    (while stack
+      (let ((node (pop stack)))
+        (cl-incf count)
+        (setq stack (append (alist-get 'children node) stack))))
+    count))
+
+(defun beads-perf-test--forest-max-depth (nodes)
+  "Return maximum tree depth in forest NODES."
+  (let ((stack (mapcar (lambda (node) (cons node 1)) nodes))
+        (max-depth 0))
+    (while stack
+      (let* ((entry (pop stack))
+             (node (car entry))
+             (depth (cdr entry)))
+        (setq max-depth (max max-depth depth))
+        (dolist (child (alist-get 'children node))
+          (push (cons child (1+ depth)) stack))))
+    max-depth))
+
+(defun beads-perf-test--root-child-count (node)
+  "Return direct child count for NODE."
+  (let ((count 0))
+    (dolist (_child (alist-get 'children node) count)
+      (cl-incf count)
+      count)))
+
+(defun beads-perf-test--assert-broad-forest-correct (forest expected-count)
+  "Assert broad hierarchy FOREST contains EXPECTED-COUNT issues."
+  (should (= 1 (length forest)))
+  (should (= expected-count (beads-perf-test--forest-count forest)))
+  (should (= (1- expected-count)
+             (beads-perf-test--root-child-count (car forest)))))
+
+(defun beads-perf-test--assert-deep-forest-correct (forest expected-count)
+  "Assert deep hierarchy FOREST contains EXPECTED-COUNT issues."
+  (should (= 1 (length forest)))
+  (should (= expected-count (beads-perf-test--forest-count forest)))
+  (should (= expected-count (beads-perf-test--forest-max-depth forest))))
+
 (ert-deftest beads-perf-test-list-model-large-flat-build ()
   "Flat list model build stays correct and near-linear on large fixtures."
   (let* ((base-size (beads-perf-test--scaled-size 400))
@@ -150,6 +215,57 @@ noise in batch runs."
     (beads-perf-test--assert-under base 1.0)
     (beads-perf-test--assert-under larger 3.0)
     (beads-perf-test--assert-growth-under base larger 8.0)))
+
+(ert-deftest beads-perf-test-list-model-hierarchy-forest-build ()
+  "Hierarchy forest construction stays correct on broad and deep fixtures."
+  (let* ((broad-base-children (beads-perf-test--scaled-size 200))
+         (broad-larger-children (beads-perf-test--scaled-size 800))
+         (deep-base-size (beads-perf-test--scaled-size 100))
+         (deep-larger-size (beads-perf-test--scaled-size 400))
+         (broad-base-issues
+          (beads-perf-test--broad-hierarchy-issues broad-base-children))
+         (broad-larger-issues
+          (beads-perf-test--broad-hierarchy-issues broad-larger-children))
+         (deep-base-issues
+          (beads-perf-test--deep-hierarchy-issues deep-base-size))
+         (deep-larger-issues
+          (beads-perf-test--deep-hierarchy-issues deep-larger-size))
+         (broad-base (beads-perf-test--measure
+                      "beads-list-model-flat-issues-to-forest broad"
+                      (length broad-base-issues)
+                      (lambda ()
+                        (beads-list-model-flat-issues-to-forest
+                         broad-base-issues))))
+         (broad-larger (beads-perf-test--measure
+                        "beads-list-model-flat-issues-to-forest broad"
+                        (length broad-larger-issues)
+                        (lambda ()
+                          (beads-list-model-flat-issues-to-forest
+                           broad-larger-issues))))
+         (deep-base (beads-perf-test--measure
+                     "beads-list-model-flat-issues-to-forest deep"
+                     (length deep-base-issues)
+                     (lambda ()
+                       (beads-list-model-flat-issues-to-forest
+                        deep-base-issues))))
+         (deep-larger (beads-perf-test--measure
+                       "beads-list-model-flat-issues-to-forest deep"
+                       (length deep-larger-issues)
+                       (lambda ()
+                         (beads-list-model-flat-issues-to-forest
+                          deep-larger-issues)))))
+    (beads-perf-test--assert-broad-forest-correct
+     (plist-get broad-base :result) (length broad-base-issues))
+    (beads-perf-test--assert-broad-forest-correct
+     (plist-get broad-larger :result) (length broad-larger-issues))
+    (beads-perf-test--assert-deep-forest-correct
+     (plist-get deep-base :result) (length deep-base-issues))
+    (beads-perf-test--assert-deep-forest-correct
+     (plist-get deep-larger :result) (length deep-larger-issues))
+    (beads-perf-test--assert-under broad-larger 3.0)
+    (beads-perf-test--assert-under deep-larger 3.0)
+    (beads-perf-test--assert-growth-under broad-base broad-larger 8.0)
+    (beads-perf-test--assert-growth-under deep-base deep-larger 12.0)))
 
 (provide 'beads-perf-test)
 ;;; beads-perf-test.el ends here

@@ -187,25 +187,6 @@ property contract.  Empty strings are treated as no parent."
   "Return NODE's children cons cell."
   (assq 'children node))
 
-(defun beads-list-model--ancestor-p (candidate-id node by-id)
-  "Return non-nil if CANDIDATE-ID is NODE or one of NODE's parents."
-  (let ((seen nil)
-        (current node)
-        found)
-    (while (and current (not found))
-      (let* ((issue (beads-list-model--node-issue current))
-             (id (alist-get 'id issue))
-             (parent-id (beads-list-model-parent-id issue)))
-        (cond
-         ((equal candidate-id id)
-          (setq found t))
-         ((or (null parent-id) (member id seen))
-          (setq current nil))
-         (t
-          (push id seen)
-          (setq current (gethash parent-id by-id))))))
-    found))
-
 (defun beads-list-model-flat-issues-to-forest (issues)
   "Return a parent-child forest built from flat ISSUES.
 
@@ -219,6 +200,7 @@ Duplicate issue ids are ignored after their first occurrence, so each
 id appears at most once in the output.  If a parent cycle is detected,
 the affected issue is kept as a root instead of being linked twice."
   (let ((by-id (make-hash-table :test #'equal))
+        (cycle-ids (make-hash-table :test #'equal))
         nodes roots)
     (seq-doseq (issue issues)
       (let ((id (alist-get 'id issue)))
@@ -227,6 +209,31 @@ the affected issue is kept as a root instead of being linked twice."
             (puthash id node by-id)
             (push node nodes)))))
     (setq nodes (nreverse nodes))
+    (let ((visiting (make-hash-table :test #'equal))
+          (visited (make-hash-table :test #'equal)))
+      (cl-labels
+          ((visit
+            (id stack)
+            (cond
+             ((gethash id visited) nil)
+             ((gethash id visiting)
+              (let ((mark-cycle t))
+                (dolist (stack-id stack)
+                  (when mark-cycle
+                    (puthash stack-id t cycle-ids))
+                  (when (equal stack-id id)
+                    (setq mark-cycle nil)))))
+             (t
+              (puthash id t visiting)
+              (when-let* ((node (gethash id by-id))
+                          (issue (beads-list-model--node-issue node))
+                          (parent-id (beads-list-model-parent-id issue)))
+                (when (gethash parent-id by-id)
+                  (visit parent-id (cons id stack))))
+              (remhash id visiting)
+              (puthash id t visited)))))
+        (dolist (node nodes)
+          (visit (alist-get 'id (beads-list-model--node-issue node)) nil))))
     (dolist (node nodes)
       (let* ((issue (beads-list-model--node-issue node))
              (id (alist-get 'id issue))
@@ -234,10 +241,13 @@ the affected issue is kept as a root instead of being linked twice."
              (parent (and parent-id (gethash parent-id by-id))))
         (if (and parent
                  (not (equal parent-id id))
-                 (not (beads-list-model--ancestor-p id parent by-id)))
+                 (not (gethash id cycle-ids)))
             (let ((children-cell (beads-list-model--node-children-cell parent)))
-              (setcdr children-cell (append (cdr children-cell) (list node))))
+              (push node (cdr children-cell)))
           (push node roots))))
+    (dolist (node nodes)
+      (let ((children-cell (beads-list-model--node-children-cell node)))
+        (setcdr children-cell (nreverse (cdr children-cell)))))
     (nreverse roots)))
 
 (provide 'beads-list-model)

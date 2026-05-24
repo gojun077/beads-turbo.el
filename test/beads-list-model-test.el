@@ -104,6 +104,15 @@
     (should (equal (alist-get 'title (alist-get 'issue (car forest)))
                    "First root"))))
 
+(ert-deftest beads-list-model-test-flat-issues-to-forest-cycle-nodes-are-roots ()
+  "Parent cycles are broken by keeping affected issues as roots."
+  (let* ((issues '(((id . "a") (parent . "b"))
+                   ((id . "b") (parent . "a"))
+                   ((id . "child") (parent . "a"))))
+         (forest (beads-list-model-flat-issues-to-forest issues)))
+    (should (equal (beads-list-model-test--tree-ids forest)
+                   '("a" "child" "b")))))
+
 (ert-deftest beads-list-model-test-flat-issues-to-forest-filtered-subset-orphans-child ()
   "Filtered subsets can be tree-built without the filtered-out parent."
   (let* ((issues '(((id . "parent") (status . "closed"))
