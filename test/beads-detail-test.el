@@ -999,6 +999,22 @@ unknown-vnode error."
         (should (string-match-p "Depends on:" content))
         (should (string-match-p "Children:" content))))))
 
+(ert-deftest beads-detail-test-vui-metadata-renders-labels ()
+  "The vui detail metadata row should display issue labels."
+  (require 'beads-vui)
+  (let ((issue '((id . "bd-vui-labels-1")
+                 (title . "Labels in detail view")
+                 (status . "open")
+                 (priority . 2)
+                 (issue_type . "task")
+                 (labels . ["backend" "urgent"]))))
+    (with-temp-buffer
+      (vui-render (vui-component 'beads-vui-metadata-row :issue issue)
+                  (current-buffer))
+      (let ((content (buffer-string)))
+        (should (string-match-p "Labels:" content))
+        (should (string-match-p "backend, urgent" content))))))
+
 (ert-deftest beads-detail-test-refresh-fn-switches-to-detail-buffer ()
   "Regression test: refresh-fn closure captured by `beads-detail--render-vui'
 must switch to the detail buffer it was created for, even when invoked
