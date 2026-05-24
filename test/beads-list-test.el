@@ -599,6 +599,79 @@ Use a key that is not overridden by `beads-list-mode-map' (e.g. `n')."
         (should (string-match-p "^\\* TODO \\[#B\\] First :task:" (buffer-string)))
         (should (string-match-p "^\\* DONE Second :bug:" (buffer-string)))))))
 
+(ert-deftest beads-list-test-org-list-refresh-preserves-point-by-id ()
+  "Sync org refresh keeps point on the same bead heading when it still exists."
+  (let ((issues '(((id . "bd-a") (title . "First") (status . "open"))
+                  ((id . "bd-b") (title . "Second") (status . "open"))
+                  ((id . "bd-c") (title . "Third") (status . "open")))))
+    (with-temp-buffer
+      (beads-org-list-mode)
+      (cl-letf (((symbol-function 'beads-cache-refresh)
+                 (lambda (&rest _args) (cons t issues))))
+        (beads-org-list-refresh t)
+        (should (beads-list--org-goto-id "bd-b"))
+        (beads-org-list-refresh t)
+        (should (equal (beads-list--org-id-at-point) "bd-b"))))))
+
+(ert-deftest beads-list-test-org-list-refresh-falls-back-nearby-when-id-disappears ()
+  "Org refresh falls back to a nearby issue heading instead of point-min."
+  (let ((first '(((id . "bd-a") (title . "First") (status . "open"))
+                 ((id . "bd-b") (title . "Second") (status . "open"))
+                 ((id . "bd-c") (title . "Third") (status . "open"))))
+        (second '(((id . "bd-a") (title . "First") (status . "open"))
+                  ((id . "bd-c") (title . "Third") (status . "open")))))
+    (with-temp-buffer
+      (beads-org-list-mode)
+      (let ((calls 0))
+        (cl-letf (((symbol-function 'beads-cache-refresh)
+                   (lambda (&rest _args)
+                     (cl-incf calls)
+                     (cons t (if (= calls 1) first second)))))
+          (beads-org-list-refresh t)
+          (should (beads-list--org-goto-id "bd-b"))
+          (beads-org-list-refresh t)
+          (should (member (beads-list--org-id-at-point) '("bd-a" "bd-c")))
+          (should-not (equal (beads-list--org-id-at-point) "bd-b"))
+          (should-not (= (point) (point-min))))))))
+
+(ert-deftest beads-list-test-org-list-refresh-preserves-folded-subtrees ()
+  "Org refresh reapplies folded issue subtrees by bead ID."
+  (let ((issues '(((id . "bd-parent")
+                   (title . "Parent")
+                   (status . "open")
+                   (dependent_count . 1))
+                  ((id . "bd-child")
+                   (title . "Child")
+                   (status . "open")
+                   (parent . "bd-parent")))))
+    (with-temp-buffer
+      (beads-org-list-mode)
+      (cl-letf (((symbol-function 'beads-cache-refresh)
+                 (lambda (&rest _args) (cons t issues))))
+        (beads-org-list-refresh t)
+        (should (beads-list--org-goto-id "bd-parent"))
+        (org-fold-hide-subtree)
+        (should (beads-list--org-heading-folded-p))
+        (beads-org-list-refresh t)
+        (should (equal (beads-list--org-id-at-point) "bd-parent"))
+        (should (beads-list--org-heading-folded-p))))))
+
+(ert-deftest beads-list-test-org-list-refresh-async-preserves-point-by-id ()
+  "Async org refresh keeps point on the same bead heading when it still exists."
+  (let ((issues '(((id . "bd-a") (title . "First") (status . "open"))
+                  ((id . "bd-b") (title . "Second") (status . "open"))
+                  ((id . "bd-c") (title . "Third") (status . "open")))))
+    (with-temp-buffer
+      (let ((beads-cache-enabled nil))
+        (beads-org-list-mode)
+        (cl-letf (((symbol-function 'beads-client-list-async)
+                   (lambda (callback &rest _args)
+                     (funcall callback nil issues))))
+          (beads-org-list-refresh-async t)
+          (should (beads-list--org-goto-id "bd-b"))
+          (beads-org-list-refresh-async t)
+          (should (equal (beads-list--org-id-at-point) "bd-b")))))))
+
 (ert-deftest beads-list-test-org-list-command-creates-project-scoped-buffer ()
   "Experimental org command creates a generated project-pinned buffer."
   (let* ((project-root (file-name-as-directory

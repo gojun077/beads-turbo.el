@@ -616,8 +616,22 @@ Shared by `beads-list-refresh' (sync) and `beads-list-refresh-async'
 When SILENT is non-nil, suppress the refresh message.
 MESSAGE-PREFIX (default \"Refreshed\") is the verb used in the message.
 
+Preserves point by `BEADS_ID' when possible, falls back to a nearby
+heading when the current issue no longer exists, and reapplies folded
+subtrees by issue ID after regenerating the org text.
+
 Must be called with a `beads-org-list-mode' buffer current."
-  (let* ((model (beads-list-model-build all-issues :sort-mode 'sectioned))
+  (let* ((saved-id (beads-list--org-id-at-point))
+         (saved-index (and saved-id
+                           (cl-position saved-id beads-list--issues
+                                        :key (lambda (issue)
+                                               (alist-get 'id issue))
+                                        :test #'equal)))
+         (saved-line (line-number-at-pos))
+         (saved-start-line (when-let ((win (get-buffer-window (current-buffer))))
+                             (line-number-at-pos (window-start win))))
+         (folded-ids (beads-list--org-folded-ids))
+         (model (beads-list-model-build all-issues :sort-mode 'sectioned))
          (display-issues (beads-list-model-display-issues model))
          (org-text (beads-list-render-org display-issues))
          (inhibit-read-only t))
@@ -628,7 +642,21 @@ Must be called with a `beads-org-list-mode' buffer current."
     (unless (string= org-text "")
       (insert org-text)
       (insert "\n"))
-    (goto-char (point-min))
+    (beads-list--org-restore-folds folded-ids)
+    (cond
+     ((and saved-id (beads-list--org-goto-id saved-id)))
+     ((and saved-index display-issues)
+      (beads-list--org-goto-id
+       (alist-get 'id (nth (min saved-index (1- (length display-issues)))
+                           display-issues))))
+     (t
+      (beads-list--org-goto-near-line saved-line)))
+    (when-let ((win (get-buffer-window (current-buffer)))
+               (line saved-start-line))
+      (save-excursion
+        (goto-char (point-min))
+        (forward-line (1- (min line (line-number-at-pos (point-max)))))
+        (set-window-start win (point))))
     (beads-list--update-mode-line (beads-list-model-stats model))
     (unless silent
       (message "%s %d issues (org)"
@@ -1052,6 +1080,71 @@ on a group/section heading or another heading without Beads metadata."
   (when (and (derived-mode-p 'org-mode)
              (not (org-before-first-heading-p)))
     (org-entry-get nil "BEADS_ID" nil)))
+
+(defun beads-list--org-goto-id (id)
+  "Move point to the org heading with BEADS_ID equal to ID.
+Returns t when the heading is found."
+  (let (found)
+    (goto-char (point-min))
+    (while (and (not found)
+                (re-search-forward org-heading-regexp nil t))
+      (beginning-of-line)
+      (if (equal id (org-entry-get nil "BEADS_ID" nil))
+          (setq found t)
+        (forward-line 1)))
+    found))
+
+(defun beads-list--org-goto-near-line (line)
+  "Move point to a deterministic nearby issue heading around LINE.
+Prefer the heading containing LINE, then the next heading, then the
+previous heading, and finally `point-min' for an empty generated list."
+  (goto-char (point-min))
+  (forward-line (1- (min (max line 1)
+                         (line-number-at-pos (point-max)))))
+  (cond
+   ((and (org-at-heading-p)
+         (beads-list--org-id-at-point)))
+   ((and (not (org-before-first-heading-p))
+         (save-excursion
+           (org-back-to-heading t)
+           (beads-list--org-id-at-point)))
+    (org-back-to-heading t))
+   ((re-search-forward org-heading-regexp nil t)
+    (beginning-of-line))
+   ((re-search-backward org-heading-regexp nil t)
+    (beginning-of-line))
+   (t
+    (goto-char (point-min)))))
+
+(defun beads-list--org-heading-folded-p ()
+  "Return non-nil when the current org heading's subtree is folded."
+  (save-excursion
+    (end-of-line)
+    (or (and (fboundp 'org-fold-folded-p)
+             (org-fold-folded-p (point)))
+        (outline-invisible-p (point)))))
+
+(defun beads-list--org-folded-ids ()
+  "Return BEADS_ID values for currently folded org issue subtrees."
+  (let (ids)
+    (when (derived-mode-p 'org-mode)
+      (save-excursion
+        (goto-char (point-min))
+        (while (re-search-forward org-heading-regexp nil t)
+          (beginning-of-line)
+          (when-let ((id (and (beads-list--org-heading-folded-p)
+                              (org-entry-get nil "BEADS_ID" nil))))
+            (push id ids))
+          (forward-line 1))))
+    (nreverse ids)))
+
+(defun beads-list--org-restore-folds (ids)
+  "Fold generated org issue subtrees whose BEADS_ID is in IDS."
+  (when ids
+    (save-excursion
+      (dolist (id ids)
+        (when (beads-list--org-goto-id id)
+          (org-fold-hide-subtree))))))
 
 (defun beads-list--refresh-current-view (&optional silent)
   "Refresh the current Beads list view.
