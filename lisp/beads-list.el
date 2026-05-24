@@ -163,6 +163,48 @@ across the entire row for maximum visibility."
   "Column definitions for beads list view.
 Each entry is (SYMBOL . (HEADER WIDTH SORTABLE FORMATTER)).")
 
+(defconst beads-list--org-status-todo-map
+  '(("open" . "TODO")
+    ("in_progress" . "NEXT")
+    ("blocked" . "WAIT")
+    ("hooked" . "WAIT")
+    ("deferred" . "WAIT")
+    ("closed" . "DONE"))
+  "Mapping from beads issue status strings to org TODO keywords.
+Unknown or missing statuses use TODO in headings and keep their raw
+status only in the `BEADS_STATUS' property.")
+
+(defconst beads-list--org-property-fields
+  '((BEADS_ID . id)
+    (BEADS_STATUS . status)
+    (BEADS_TYPE . issue_type)
+    (BEADS_PRIORITY . priority)
+    (BEADS_ASSIGNEE . assignee)
+    (BEADS_LABELS . labels)
+    (BEADS_PARENT . parent)
+    (BEADS_PARENT . parent_id)
+    (BEADS_DEPENDENCY_COUNT . dependency_count)
+    (BEADS_DEPENDENT_COUNT . dependent_count)
+    (BEADS_CREATED_AT . created_at)
+    (BEADS_UPDATED_AT . updated_at)
+    (BEADS_CLOSED_AT . closed_at)
+    (BEADS_EXTERNAL_REF . external_ref)
+    (BEADS_SPEC_ID . spec_id)
+    (BEADS_SOURCE_REPO . source_repo))
+  "Org property drawer contract for a beads issue.
+
+Each issue renders as one org task heading:
+
+  * TODO [#B] Issue title :task:
+
+The heading intentionally stays compact: it contains only the org
+TODO keyword, optional org priority cookie, title, and optional issue
+type as an org tag.  Stable lookup and wide metadata live in the
+property drawer.  `BEADS_ID' is the canonical property for looking up
+the issue at point.  Missing or empty values are omitted, including
+unknown fields, so headings and drawers do not grow noisy.  If both
+`parent' and `parent_id' are present, `parent' wins.")
+
 (defvar-local beads-list--marked nil
   "List of marked issue IDs in current buffer.")
 
@@ -630,6 +672,81 @@ Returns t if found, nil otherwise."
             (let ((id (alist-get 'id issue)))
               (list id (beads-list--build-entry issue))))
           issues))
+
+(defun beads-list--org-todo-keyword (issue)
+  "Return the org TODO keyword for ISSUE's beads status."
+  (or (cdr (assoc (alist-get 'status issue) beads-list--org-status-todo-map))
+      "TODO"))
+
+(defun beads-list--org-priority-cookie (issue)
+  "Return an org priority cookie for ISSUE, or nil when absent.
+Beads P0/P1/P2 map to org A/B/C respectively.  Lower-priority
+beads values are omitted to keep headings compact."
+  (pcase (alist-get 'priority issue)
+    (0 "[#A]")
+    (1 "[#B]")
+    (2 "[#C]")
+    (_ nil)))
+
+(defun beads-list--org-tag (value)
+  "Return VALUE converted to an org tag-safe string, or nil.
+Spaces and punctuation become underscores; empty results are omitted."
+  (when (and value (stringp value) (> (length value) 0))
+    (let ((tag (replace-regexp-in-string "[^[:alnum:]_@#%]" "_" value)))
+      (unless (string= tag "")
+        tag))))
+
+(defun beads-list--org-heading (issue &optional level)
+  "Return a compact org heading for ISSUE at LEVEL.
+The heading contains stars, TODO keyword, optional org priority
+cookie, title, and optional issue type as a tag.  Wide metadata is
+reserved for `beads-list--org-properties'."
+  (let* ((stars (make-string (or level 1) ?*))
+         (todo (beads-list--org-todo-keyword issue))
+         (priority (beads-list--org-priority-cookie issue))
+         (title (or (alist-get 'title issue) ""))
+         (type-tag (beads-list--org-tag (alist-get 'issue_type issue)))
+         (parts (delq nil (list stars todo priority title))))
+    (concat (mapconcat #'identity parts " ")
+            (if type-tag (format " :%s:" type-tag) ""))))
+
+(defun beads-list--org-property-value (value)
+  "Return VALUE formatted for an org property drawer, or nil if empty."
+  (cond
+   ((null value) nil)
+   ((stringp value) (unless (string= value "") value))
+   ((vectorp value) (beads-list--org-property-value (append value nil)))
+   ((listp value)
+    (let ((items (delq nil (mapcar #'beads-list--org-property-value value))))
+      (unless (null items)
+        (mapconcat #'identity items ","))))
+   (t (format "%s" value))))
+
+(defun beads-list--org-properties (issue)
+  "Return ISSUE metadata as org property drawer pairs.
+The returned alist has string property names, including stable lookup
+property `BEADS_ID'.  Missing and empty values are omitted."
+  (let (properties seen)
+    (dolist (field beads-list--org-property-fields)
+      (let* ((property (car field))
+             (source (cdr field))
+             (value (beads-list--org-property-value (alist-get source issue))))
+        (when (and value (not (memq property seen)))
+          (push property seen)
+          (push (cons (symbol-name property) value) properties))))
+    (nreverse properties)))
+
+(defun beads-list--org-property-drawer (issue)
+  "Return an org property drawer string for ISSUE.
+Returns an empty string when ISSUE has no non-empty org properties."
+  (let ((properties (beads-list--org-properties issue)))
+    (if properties
+        (concat ":PROPERTIES:\n"
+                (mapconcat (lambda (property)
+                             (format ":%s: %s" (car property) (cdr property)))
+                           properties "\n")
+                "\n:END:")
+      "")))
 
 (defun beads-list--format-id (issue)
   "Format ID column for ISSUE."
