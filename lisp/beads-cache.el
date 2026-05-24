@@ -143,19 +143,22 @@ When FORCE is non-nil, skip the freshness check and always re-fetch.
 
 If `beads-cache-enabled' is nil, or the backend does not support
 the freshness check, or no project cache can be resolved, this
-falls through to a plain `beads-client-list' with no caching."
+falls through to a plain `beads-client-list' with no caching.
+
+The cached list is explicitly requested with `:all t' so list views use
+the same all-normal-issues contract across bd CLI and Dolt SQL backends."
   (let ((cache (or cache (beads-cache-for-project))))
     (cond
      ;; No cache available: passthrough.
      ((or (not beads-cache-enabled) (null cache))
-      (cons t (beads-client-list)))
+      (cons t (beads-client-list '(:all t))))
      ;; Backend can't check freshness: passthrough.
      ((not (beads-cache-supported-p))
-      (cons t (beads-client-list)))
+      (cons t (beads-client-list '(:all t))))
      ;; Forced refresh, or cold cache: capture token BEFORE list.
      ((or force (null (beads-cache-freshness-token cache)))
       (let* ((token (beads-cache--fetch-token))
-             (issues (beads-client-list)))
+             (issues (beads-client-list '(:all t))))
         (setf (beads-cache-freshness-token cache) token)
         (setf (beads-cache-issues cache) issues)
         (cons t issues)))
@@ -165,7 +168,7 @@ falls through to a plain `beads-client-list' with no caching."
          ;; Freshness check itself failed: degrade gracefully to a
          ;; full fetch and clear the token so we retry cleanly later.
          ((null token)
-          (let ((issues (beads-client-list)))
+          (let ((issues (beads-client-list '(:all t))))
             (setf (beads-cache-freshness-token cache) nil)
             (setf (beads-cache-issues cache) issues)
             (cons t issues)))
@@ -177,7 +180,7 @@ falls through to a plain `beads-client-list' with no caching."
          ;; permanently stranding stale data if a write lands between
          ;; the two reads.)
          (t
-          (let ((issues (beads-client-list)))
+          (let ((issues (beads-client-list '(:all t))))
             (setf (beads-cache-freshness-token cache) token)
             (setf (beads-cache-issues cache) issues)
             (cons t issues)))))))))

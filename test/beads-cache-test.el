@@ -147,6 +147,17 @@ Verified by the call order: freshness first, then list."
         (beads-cache-refresh)
         (should (equal (nreverse order) '(freshness list)))))))
 
+(ert-deftest beads-cache-test-refresh-requests-all-issues ()
+  "List-view cache refreshes explicitly request all normal issues."
+  (let ((filters-seen nil))
+    (beads-cache-test--with-mocks "/tmp/proj/" '(((id . "a"))) '(token-1) t
+      (cl-letf (((symbol-function 'beads-client-list)
+                 (lambda (&optional filters)
+                   (push filters filters-seen)
+                   '(((id . "a"))))))
+        (beads-cache-refresh)
+        (should (equal filters-seen '((:all t))))))))
+
 (ert-deftest beads-cache-test-refresh-freshness-failure-degrades ()
   "If freshness check returns nil, fall back to a full fetch."
   (beads-cache-test--with-mocks "/tmp/proj/" '(((id . "a")))

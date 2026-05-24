@@ -65,13 +65,16 @@ an old key and its canonical key are present, keep the canonical key."
     ("list"
      ;; `bd list' defaults to --limit 50.  The Emacs list view is the
      ;; canonical full issue list, so request an unlimited result set
-     ;; unless a caller explicitly supplies its own limit.
+     ;; unless a caller explicitly supplies its own limit.  Callers that
+     ;; need all normal statuses, including closed issues, pass `all',
+     ;; which maps directly to `bd list --all'.
      (let ((effective-args (if (assq 'limit args)
                                args
                              (append args '((limit . 0))))))
        (beads-backend--build-cli-args "list" effective-args
                                       '(status priority issue_type assignee
-                                        labels limit title_contains parent))))
+                                        labels limit title_contains parent
+                                        all))))
     ("show"
      (let ((id (alist-get 'id args)))
        (list "show" id)))

@@ -362,9 +362,8 @@ dependencies).  Therefore `blocked_issues' counts entries whose
 entries with no incomplete blocking deps.
 
 Note: counts reflect the issues currently fetched into the list
-view.  Because `bd list' excludes closed issues by default,
-`closed_issues' will typically be 0 and `total_issues' will
-reflect only the active issues in the list."
+view.  List refreshes request all normal issues explicitly, so closed
+issues are included when the backend supports the all-issues contract."
   (let ((total (length issues))
         (open 0) (in-progress 0) (blocked 0)
         (closed 0) (ready 0))
@@ -611,7 +610,8 @@ token-before-list ordering invariant (see `beads-cache.el')."
                       (if (> (length err) 200)
                           (concat (substring err 0 197) "...")
                         err))
-           (beads-list--rebuild-from-issues all-issues silent "Auto-refreshed")))))))
+           (beads-list--rebuild-from-issues all-issues silent "Auto-refreshed"))))
+     '(:all t))))
 
 (defun beads-list-goto-id (id)
   "Move point to the line with issue ID.

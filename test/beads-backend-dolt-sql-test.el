@@ -409,6 +409,16 @@ but keep dependency_count, dependent_count, comment_count, and parent
     (should (string-match-p "'parent'" sql))
     (should (string-match-p "'labels'" sql))))
 
+(ert-deftest beads-dolt-sql-test-list-sql-contract-is-all-non-ephemeral ()
+  "The SQL list path is already the all-normal-issues contract.
+It filters out ephemeral issues but does not filter by status, so it
+includes closed issues like `bd list --all'."
+  (dolist (sql (list beads-dolt-sql--list-sql
+                     beads-dolt-sql--list-lite-sql))
+    (should (string-match-p "WHERE i\\.ephemeral = 0" sql))
+    (should-not (string-match-p "i\\.status[[:space:]]*=" sql))
+    (should-not (string-match-p "i\\.status[[:space:]]+IN" sql))))
+
 (ert-deftest beads-dolt-sql-test-parent-subquery-uses-dependency-source ()
   "The SQL `parent' field must return the issue this issue depends on.
 For parent-child edges, `issue_id' is the child and `depends_on_id' is

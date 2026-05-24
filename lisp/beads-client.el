@@ -171,8 +171,11 @@ is expected."
 
 (defun beads-client-list (&optional filters)
   "List issues with optional FILTERS.
-FILTERS is a plist with keys like :status, :priority, :issue-type, :assignee,
-:labels, :limit, :title-contains, :parent (for epic-scoped views), etc.
+FILTERS is a plist with keys like :all, :status, :priority,
+:issue-type, :assignee, :labels, :limit, :title-contains, :parent
+(for epic-scoped views), etc.  Use `:all t' when a caller needs
+the complete normal issue list, including closed issues, rather
+than backend-specific active/default status sets.
 Returns array of issue objects."
   (let ((args (beads-client--plist-to-alist filters)))
     (beads-client-request "list" args)))
@@ -180,7 +183,8 @@ Returns array of issue objects."
 (defun beads-client-list-async (callback &optional filters)
   "Fetch issue list asynchronously with optional FILTERS.
 CALLBACK is called with (ERROR DATA) when complete.
-FILTERS uses the same plist format as `beads-client-list'."
+FILTERS uses the same plist format as `beads-client-list', including
+`:all t' for the complete normal issue list."
   (let ((args (beads-client--plist-to-alist filters)))
     (beads-client-request-async "list" args callback)))
 

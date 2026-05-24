@@ -511,6 +511,18 @@ the previous line is the intended issue row."
       (beads-list-refresh-async)
       (should t))))
 
+(ert-deftest beads-list-test-refresh-async-requests-all-issues ()
+  "Async list refresh explicitly requests all normal issues."
+  (let (filters-seen)
+    (with-temp-buffer
+      (beads-list-mode)
+      (cl-letf (((symbol-function 'beads-client-list-async)
+                 (lambda (cb &optional filters)
+                   (setq filters-seen filters)
+                   (funcall cb nil '()))))
+        (beads-list-refresh-async)
+        (should (equal filters-seen '(:all t)))))))
+
 (ert-deftest beads-list-test-refresh-async-preserves-point ()
   "Auto-refresh must not yank the cursor back to the top of the buffer.
 

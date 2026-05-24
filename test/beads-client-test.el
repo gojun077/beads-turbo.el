@@ -219,6 +219,30 @@ return the cached path from the other project."
     (should-error (beads-client-request "test-operation" nil)
                   :type 'beads-client-error)))
 
+(ert-deftest beads-client-test-list-accepts-all-filter ()
+  "Test that beads-client-list forwards explicit all-issues requests."
+  (let (captured)
+    (cl-letf (((symbol-function 'beads-client-request)
+               (lambda (operation args)
+                 (setq captured (list operation args))
+                 '())))
+      (beads-client-list '(:all t :status "closed" :limit 25))
+      (should (equal (car captured) "list"))
+      (should (equal (cadr captured)
+                     '((all . t) (status . "closed") (limit . 25)))))))
+
+(ert-deftest beads-client-test-list-async-accepts-all-filter ()
+  "Test that beads-client-list-async forwards explicit all-issues requests."
+  (let (captured)
+    (cl-letf (((symbol-function 'beads-client-request-async)
+               (lambda (operation args callback)
+                 (setq captured (list operation args))
+                 (funcall callback nil '()))))
+      (beads-client-list-async #'ignore '(:all t :parent "bd-parent"))
+      (should (equal (car captured) "list"))
+      (should (equal (cadr captured)
+                     '((all . t) (parent . "bd-parent")))))))
+
 ;;; Integration tests (require bd CLI)
 
 (ert-deftest beads-client-test-list ()

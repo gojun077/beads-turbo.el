@@ -789,7 +789,11 @@ Caches result for 60 seconds."
   "Execute `list' operation via direct SQL.
 Uses `beads-dolt-sql--list-lite-sql' when `beads-dolt-sql-list-lite'
 is non-nil (the default), otherwise falls back to the full
-`beads-dolt-sql--list-sql' that mirrors `bd list --json' exactly."
+`beads-dolt-sql--list-sql' that mirrors `bd list --json' exactly.
+
+The SQL list contract is all normal issues (`ephemeral = 0'), including
+closed issues.  That is the same status set requested from the bd CLI
+backend when callers pass `:all t'."
   (beads-backend-dolt-sql--execute-sql
    (if beads-dolt-sql-list-lite
        beads-dolt-sql--list-lite-sql

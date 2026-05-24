@@ -156,6 +156,22 @@
                "list" '((limit . 25)))))
     (should (equal args '("list" "--limit" "25")))))
 
+(ert-deftest beads-backend-test-bd-list-all-args ()
+  "Test bd backend list operation maps all-issues requests to --all."
+  (let ((args (beads-backend-bd--operation-to-cli-args
+               "list" '((all . t)
+                         (status . "closed")
+                         (priority . 1)
+                         (limit . 25)))))
+    (should (equal (car args) "list"))
+    (should (member "--all" args))
+    (should (member "--status" args))
+    (should (member "closed" args))
+    (should (member "--priority" args))
+    (should (member "1" args))
+    (should (member "--limit" args))
+    (should (member "25" args))))
+
 (ert-deftest beads-backend-test-bd-show-args ()
   "Test bd backend show operation CLI args."
   (should (equal (beads-backend-bd--operation-to-cli-args
