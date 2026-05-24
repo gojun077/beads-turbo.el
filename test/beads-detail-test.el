@@ -285,7 +285,7 @@
       (should (search-forward "urgent" nil t)))))
 
 (ert-deftest beads-detail-test-render-labels-absent ()
-  "Test that beads-detail--render handles missing labels gracefully."
+  "Test that beads-detail--render shows empty labels when missing."
   (with-temp-buffer
     (let ((issue '((id . "bd-test")
                    (title . "Test")
@@ -294,7 +294,8 @@
                    (issue_type . "task"))))
       (beads-detail--render issue)
       (let ((buffer-content (buffer-string)))
-        (should-not (string-match-p "Labels:" buffer-content))))))
+        (should (string-match-p "Labels:" buffer-content))
+        (should (string-match-p "(none)" buffer-content))))))
 
 (ert-deftest beads-detail-test-render-timestamps ()
   "Test that beads-detail--render shows created and updated timestamps."
@@ -1014,6 +1015,77 @@ unknown-vnode error."
       (let ((content (buffer-string)))
         (should (string-match-p "Labels:" content))
         (should (string-match-p "backend, urgent" content))))))
+
+(ert-deftest beads-detail-test-vui-metadata-renders-empty-labels ()
+  "The vui detail metadata row should display Labels even when empty."
+  (require 'beads-vui)
+  (let ((issue '((id . "bd-vui-labels-empty")
+                 (title . "No labels yet")
+                 (status . "open")
+                 (priority . 2)
+                 (issue_type . "task"))))
+    (with-temp-buffer
+      (vui-render (vui-component 'beads-vui-metadata-row :issue issue)
+                  (current-buffer))
+      (let ((content (buffer-string)))
+        (should (string-match-p "Labels:" content))
+        (should (string-match-p "(none)" content))))))
+
+(ert-deftest beads-detail-test-vui-metadata-renders-label-edit-actions ()
+  "The vui detail metadata row should show label add/remove actions."
+  (require 'beads-vui)
+  (let ((issue '((id . "bd-vui-labels-edit")
+                 (title . "Labels can be edited")
+                 (status . "open")
+                 (priority . 2)
+                 (issue_type . "task")
+                 (labels . ["backend"]))))
+    (with-temp-buffer
+      (vui-render (vui-component 'beads-vui-metadata-row
+                                 :issue issue
+                                 :editable t)
+                  (current-buffer))
+      (let ((content (buffer-string)))
+        (should (string-match-p "Labels:" content))
+        (should (string-match-p "add" content))
+        (should (string-match-p "remove" content))))))
+
+(ert-deftest beads-detail-test-vui-label-add-handler-calls-rpc ()
+  "Test that the vui label add handler calls beads-client-label-add."
+  (require 'beads-vui)
+  (let ((rpc-args nil)
+        (refreshed nil))
+    (let ((handler (beads-vui-make-label-add-handler
+                    '((id . "test-123")
+                      (labels . ["existing"]))
+                    (lambda () (setq refreshed t)))))
+      (cl-letf (((symbol-function 'read-string)
+                 (lambda (_prompt) "new-label"))
+                ((symbol-function 'beads-client-label-add)
+                 (lambda (id label)
+                   (setq rpc-args (list id label)))))
+        (funcall handler)
+        (should (equal rpc-args '("test-123" "new-label")))
+        (should refreshed)))))
+
+(ert-deftest beads-detail-test-vui-label-remove-handler-calls-rpc ()
+  "Test that the vui label remove handler calls beads-client-label-remove."
+  (require 'beads-vui)
+  (let ((rpc-args nil)
+        (refreshed nil))
+    (let ((handler (beads-vui-make-label-remove-handler
+                    '((id . "test-456")
+                      (labels . ["label1" "label2"]))
+                    (lambda () (setq refreshed t)))))
+      (cl-letf (((symbol-function 'completing-read)
+                 (lambda (_prompt _choices &rest _)
+                   "label1"))
+                ((symbol-function 'beads-client-label-remove)
+                 (lambda (id label)
+                   (setq rpc-args (list id label)))))
+        (funcall handler)
+        (should (equal rpc-args '("test-456" "label1")))
+        (should refreshed)))))
 
 (ert-deftest beads-detail-test-refresh-fn-switches-to-detail-buffer ()
   "Regression test: refresh-fn closure captured by `beads-detail--render-vui'

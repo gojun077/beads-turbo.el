@@ -118,6 +118,36 @@ Calls ON-REFRESH after successful edit."
                (beads-client-update id :priority new-priority)
                (when on-refresh (funcall on-refresh))))))))))
 
+(defun beads-vui-make-label-add-handler (issue on-refresh)
+  "Create a handler that adds a label to ISSUE.
+Calls ON-REFRESH after a label is added."
+  (lambda ()
+    (let* ((id (alist-get 'id issue))
+           (labels (alist-get 'labels issue))
+           (labels-list (when labels (append labels nil)))
+           (labels-str (if labels-list
+                           (format " [current: %s]"
+                                   (mapconcat #'identity labels-list ", "))
+                         ""))
+           (label (read-string (format "Add label%s: " labels-str))))
+      (when (and label (not (string-empty-p label)))
+        (beads-client-label-add id label)
+        (when on-refresh (funcall on-refresh))))))
+
+(defun beads-vui-make-label-remove-handler (issue on-refresh)
+  "Create a handler that removes a label from ISSUE.
+Calls ON-REFRESH after a label is removed."
+  (lambda ()
+    (let* ((id (alist-get 'id issue))
+           (labels (alist-get 'labels issue))
+           (labels-list (when labels (append labels nil))))
+      (if (not labels-list)
+          (message "Issue %s has no labels to remove" id)
+        (let ((label (completing-read "Remove label: " labels-list nil t)))
+          (when (and label (not (string-empty-p label)))
+            (beads-client-label-remove id label)
+            (when on-refresh (funcall on-refresh))))))))
+
 (defun beads-vui--field-to-keyword (field-key)
   "Convert FIELD-KEY symbol to RPC keyword."
   (pcase field-key
@@ -230,6 +260,30 @@ FACE applies to value, ON-EDIT called when edit button clicked."
       (vui-text " ")
       (vui-button "edit" :on-click on-edit :face 'link)))))
 
+(vui-defcomponent beads-vui-labels-field (issue labels &key editable on-refresh)
+  "Display the labels field for ISSUE.
+LABELS may be nil, an empty vector, or a sequence of label strings.
+When EDITABLE is non-nil, show label add/remove buttons."
+  :render
+  (let ((labels-list (when labels (append labels nil))))
+    (vui-hstack
+     (vui-text "Labels: " :face 'bold)
+     (vui-text (if labels-list
+                   (mapconcat #'identity labels-list ", ")
+                 "(none)"))
+     (when editable
+       (vui-fragment
+        (vui-text " ")
+        (vui-button "add" :on-click (beads-vui-make-label-add-handler
+                                      issue on-refresh)
+                    :face 'link)
+        (when labels-list
+          (vui-fragment
+           (vui-text " ")
+           (vui-button "remove" :on-click (beads-vui-make-label-remove-handler
+                                           issue on-refresh)
+                       :face 'link))))))))
+
 (vui-defcomponent beads-vui-metadata-row (issue &key editable on-refresh)
   "Display metadata row for ISSUE with status, priority, type, etc.
 When EDITABLE is non-nil, show edit buttons. ON-REFRESH called after edits."
@@ -315,10 +369,11 @@ When EDITABLE is non-nil, show edit buttons. ON-REFRESH called after edits."
        (vui-hstack
         (vui-text "Parent: " :face 'bold)
         (vui-component 'beads-vui-clickable-id :issue-id parent-id)))
-     (when (and labels (> (length labels) 0))
-       (vui-component 'beads-vui-labeled-value
-                      :label "Labels"
-                      :value (mapconcat #'identity (append labels nil) ", "))))))
+     (vui-component 'beads-vui-labels-field
+                    :issue issue
+                    :labels labels
+                    :editable editable
+                    :on-refresh on-refresh))))
 
 (vui-defcomponent beads-vui-content-section (title content &key on-edit)
   "Display a content section with TITLE and markdown CONTENT.

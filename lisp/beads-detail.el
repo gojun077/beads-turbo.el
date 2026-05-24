@@ -600,10 +600,11 @@ Uses CLI fallback since RPC does not support comment_add."
       (beads-detail--insert-parent-link parent)
       (insert "\n"))
 
-    (when (and labels (> (length labels) 0))
-      (beads-detail--insert-field "Labels"
-                                  (mapconcat #'identity (append labels nil) ", "))
-      (insert "\n"))
+    (beads-detail--insert-field "Labels"
+                                (if (and labels (> (length labels) 0))
+                                    (mapconcat #'identity (append labels nil) ", ")
+                                  "(none)"))
+    (insert "\n")
 
     (beads-detail--insert-relationships issue)))
 
