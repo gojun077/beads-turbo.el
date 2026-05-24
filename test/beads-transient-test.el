@@ -43,11 +43,25 @@
     (should (eq (lookup-key beads-list-mode-map (kbd "?"))
                 #'beads-menu))))
 
+(ert-deftest beads-transient-test-org-list-mode-help-key ()
+  "Test that ? is bound to beads-menu in beads-org-list-mode."
+  (with-temp-buffer
+    (beads-org-list-mode)
+    (should (eq (lookup-key beads-org-list-mode-map (kbd "?"))
+                #'beads-menu))))
+
 (ert-deftest beads-transient-test-list-mode-menu-key ()
   "Test that C-c m is bound to beads-menu in beads-list-mode."
   (with-temp-buffer
     (beads-list-mode)
     (should (eq (lookup-key beads-list-mode-map (kbd "C-c m"))
+                #'beads-menu))))
+
+(ert-deftest beads-transient-test-org-list-mode-menu-key ()
+  "Test that C-c m is bound to beads-menu in beads-org-list-mode."
+  (with-temp-buffer
+    (beads-org-list-mode)
+    (should (eq (lookup-key beads-org-list-mode-map (kbd "C-c m"))
                 #'beads-menu))))
 
 (ert-deftest beads-transient-test-detail-mode-help-key ()
@@ -178,7 +192,8 @@
 
 (ert-deftest beads-transient-test-menu-contains-list-command ()
   "Test that beads-menu includes beads-list command."
-  (should (commandp 'beads-list)))
+  (should (commandp 'beads-list))
+  (should (commandp 'beads-list-legacy)))
 
 (ert-deftest beads-transient-test-menu-contains-refresh-command ()
   "Test that beads-menu includes beads-list-refresh command."
@@ -216,11 +231,11 @@
 (ert-deftest beads-transient-test-keybindings-dont-conflict ()
   "Test that ? keybinding doesn't conflict with other bindings in list mode."
   (with-temp-buffer
-    (beads-list-mode)
-    (should (eq (lookup-key beads-list-mode-map (kbd "?")) #'beads-menu))
-    (should (eq (lookup-key beads-list-mode-map (kbd "g")) #'beads-list-refresh))
-    (should (eq (lookup-key beads-list-mode-map (kbd "RET")) #'beads-list-goto-issue))
-    (should (eq (lookup-key beads-list-mode-map (kbd "q")) #'beads-list-quit))))
+    (beads-org-list-mode)
+    (should (eq (lookup-key beads-org-list-mode-map (kbd "?")) #'beads-menu))
+    (should (eq (lookup-key beads-org-list-mode-map (kbd "g")) #'beads-org-list-refresh))
+    (should (eq (lookup-key beads-org-list-mode-map (kbd "RET")) #'beads-list-goto-issue))
+    (should (eq (lookup-key beads-org-list-mode-map (kbd "q")) #'beads-list-quit))))
 
 (ert-deftest beads-transient-test-detail-keybindings-dont-conflict ()
   "Test that ? keybinding doesn't conflict with other bindings in detail mode."

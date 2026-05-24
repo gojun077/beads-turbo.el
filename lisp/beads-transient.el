@@ -53,6 +53,7 @@
 (declare-function beads-list "beads-list")
 (declare-function beads-list-refresh "beads-list")
 (declare-function beads-list--refresh-current-view "beads-list")
+(declare-function beads-list--get-issue-at-point "beads-list")
 (declare-function beads-list-edit-form "beads-list")
 (declare-function beads-list--build-format "beads-list")
 (declare-function beads-list--column-names "beads-list")
@@ -144,7 +145,7 @@ Prompts for title (required), type, priority, and common `bd create' options."
                               (plist-get params :title)
                               (beads-transient--plist-remove params :title))))
             (message "Created issue %s" (alist-get 'id issue))
-            (when (derived-mode-p 'beads-list-mode)
+            (when (beads-transient--list-view-p)
               (beads-list-refresh)))
         (beads-client-error
          (message "Failed to create issue: %s" (error-message-string err)))))))
@@ -226,7 +227,7 @@ Shows what the issue will look like, then press C-c C-c to create."
                             (beads-transient--plist-remove params :title))))
           (quit-window t)
           (message "Created issue %s" (alist-get 'id issue))
-          (when (derived-mode-p 'beads-list-mode)
+          (when (beads-transient--list-view-p)
             (beads-list-refresh)))
       (beads-client-error
        (message "Failed to create issue: %s" (error-message-string err))))))
@@ -253,8 +254,8 @@ Prompts for an optional close reason."
   (let ((id (cond
              ((derived-mode-p 'beads-detail-mode)
               (bound-and-true-p beads-detail--current-issue-id))
-             ((derived-mode-p 'beads-list-mode)
-              (tabulated-list-get-id))
+             ((beads-transient--list-view-p)
+              (alist-get 'id (beads-list--get-issue-at-point)))
              (t nil))))
     (if (not id)
         (message "No issue at point")
@@ -264,7 +265,7 @@ Prompts for an optional close reason."
               (beads-client-close id (unless (string-empty-p reason) reason))
               (message "Closed issue %s" id)
               (cond
-               ((derived-mode-p 'beads-list-mode)
+               ((beads-transient--list-view-p)
                 (beads-list-refresh))
                ((derived-mode-p 'beads-detail-mode)
                 (beads-detail-refresh))))
@@ -278,18 +279,19 @@ Prompts for an optional close reason."
   "Permanently delete the issue at point.
 Prompts for confirmation with `yes-or-no-p'."
   (interactive)
-  (let* ((id (cond
+  (let* ((list-issue (and (beads-transient--list-view-p)
+                          (beads-list--get-issue-at-point)))
+         (id (cond
               ((derived-mode-p 'beads-detail-mode)
                (bound-and-true-p beads-detail--current-issue-id))
-              ((derived-mode-p 'beads-list-mode)
-               (tabulated-list-get-id))
+              (list-issue
+               (alist-get 'id list-issue))
               (t nil)))
          (title (cond
                  ((derived-mode-p 'beads-detail-mode)
                   (alist-get 'title (bound-and-true-p beads-detail--current-issue)))
-                 ((derived-mode-p 'beads-list-mode)
-                  (when-let ((entry (tabulated-list-get-entry)))
-                    (aref entry 5)))
+                 (list-issue
+                  (alist-get 'title list-issue))
                  (t nil)))
          (display-title (if title
                             (beads-transient--truncate-middle title 30)
@@ -305,7 +307,7 @@ Prompts for confirmation with `yes-or-no-p'."
               (beads-client-delete (list id))
               (message "Deleted issue %s" id)
               (cond
-               ((derived-mode-p 'beads-list-mode)
+               ((beads-transient--list-view-p)
                 (beads-list-refresh))
                ((derived-mode-p 'beads-detail-mode)
                 (quit-window t))))
@@ -319,8 +321,8 @@ Sets status to open and clears closed_at timestamp."
   (let ((id (cond
              ((derived-mode-p 'beads-detail-mode)
               (bound-and-true-p beads-detail--current-issue-id))
-             ((derived-mode-p 'beads-list-mode)
-              (tabulated-list-get-id))
+             ((beads-transient--list-view-p)
+              (alist-get 'id (beads-list--get-issue-at-point)))
              (t nil))))
     (if (not id)
         (message "No issue at point")
@@ -329,7 +331,7 @@ Sets status to open and clears closed_at timestamp."
             (beads-client-update id :status "open")
             (message "Reopened issue %s" id)
             (cond
-             ((derived-mode-p 'beads-list-mode)
+             ((beads-transient--list-view-p)
               (beads-list-refresh))
              ((derived-mode-p 'beads-detail-mode)
               (beads-detail-refresh))))
@@ -879,7 +881,7 @@ See `beads-backend-dolt-sql-activate' and
   (cond
    ((derived-mode-p 'beads-detail-mode)
     (beads-detail-menu))
-   ((derived-mode-p 'beads-list-mode)
+   ((beads-transient--list-view-p)
     (beads-list-menu))
    (t
     (beads-list-menu))))

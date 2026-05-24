@@ -115,7 +115,7 @@ Hierarchy View
 
 Customization
 
-* Columns::
+* Legacy Table Columns::
 * Type Display::
 * Sorting: Sorting (1). 
 * Header Statistics::
@@ -545,9 +545,14 @@ Congratulations!  You've learned the basic Beads workflow.
 @chapter List View
 
 @cindex list view
-@findex beads-list-mode
+@findex beads-org-list-mode
+@findex beads-list-legacy
 
 The list view is your main interface.  Open it with @samp{M-x beads-list}.
+By default this opens a generated org-mode task/tree view: issues are
+org headings, parent/child relationships are nested, and metadata lives
+in a @code{:PROPERTIES:} drawer.  If you need the old tabulated UI during
+the transition, run @samp{M-x beads-list-legacy}.
 
 @menu
 * Essential Commands: Essential Commands (1). 
@@ -582,6 +587,15 @@ The list view is your main interface.  Open it with @samp{M-x beads-list}.
 @item @samp{?}
 @tab @code{beads-menu}
 @tab Show help menu
+@item @samp{n}
+@tab @code{org-next-visible-heading}
+@tab Next visible issue
+@item @samp{p}
+@tab @code{org-previous-visible-heading}
+@tab Previous visible issue
+@item @samp{TAB}
+@tab @code{org-cycle}
+@tab Fold or unfold subtree
 @end multitable
 
 @node Editing Issues
@@ -668,14 +682,17 @@ Search (@samp{/}) matches against title and description.
 @tab Toggle sectioned/column
 @item @samp{o}
 @tab @code{beads-list-cycle-sort}
-@tab Cycle through columns
+@tab Cycle columns in legacy table
 @item @samp{O}
 @tab @code{beads-list-reverse-sort}
-@tab Reverse sort direction
+@tab Reverse legacy table sort
 @end multitable
 
 @strong{Sectioned sorting} (default) groups by status then sorts by priority.
-@strong{Column sorting} lets you click headers or cycle with @samp{o}.
+In the org view, sectioned sorting renders section headings and nested
+issue trees; column mode preserves the fetched issue order without table
+headers.  Column cycling with @samp{o} and @samp{O} is available in
+@samp{M-x beads-list-legacy}.
 
 @node Marking and Bulk Operations
 @section Marking and Bulk Operations
@@ -746,16 +763,16 @@ Then apply bulk operations:
 @tab @code{beads-preview-mode}
 @tab Toggle live preview
 @item @samp{H}
-@tab @code{beads-hierarchy-show}
+@tab @code{beads-org-list-hierarchy-show}
 @tab Show dependency tree
 @item @samp{S}
 @tab @code{beads-stats}
 @tab Show statistics
 @item @samp{D}
-@tab @code{beads-delete-issue}
+@tab @code{beads-org-list-delete-issue}
 @tab Delete issue at point
 @item @samp{R}
-@tab @code{beads-reopen-issue}
+@tab @code{beads-org-list-reopen-issue}
 @tab Reopen closed issue
 @end multitable
 
@@ -951,7 +968,7 @@ is closed).
 These settings are optional.  The defaults work well for most users.
 
 @menu
-* Columns::
+* Legacy Table Columns::
 * Type Display::
 * Sorting: Sorting (1). 
 * Header Statistics::
@@ -960,12 +977,16 @@ These settings are optional.  The defaults work well for most users.
 * Project Integration::
 @end menu
 
-@node Columns
-@section Columns
+@node Legacy Table Columns
+@section Legacy Table Columns
 
 @vindex beads-list-columns
 
-Control which columns appear:
+These settings apply to the fallback table opened with
+@samp{M-x beads-list-legacy}.  The default org view stores metadata in
+property drawers instead of columns.
+
+Control which legacy table columns appear:
 
 @lisp
 (setq beads-list-columns '(id date status priority type title))
@@ -1018,8 +1039,9 @@ Available: @samp{id}, @samp{date}, @samp{status}, @samp{priority}, @samp{type}, 
 
 The list view refreshes automatically after any write performed
 through beads.el (transient menu, edit commands, detail-mode
-actions, forms) and whenever you return to a @code{beads-list-mode}
-window from another buffer (for example, closing a detail view).
+actions, forms) and whenever you return to a @code{beads-org-list-mode}
+or @code{beads-list-mode} window from another buffer (for example,
+closing a detail view).
 The on-select refresh is asynchronous, cursor-preserving and
 short-circuits via the cache freshness token when nothing has
 changed, so it is essentially free in the common case.
@@ -1400,9 +1422,11 @@ can work on right now.
 @headitem Command
 @tab Description
 @item @samp{M-x beads-list}
-@tab Open issue list
+@tab Open org issue list
+@item @samp{M-x beads-list-legacy}
+@tab Open legacy table list
 @item @samp{M-x beads}
-@tab Open issue list
+@tab Open org issue list
 @end multitable
 
 @node List View

@@ -20,7 +20,8 @@
 
 ;;; Commentary:
 
-;; Tabulated issue list mode with sorting, filtering, and bulk operations.
+;; Org task/tree issue list mode with sorting, filtering, and bulk operations.
+;; The legacy tabulated-list view remains available via `beads-list-legacy'.
 
 ;;; Code:
 
@@ -62,8 +63,10 @@ in the mode line of the list view."
 
 (defcustom beads-list-columns
   '(id date status priority type title)
-  "Columns to display in beads list view.
-Available: id, date, status, priority, type, title, assignee, labels, deps."
+  "Columns to display in the legacy tabulated beads list view.
+Available: id, date, status, priority, type, title, assignee, labels, deps.
+This only affects `beads-list-legacy'; the default `beads-list' org view
+renders issue metadata in org property drawers instead of columns."
   :type '(repeat (choice (const :tag "ID" id)
                          (const :tag "Date" date)
                          (const :tag "Status" status)
@@ -90,15 +93,17 @@ When `column', use standard tabulated-list column sorting."
   :group 'beads-list)
 
 (defcustom beads-list-section-separators t
-  "Whether to show visual separators between sections.
-Only applies when `beads-list-sort-mode' is `sectioned'."
+  "Whether to show visual separators between legacy table sections.
+Only applies to `beads-list-legacy' when `beads-list-sort-mode' is
+`sectioned'.  The default org list renders sections as org headings."
   :type 'boolean
   :group 'beads-list)
 
 (defcustom beads-list-id-column-max-width nil
-  "Maximum width for the ID column in beads list view.
+  "Maximum width for the ID column in the legacy tabulated beads list view.
 When nil, the column width is unlimited and adjusts to the longest ID.
-When an integer, the column width will not exceed this value."
+When an integer, the column width will not exceed this value.
+This only affects `beads-list-legacy'."
   :type '(choice (const :tag "Unlimited" nil)
                  (integer :tag "Maximum width"))
   :group 'beads-list)
@@ -289,7 +294,7 @@ When non-nil, overrides the global setting for this buffer.")
 Used to ensure refresh uses the correct project context.")
 
 (defvar-local beads-org-list--project-root nil
-  "Project root for this experimental org list buffer.
+  "Project root for this org list buffer.
 Used to ensure refresh uses the correct project context.")
 
 (declare-function beads-filter-menu "beads-transient")
@@ -374,11 +379,16 @@ Used to ensure refresh uses the correct project context.")
     (set-keymap-parent map org-mode-map)
     (define-key map (kbd "g") #'beads-org-list-refresh)
     (define-key map (kbd "RET") #'beads-list-goto-issue)
+    (define-key map (kbd "c") #'beads-create-issue)
+    (define-key map (kbd "C") #'beads-create-issue-preview)
     (define-key map (kbd "e") beads-list-edit-map)
     (define-key map (kbd "E") #'beads-list-edit-form)
     (define-key map (kbd "f") #'beads-filter-menu)
+    (define-key map (kbd "/") #'beads-search)
     (define-key map (kbd "H") #'beads-org-list-hierarchy-show)
     (define-key map (kbd "P") #'beads-preview-mode)
+    (define-key map (kbd "S") #'beads-stats)
+    (define-key map (kbd "T") #'beads-types-edit)
     (define-key map (kbd "D") #'beads-org-list-delete-issue)
     (define-key map (kbd "R") #'beads-org-list-reopen-issue)
     (define-key map (kbd "s") #'beads-list-toggle-sort-mode)
@@ -393,12 +403,15 @@ Used to ensure refresh uses the correct project context.")
     (define-key map (kbd "x") #'beads-list-bulk-close)
     (define-key map (kbd "a") #'beads-list-quick-assign)
     (define-key map (kbd "A") #'beads-list-assign-to-me)
+    (define-key map (kbd "V") #'beads-views-menu)
     (define-key map (kbd "n") #'org-next-visible-heading)
     (define-key map (kbd "p") #'org-previous-visible-heading)
     (define-key map (kbd "TAB") #'org-cycle)
     (define-key map (kbd "q") #'beads-list-quit)
+    (define-key map (kbd "?") #'beads-menu)
+    (define-key map (kbd "C-c m") #'beads-menu)
     map)
-  "Keymap for experimental `beads-org-list-mode'.")
+  "Keymap for `beads-org-list-mode'.")
 
 (defun beads-list--row-face-for-id (id)
   "Return row face for issue ID, or nil if no special styling needed."
@@ -543,11 +556,11 @@ org list and uses the same freshness short-circuit via
   (beads-show-hint))
 
 (define-derived-mode beads-org-list-mode org-mode "Beads-Org-List"
-  "Experimental major mode for displaying Beads issues as org headings.
+  "Major mode for displaying Beads issues as org headings.
 
 This mode renders a generated, project-scoped org buffer from Beads data;
 it does not visit or require an org file on disk.  The legacy table view
-remains available through `beads-list'.
+remains available through `beads-list-legacy'.
 
 \\{beads-org-list-mode-map}"
   (setq-local org-todo-keywords '((sequence "TODO" "NEXT" "WAIT" "|" "DONE")))
@@ -698,17 +711,22 @@ Must be called with a `beads-org-list-mode' buffer current."
 When SILENT is non-nil, don't show message.
 Applies `beads-list--filter' if set, and `beads-list--show-only-marked' filter.
 
+When called from `beads-org-list-mode', refresh the org view so shared
+menu entries continue to work in the default list UI.
+
 Synchronous: blocks until the fetch completes and always rebuilds the
 display.  Use this for interactive refreshes and after writes where the
 user expects to see the new state immediately.  For background/timer
 refreshes that may safely no-op when nothing has changed, use
 `beads-list-refresh-async' instead."
   (interactive)
-  (condition-case err
-      (let ((all-issues (cdr (beads-cache-refresh))))
-        (beads-list--rebuild-from-issues all-issues silent "Refreshed"))
-    (beads-client-error
-     (message "Failed to fetch issues: %s" (error-message-string err)))))
+  (if (derived-mode-p 'beads-org-list-mode)
+      (beads-org-list-refresh silent)
+    (condition-case err
+        (let ((all-issues (cdr (beads-cache-refresh))))
+          (beads-list--rebuild-from-issues all-issues silent "Refreshed"))
+      (beads-client-error
+       (message "Failed to fetch issues: %s" (error-message-string err))))))
 
 (cl-defun beads-list-refresh-async (&optional silent)
   "Fetch issues asynchronously and refresh the display.
@@ -778,7 +796,7 @@ token-before-list ordering invariant (see `beads-cache.el')."
      '(:all t))))
 
 (defun beads-org-list-refresh (&optional silent)
-  "Fetch all issues and refresh the experimental org list display.
+  "Fetch all issues and refresh the org list display.
 When SILENT is non-nil, don't show a message."
   (interactive)
   (condition-case err
@@ -788,7 +806,7 @@ When SILENT is non-nil, don't show a message."
      (message "Failed to fetch issues: %s" (error-message-string err)))))
 
 (cl-defun beads-org-list-refresh-async (&optional silent)
-  "Fetch all issues asynchronously and refresh the experimental org list.
+  "Fetch all issues asynchronously and refresh the org list.
 
 When SILENT is non-nil, suppress the refresh message.  Like
 `beads-list-refresh-async', this uses the project cache freshness token
@@ -1742,7 +1760,7 @@ Prompts for confirmation with `yes-or-no-p'."
     (message "No issue at point")))
 
 (defun beads-org-list--buffer-name ()
-  "Return the buffer name for the experimental org list in this context."
+  "Return the buffer name for the org list in this context."
   (if-let ((root (and (featurep 'beads-project)
                       (bound-and-true-p beads-project-per-project-buffers)
                       (beads-project-root))))
@@ -1752,11 +1770,11 @@ Prompts for confirmation with `yes-or-no-p'."
 
 ;;;###autoload
 (defun beads-org-list ()
-  "Open the experimental org-mode Beads issue list buffer.
+  "Open the org-mode Beads issue list buffer.
 
 The buffer is generated from Beads data for the current project and does
-not visit an org file on disk.  `beads-list' continues to open the legacy
-tabulated list view."
+not visit an org file on disk.  This is also the default view opened by
+`beads-list'.  Use `beads-list-legacy' for the old tabulated-list UI."
   (interactive)
   (let* ((buffer-name (beads-org-list--buffer-name))
          (buffer (get-buffer-create buffer-name))
@@ -1775,7 +1793,17 @@ tabulated list view."
 
 ;;;###autoload
 (defun beads-list ()
-  "Open the Beads issue list buffer.
+  "Open the default org-mode Beads issue list buffer.
+
+The list is a generated org task/tree view.  Use `beads-list-legacy' to
+open the old tabulated-list UI during the transition."
+  (interactive)
+  (beads-org-list))
+
+;;;###autoload
+(defun beads-list-legacy ()
+  "Open the legacy tabulated Beads issue list buffer.
+
 If beads-project.el is loaded and per-project buffers are enabled,
 creates a project-specific buffer.
 

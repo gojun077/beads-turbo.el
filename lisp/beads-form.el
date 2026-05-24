@@ -33,6 +33,7 @@
 (declare-function vui-mount "vui")
 (declare-function vui-component "vui")
 (declare-function beads-vui-form-view "beads-vui")
+(declare-function beads-org-list-refresh "beads-list")
 
 (defgroup beads-form nil
   "Form-based editing for Beads issues."
@@ -374,6 +375,9 @@ Derives from `vui-mode' and adds form-specific keybindings.
          ((eq major-mode 'beads-list-mode)
           (when (fboundp 'beads-list-refresh)
             (beads-list-refresh)))
+         ((eq major-mode 'beads-org-list-mode)
+          (when (fboundp 'beads-org-list-refresh)
+            (beads-org-list-refresh)))
          ((and (or (derived-mode-p 'beads-detail-mode)
                    (derived-mode-p 'beads-detail-vui-mode))
                (boundp 'beads-detail--current-issue-id)

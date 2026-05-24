@@ -262,9 +262,14 @@ Congratulations!  You've learned the basic Beads workflow.
 :DESCRIPTION: Working with the issue list
 :END:
 #+cindex: list view
-#+findex: beads-list-mode
+#+findex: beads-org-list-mode
+#+findex: beads-list-legacy
 
 The list view is your main interface.  Open it with =M-x beads-list=.
+By default this opens a generated org-mode task/tree view: issues are
+org headings, parent/child relationships are nested, and metadata lives
+in a =:PROPERTIES:= drawer.  If you need the old tabulated UI during the
+transition, run =M-x beads-list-legacy=.
 
 ** Essential Commands
 
@@ -279,6 +284,9 @@ The list view is your main interface.  Open it with =M-x beads-list=.
 | =g=   | ~beads-list-refresh~     | Refresh the list      |
 | =q=   | ~beads-list-quit~        | Quit (close preview)  |
 | =?=   | ~beads-menu~             | Show help menu        |
+| =n=   | ~org-next-visible-heading~ | Next visible issue  |
+| =p=   | ~org-previous-visible-heading~ | Previous visible issue |
+| =TAB= | ~org-cycle~              | Fold or unfold subtree |
 
 ** Editing Issues
 
@@ -328,11 +336,14 @@ Search (=/=) matches against title and description.
 | Key | Command                       | Description                |
 |-----+-------------------------------+----------------------------|
 | =s= | ~beads-list-toggle-sort-mode~ | Toggle sectioned/column    |
-| =o= | ~beads-list-cycle-sort~       | Cycle through columns      |
-| =O= | ~beads-list-reverse-sort~     | Reverse sort direction     |
+| =o= | ~beads-list-cycle-sort~       | Cycle columns in legacy table |
+| =O= | ~beads-list-reverse-sort~     | Reverse legacy table sort  |
 
 *Sectioned sorting* (default) groups by status then sorts by priority.
-*Column sorting* lets you click headers or cycle with =o=.
+In the org view, sectioned sorting renders section headings and nested
+issue trees; column mode preserves the fetched issue order without table
+headers.  Column cycling with =o= and =O= is available in
+=M-x beads-list-legacy=.
 
 ** Marking and Bulk Operations
 
@@ -372,10 +383,10 @@ Then apply bulk operations:
 | Key | Command                | Description              |
 |-----+------------------------+--------------------------|
 | =P= | ~beads-preview-mode~   | Toggle live preview      |
-| =H= | ~beads-hierarchy-show~ | Show dependency tree     |
+| =H= | ~beads-org-list-hierarchy-show~ | Show dependency tree |
 | =S= | ~beads-stats~          | Show statistics          |
-| =D= | ~beads-delete-issue~   | Delete issue at point    |
-| =R= | ~beads-reopen-issue~   | Reopen closed issue      |
+| =D= | ~beads-org-list-delete-issue~ | Delete issue at point |
+| =R= | ~beads-org-list-reopen-issue~ | Reopen closed issue   |
 
 * Detail View
 :PROPERTIES:
@@ -497,11 +508,15 @@ is closed).
 
 These settings are optional.  The defaults work well for most users.
 
-** Columns
+** Legacy Table Columns
 
 #+vindex: beads-list-columns
 
-Control which columns appear:
+These settings apply to the fallback table opened with
+=M-x beads-list-legacy=.  The default org view stores metadata in
+property drawers instead of columns.
+
+Control which legacy table columns appear:
 
 #+begin_src emacs-lisp
 (setq beads-list-columns '(id date status priority type title))
@@ -550,8 +565,9 @@ Available: =id=, =date=, =status=, =priority=, =type=, =title=,
 
 The list view refreshes automatically after any write performed
 through beads.el (transient menu, edit commands, detail-mode
-actions, forms) and whenever you return to a =beads-list-mode=
-window from another buffer (for example, closing a detail view).
+actions, forms) and whenever you return to a =beads-org-list-mode= or
+=beads-list-mode= window from another buffer (for example, closing a
+detail view).
 The on-select refresh is asynchronous, cursor-preserving and
 short-circuits via the cache freshness token when nothing has
 changed, so it is essentially free in the common case.
@@ -829,8 +845,9 @@ can work on right now.
 
 | Command              | Description              |
 |----------------------+--------------------------|
-| =M-x beads-list=     | Open issue list          |
-| =M-x beads=          | Open issue list          |
+| =M-x beads-list=     | Open org issue list      |
+| =M-x beads-list-legacy= | Open legacy table list |
+| =M-x beads=          | Open org issue list      |
 
 ** List View
 

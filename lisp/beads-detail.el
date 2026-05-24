@@ -39,6 +39,9 @@
 (declare-function beads-reopen-issue "beads-transient")
 (declare-function beads-list "beads-list")
 (declare-function beads-list-refresh "beads-list")
+(declare-function beads-org-list-refresh "beads-list")
+(declare-function beads-list--refresh-current-view "beads-list")
+(declare-function beads-filter-by-parent "beads-filter")
 (declare-function beads-form-open "beads-form")
 (declare-function beads-hierarchy-show "beads-hierarchy")
 (require 'beads-core)
@@ -248,12 +251,15 @@ stomping on the user if they have already navigated away."
               (set-window-start window (min saved-start (point-max))))))))))
 
 (defun beads-detail--refresh-list-buffers ()
-  "Refresh all beads-list-mode buffers."
+  "Refresh all Beads list buffers."
   (dolist (buf (buffer-list))
     (when (and (buffer-live-p buf)
-               (eq (buffer-local-value 'major-mode buf) 'beads-list-mode))
+               (memq (buffer-local-value 'major-mode buf)
+                     '(beads-list-mode beads-org-list-mode)))
       (with-current-buffer buf
-        (beads-list-refresh)))))
+        (if (eq major-mode 'beads-org-list-mode)
+            (beads-org-list-refresh)
+          (beads-list-refresh))))))
 
 (defun beads-detail-refresh ()
   "Re-fetch and redisplay current issue."
@@ -304,10 +310,9 @@ Filters the issue list to show only issues whose parent is this issue."
     (require 'beads-list)
     (require 'beads-filter)
     (beads-list)
-    (with-current-buffer (get-buffer "*Beads Issues*")
-      (setq-local beads-list--filter-state
-                  (plist-put beads-list--filter-state :parent-filter id))
-      (beads-list-refresh)
+    (with-current-buffer (current-buffer)
+      (setq-local beads-list--filter (beads-filter-by-parent id))
+      (beads-list--refresh-current-view)
       (message "Showing children of %s" id))))
 
 (defun beads-detail-add-comment ()

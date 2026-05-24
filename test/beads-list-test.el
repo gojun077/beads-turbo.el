@@ -23,6 +23,11 @@
 (require 'beads-test-helpers)
 (require 'beads-backend-dolt-sql)
 
+(declare-function beads-create-issue "beads-transient")
+(declare-function beads-filter-menu "beads-transient")
+(declare-function beads-menu "beads-transient")
+(declare-function beads-search "beads-transient")
+
 ;;; Formatter tests (no daemon needed)
 
 (ert-deftest beads-list-test-core-idle-backend-keeps-session-with-other-buffer ()
@@ -573,7 +578,7 @@ Use a key that is not overridden by `beads-list-mode-map' (e.g. `n')."
                 (lookup-key tabulated-list-mode-map (kbd "n"))))))
 
 (ert-deftest beads-list-test-org-list-mode-derived-from-org ()
-  "Experimental org list mode derives from org-mode."
+  "Org list mode derives from org-mode."
   (with-temp-buffer
     (beads-org-list-mode)
     (should (derived-mode-p 'org-mode))
@@ -582,15 +587,19 @@ Use a key that is not overridden by `beads-list-mode-map' (e.g. `n')."
     (should (local-variable-p 'beads-org-list--project-root))))
 
 (ert-deftest beads-list-test-org-list-mode-keybindings ()
-  "Experimental org list mode binds only safe refresh/navigation keys."
+  "Org list mode binds list refresh/navigation/edit keys."
   (with-temp-buffer
     (beads-org-list-mode)
     (should (eq (lookup-key beads-org-list-mode-map (kbd "g"))
                 #'beads-org-list-refresh))
     (should (eq (lookup-key beads-org-list-mode-map (kbd "RET"))
                 #'beads-list-goto-issue))
+    (should (eq (lookup-key beads-org-list-mode-map (kbd "c"))
+                #'beads-create-issue))
     (should (eq (lookup-key beads-org-list-mode-map (kbd "f"))
                 #'beads-filter-menu))
+    (should (eq (lookup-key beads-org-list-mode-map (kbd "/"))
+                #'beads-search))
     (should (eq (lookup-key beads-org-list-mode-map (kbd "E"))
                 #'beads-list-edit-form))
     (should (eq (lookup-key beads-org-list-mode-map (kbd "P"))
@@ -609,6 +618,10 @@ Use a key that is not overridden by `beads-list-mode-map' (e.g. `n')."
                 #'beads-list-bulk-close))
     (should (eq (lookup-key beads-org-list-mode-map (kbd "a"))
                 #'beads-list-quick-assign))
+    (should (eq (lookup-key beads-org-list-mode-map (kbd "?"))
+                #'beads-menu))
+    (should (eq (lookup-key beads-org-list-mode-map (kbd "C-c m"))
+                #'beads-menu))
     (should (eq (lookup-key beads-org-list-mode-map (kbd "n"))
                 #'org-next-visible-heading))
     (should (eq (lookup-key beads-org-list-mode-map (kbd "p"))
@@ -617,7 +630,7 @@ Use a key that is not overridden by `beads-list-mode-map' (e.g. `n')."
                 #'org-cycle))))
 
 (ert-deftest beads-list-test-org-list-refresh-mocked ()
-  "Experimental org list refresh renders generated org text from bd data."
+  "Org list refresh renders generated org text from bd data."
   (let ((issues '(((id . "bd-a")
                    (title . "First")
                    (status . "open")
@@ -841,7 +854,7 @@ Use a key that is not overridden by `beads-list-mode-map' (e.g. `n')."
           (should (equal (beads-list--org-id-at-point) "bd-b")))))))
 
 (ert-deftest beads-list-test-org-list-command-creates-project-scoped-buffer ()
-  "Experimental org command creates a generated project-pinned buffer."
+  "Org command creates a generated project-pinned buffer."
   (let* ((project-root (file-name-as-directory
                         (expand-file-name "beads-org-list-project" temporary-file-directory)))
          (buffer-name "*beads-org-list-test*")
@@ -873,8 +886,26 @@ Use a key that is not overridden by `beads-list-mode-map' (e.g. `n')."
       (when (file-directory-p project-root)
         (delete-directory project-root t)))))
 
-(ert-deftest beads-list-test-list-command-still-opens-legacy-table-view ()
-  "The legacy beads-list command still opens beads-list-mode."
+(ert-deftest beads-list-test-list-command-opens-org-view-by-default ()
+  "The default beads-list command opens beads-org-list-mode."
+  (let ((buffer-name "*beads-list-default-org-test*")
+        (issues '(((id . "bd-a") (title . "First") (status . "open")))))
+    (when (get-buffer buffer-name)
+      (kill-buffer buffer-name))
+    (unwind-protect
+        (cl-letf (((symbol-function 'beads-org-list--buffer-name)
+                   (lambda () buffer-name))
+                  ((symbol-function 'beads-cache-refresh)
+                   (lambda (&rest _args) (cons t issues))))
+          (beads-list)
+          (with-current-buffer buffer-name
+            (should (eq major-mode 'beads-org-list-mode))
+            (should (string-match-p "^\\* Ready\n\\*\\* TODO First" (buffer-string)))))
+      (when (get-buffer buffer-name)
+        (kill-buffer buffer-name)))))
+
+(ert-deftest beads-list-test-legacy-command-opens-table-view ()
+  "The explicit legacy command opens beads-list-mode."
   (let ((buffer-name (if (featurep 'beads-project)
                          "*beads-list-legacy-test*"
                        "*Beads Issues*")))
@@ -885,7 +916,7 @@ Use a key that is not overridden by `beads-list-mode-map' (e.g. `n')."
                    (lambda () buffer-name))
                   ((symbol-function 'beads-list-refresh)
                    (lambda (&rest _args) nil)))
-          (beads-list)
+          (beads-list-legacy)
           (with-current-buffer buffer-name
             (should (eq major-mode 'beads-list-mode))))
       (when (get-buffer buffer-name)
@@ -1152,14 +1183,14 @@ timer fired."
   :tags '(:integration)
   (skip-unless (beads-test-integration-enabled-p))
   (skip-unless (beads-client--find-database))
-  (let ((buffer-name "*Beads Issues*"))
+  (let ((buffer-name "*Beads Org Issues*"))
     (when (get-buffer buffer-name)
       (kill-buffer buffer-name))
     (unwind-protect
         (progn
           (beads-list)
           (should (get-buffer buffer-name))
-          (should (eq major-mode 'beads-list-mode)))
+          (should (eq major-mode 'beads-org-list-mode)))
       (when (get-buffer buffer-name)
         (kill-buffer buffer-name)))))
 
@@ -1168,7 +1199,7 @@ timer fired."
   :tags '(:integration)
   (skip-unless (beads-test-integration-enabled-p))
   (skip-unless (beads-client--find-database))
-  (let ((buffer-name "*Beads Issues*"))
+  (let ((buffer-name "*Beads Org Issues*"))
     (when (get-buffer buffer-name)
       (kill-buffer buffer-name))
     (unwind-protect
@@ -1184,7 +1215,7 @@ timer fired."
   :tags '(:integration)
   (skip-unless (beads-test-integration-enabled-p))
   (skip-unless (beads-client--find-database))
-  (let ((buffer-name "*Beads Issues*"))
+  (let ((buffer-name "*Beads Org Issues*"))
     (when (get-buffer buffer-name)
       (kill-buffer buffer-name))
     (unwind-protect
@@ -1214,7 +1245,7 @@ timer fired."
   :tags '(:integration)
   (skip-unless (beads-test-integration-enabled-p))
   (skip-unless (beads-client--find-database))
-  (let ((buffer-name "*Beads Issues*"))
+  (let ((buffer-name "*Beads Org Issues*"))
     (when (get-buffer buffer-name)
       (kill-buffer buffer-name))
     (unwind-protect
