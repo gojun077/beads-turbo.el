@@ -547,6 +547,101 @@ Use a key that is not overridden by `beads-list-mode-map' (e.g. `n')."
     (should (eq (lookup-key beads-list-mode-map (kbd "n"))
                 (lookup-key tabulated-list-mode-map (kbd "n"))))))
 
+(ert-deftest beads-list-test-org-list-mode-derived-from-org ()
+  "Experimental org list mode derives from org-mode."
+  (with-temp-buffer
+    (beads-org-list-mode)
+    (should (derived-mode-p 'org-mode))
+    (should (derived-mode-p 'beads-org-list-mode))
+    (should buffer-read-only)
+    (should (local-variable-p 'beads-org-list--project-root))))
+
+(ert-deftest beads-list-test-org-list-mode-keybindings ()
+  "Experimental org list mode binds only safe refresh/navigation keys."
+  (with-temp-buffer
+    (beads-org-list-mode)
+    (should (eq (lookup-key beads-org-list-mode-map (kbd "g"))
+                #'beads-org-list-refresh))
+    (should (eq (lookup-key beads-org-list-mode-map (kbd "n"))
+                #'org-next-visible-heading))
+    (should (eq (lookup-key beads-org-list-mode-map (kbd "p"))
+                #'org-previous-visible-heading))
+    (should (eq (lookup-key beads-org-list-mode-map (kbd "TAB"))
+                #'org-cycle))))
+
+(ert-deftest beads-list-test-org-list-refresh-mocked ()
+  "Experimental org list refresh renders generated org text from bd data."
+  (let ((issues '(((id . "bd-a")
+                   (title . "First")
+                   (status . "open")
+                   (priority . 1)
+                   (issue_type . "task"))
+                  ((id . "bd-b")
+                   (title . "Second")
+                   (status . "closed")
+                   (issue_type . "bug")))))
+    (with-temp-buffer
+      (beads-org-list-mode)
+      (cl-letf (((symbol-function 'beads-cache-refresh)
+                 (lambda (&rest _args) (cons t issues))))
+        (beads-org-list-refresh t)
+        (should (equal beads-list--issues issues))
+        (should (null buffer-file-name))
+        (should (string-match-p "^#\\+TITLE: Beads Issues" (buffer-string)))
+        (should (string-match-p "^\\* TODO \\[#B\\] First :task:" (buffer-string)))
+        (should (string-match-p "^\\* DONE Second :bug:" (buffer-string)))))))
+
+(ert-deftest beads-list-test-org-list-command-creates-project-scoped-buffer ()
+  "Experimental org command creates a generated project-pinned buffer."
+  (let* ((project-root (file-name-as-directory
+                        (expand-file-name "beads-org-list-project" temporary-file-directory)))
+         (buffer-name "*beads-org-list-test*")
+         (issues '(((id . "bd-a") (title . "First") (status . "open"))))
+         refreshed)
+    (make-directory project-root t)
+    (when (get-buffer buffer-name)
+      (kill-buffer buffer-name))
+    (unwind-protect
+        (let ((default-directory project-root))
+          (cl-letf (((symbol-function 'beads-org-list--buffer-name)
+                     (lambda () buffer-name))
+                    ((symbol-function 'beads-cache-refresh)
+                     (lambda (&rest _args)
+                       (setq refreshed default-directory)
+                       (cons t issues))))
+            (beads-org-list)
+            (should (get-buffer buffer-name))
+            (with-current-buffer buffer-name
+              (should (eq major-mode 'beads-org-list-mode))
+              (should (equal default-directory project-root))
+              (should (equal beads-org-list--project-root project-root))
+              (should (equal beads-list--project-root project-root))
+              (should (equal refreshed project-root))
+              (should (null buffer-file-name))
+              (should (string-match-p "^\\* TODO First" (buffer-string))))))
+      (when (get-buffer buffer-name)
+        (kill-buffer buffer-name))
+      (when (file-directory-p project-root)
+        (delete-directory project-root t)))))
+
+(ert-deftest beads-list-test-list-command-still-opens-legacy-table-view ()
+  "The legacy beads-list command still opens beads-list-mode."
+  (let ((buffer-name (if (featurep 'beads-project)
+                         "*beads-list-legacy-test*"
+                       "*Beads Issues*")))
+    (when (get-buffer buffer-name)
+      (kill-buffer buffer-name))
+    (unwind-protect
+        (cl-letf (((symbol-function 'beads-project-buffer-name)
+                   (lambda () buffer-name))
+                  ((symbol-function 'beads-list-refresh)
+                   (lambda (&rest _args) nil)))
+          (beads-list)
+          (with-current-buffer buffer-name
+            (should (eq major-mode 'beads-list-mode))))
+      (when (get-buffer buffer-name)
+        (kill-buffer buffer-name)))))
+
 (ert-deftest beads-list-test-get-issue-at-point-found ()
   "Test that beads-list--get-issue-at-point returns issue when found."
   (with-temp-buffer

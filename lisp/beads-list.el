@@ -34,6 +34,7 @@
 (require 'beads-preview)
 (require 'beads-faces)
 (require 'tabulated-list)
+(require 'org)
 (require 'seq)
 (require 'cl-lib)
 (require 'beads-core)
@@ -44,6 +45,7 @@
 (declare-function beads-edit-field-completing "beads-edit")
 (declare-function beads-edit-field-markdown "beads-edit")
 (declare-function beads-project-buffer-name "beads-project")
+(declare-function beads-project-root "beads-project")
 (declare-function evil-set-initial-state "evil-core")
 (declare-function evil-make-overriding-map "evil-core")
 
@@ -283,6 +285,10 @@ When non-nil, overrides the global setting for this buffer.")
   "Project root for this beads list buffer.
 Used to ensure refresh uses the correct project context.")
 
+(defvar-local beads-org-list--project-root nil
+  "Project root for this experimental org list buffer.
+Used to ensure refresh uses the correct project context.")
+
 (declare-function beads-filter-menu "beads-transient")
 (declare-function beads-delete-issue "beads-transient")
 (declare-function beads-reopen-issue "beads-transient")
@@ -359,6 +365,17 @@ Used to ensure refresh uses the correct project context.")
     (define-key map (kbd "M-p") #'beads-list-previous-section)
     map)
   "Keymap for beads-list-mode.")
+
+(defvar beads-org-list-mode-map
+  (let ((map (make-sparse-keymap)))
+    (set-keymap-parent map org-mode-map)
+    (define-key map (kbd "g") #'beads-org-list-refresh)
+    (define-key map (kbd "n") #'org-next-visible-heading)
+    (define-key map (kbd "p") #'org-previous-visible-heading)
+    (define-key map (kbd "TAB") #'org-cycle)
+    (define-key map (kbd "q") #'beads-list-quit)
+    map)
+  "Keymap for experimental `beads-org-list-mode'.")
 
 (defun beads-list--row-face-for-id (id)
   "Return row face for issue ID, or nil if no special styling needed."
@@ -462,6 +479,26 @@ buffer (e.g. from `beads-detail-mode'), not on a fixed cadence."
                 (beads-list-refresh-async t))
               (setq beads-list--window-selected now-selected))))))))
 
+(defun beads-org-list--maybe-refresh-on-select (frame-or-window)
+  "Run an async refresh when a `beads-org-list-mode' buffer becomes selected.
+
+This mirrors `beads-list--maybe-refresh-on-select' for the experimental
+org list and uses the same freshness short-circuit via
+`beads-org-list-refresh-async'."
+  (let ((frame (cond ((framep frame-or-window) frame-or-window)
+                     ((windowp frame-or-window)
+                      (window-frame frame-or-window))
+                     (t (selected-frame)))))
+    (dolist (win (window-list frame 'no-mini))
+      (when-let ((buf (window-buffer win)))
+        (with-current-buffer buf
+          (when (derived-mode-p 'beads-org-list-mode)
+            (let ((now-selected (eq win (frame-selected-window frame))))
+              (when (and now-selected
+                         (not beads-list--window-selected))
+                (beads-org-list-refresh-async t))
+              (setq beads-list--window-selected now-selected))))))))
+
 (define-derived-mode beads-list-mode tabulated-list-mode "Beads-List"
   "Major mode for displaying Beads issues in a table.
 
@@ -482,10 +519,29 @@ buffer (e.g. from `beads-detail-mode'), not on a fixed cadence."
   (hl-line-mode 1)
   (beads-show-hint))
 
+(define-derived-mode beads-org-list-mode org-mode "Beads-Org-List"
+  "Experimental major mode for displaying Beads issues as org headings.
+
+This mode renders a generated, project-scoped org buffer from Beads data;
+it does not visit or require an org file on disk.  The legacy table view
+remains available through `beads-list'.
+
+\\{beads-org-list-mode-map}"
+  (setq-local org-todo-keywords '((sequence "TODO" "NEXT" "WAIT" "|" "DONE")))
+  (setq-local org-startup-folded nil)
+  (setq-local beads-org-list--project-root nil)
+  (setq buffer-read-only t)
+  (add-hook 'window-selection-change-functions
+            #'beads-org-list--maybe-refresh-on-select nil t)
+  (hl-line-mode 1)
+  (beads-list--update-mode-line))
+
 ;; Configure evil-mode IF user has it loaded (does not enable evil)
 (with-eval-after-load 'evil
   (evil-set-initial-state 'beads-list-mode 'normal)
-  (evil-make-overriding-map beads-list-mode-map 'normal))
+  (evil-set-initial-state 'beads-org-list-mode 'normal)
+  (evil-make-overriding-map beads-list-mode-map 'normal)
+  (evil-make-overriding-map beads-org-list-mode-map 'normal))
 
 (defun beads-list--rebuild-from-issues (all-issues &optional silent message-prefix)
   "Rebuild the tabulated-list display from ALL-ISSUES.
@@ -546,6 +602,31 @@ Shared by `beads-list-refresh' (sync) and `beads-list-refresh-async'
         (message "%s %d issues%s%s"
                  (or message-prefix "Refreshed")
                  (length beads-list--issues) filter-msg sort-msg)))))
+
+(defun beads-org-list--rebuild-from-issues (all-issues &optional silent message-prefix)
+  "Rebuild the generated org list display from ALL-ISSUES.
+
+When SILENT is non-nil, suppress the refresh message.
+MESSAGE-PREFIX (default \"Refreshed\") is the verb used in the message.
+
+Must be called with a `beads-org-list-mode' buffer current."
+  (let* ((model (beads-list-model-build all-issues :sort-mode 'sectioned))
+         (display-issues (beads-list-model-display-issues model))
+         (org-text (beads-list-render-org display-issues))
+         (inhibit-read-only t))
+    (setq beads-list--issues (beads-list-model-issues model))
+    (erase-buffer)
+    (insert "#+TITLE: Beads Issues\n")
+    (insert "#+TODO: TODO NEXT WAIT | DONE\n\n")
+    (unless (string= org-text "")
+      (insert org-text)
+      (insert "\n"))
+    (goto-char (point-min))
+    (beads-list--update-mode-line (beads-list-model-stats model))
+    (unless silent
+      (message "%s %d issues (org)"
+               (or message-prefix "Refreshed")
+               (length beads-list--issues)))))
 
 (defun beads-list-refresh (&optional silent)
   "Fetch issues from daemon and refresh the display.
@@ -629,6 +710,52 @@ token-before-list ordering invariant (see `beads-cache.el')."
                           (concat (substring err 0 197) "...")
                         err))
            (beads-list--rebuild-from-issues all-issues silent "Auto-refreshed"))))
+     '(:all t))))
+
+(defun beads-org-list-refresh (&optional silent)
+  "Fetch all issues and refresh the experimental org list display.
+When SILENT is non-nil, don't show a message."
+  (interactive)
+  (condition-case err
+      (let ((all-issues (cdr (beads-cache-refresh))))
+        (beads-org-list--rebuild-from-issues all-issues silent "Refreshed"))
+    (beads-client-error
+     (message "Failed to fetch issues: %s" (error-message-string err)))))
+
+(cl-defun beads-org-list-refresh-async (&optional silent)
+  "Fetch all issues asynchronously and refresh the experimental org list.
+
+When SILENT is non-nil, suppress the refresh message.  Like
+`beads-list-refresh-async', this uses the project cache freshness token
+when available and no-ops if the issue list has not changed."
+  (let* ((buffer (current-buffer))
+         (cache (and beads-cache-enabled
+                     (beads-cache-supported-p)
+                     (beads-cache-for-project)))
+         (cached-token (and cache (beads-cache-freshness-token cache)))
+         (current-token
+          (and cache
+               (condition-case nil
+                   (beads-client-freshness)
+                 (beads-client-error nil)
+                 (beads-backend-error nil)))))
+    (when (and cached-token current-token
+               (equal cached-token current-token))
+      (cl-return-from beads-org-list-refresh-async nil))
+    (beads-client-list-async
+     (lambda (err all-issues)
+       (when (buffer-live-p buffer)
+         (when (and cache (null err))
+           (setf (beads-cache-issues cache) all-issues)
+           (setf (beads-cache-freshness-token cache) current-token))
+         (with-current-buffer buffer
+           (if err
+               (message "Auto-refresh failed: %s"
+                        (if (> (length err) 200)
+                            (concat (substring err 0 197) "...")
+                          err))
+             (beads-org-list--rebuild-from-issues all-issues silent
+                                                  "Auto-refreshed")))))
      '(:all t))))
 
 (defun beads-list-goto-id (id)
@@ -1326,6 +1453,38 @@ re-renders the detail buffer when the data arrives."
         (beads-client-error
          (message "Failed to fetch issue: %s" (error-message-string err))))
     (message "No issue at point")))
+
+(defun beads-org-list--buffer-name ()
+  "Return the buffer name for the experimental org list in this context."
+  (if-let ((root (and (featurep 'beads-project)
+                      (bound-and-true-p beads-project-per-project-buffers)
+                      (beads-project-root))))
+      (format "*Beads Org: %s*"
+              (file-name-nondirectory (directory-file-name root)))
+    "*Beads Org Issues*"))
+
+;;;###autoload
+(defun beads-org-list ()
+  "Open the experimental org-mode Beads issue list buffer.
+
+The buffer is generated from Beads data for the current project and does
+not visit an org file on disk.  `beads-list' continues to open the legacy
+tabulated list view."
+  (interactive)
+  (let* ((buffer-name (beads-org-list--buffer-name))
+         (buffer (get-buffer-create buffer-name))
+         (project-root default-directory))
+    (with-current-buffer buffer
+      (unless (eq major-mode 'beads-org-list-mode)
+        (beads-org-list-mode))
+      (setq beads-org-list--project-root project-root)
+      (setq beads-list--project-root project-root)
+      ;; Pin default-directory to the project root so generated org
+      ;; refreshes do not depend on the caller's current buffer or any
+      ;; org file path.
+      (setq default-directory project-root)
+      (beads-org-list-refresh))
+    (switch-to-buffer buffer)))
 
 ;;;###autoload
 (defun beads-list ()
