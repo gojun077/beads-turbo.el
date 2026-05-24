@@ -373,10 +373,12 @@ Used to ensure refresh uses the correct project context.")
     (define-key map (kbd "RET") #'beads-list-goto-issue)
     (define-key map (kbd "e") beads-list-edit-map)
     (define-key map (kbd "E") #'beads-list-edit-form)
+    (define-key map (kbd "f") #'beads-filter-menu)
     (define-key map (kbd "H") #'beads-org-list-hierarchy-show)
     (define-key map (kbd "P") #'beads-preview-mode)
     (define-key map (kbd "D") #'beads-org-list-delete-issue)
     (define-key map (kbd "R") #'beads-org-list-reopen-issue)
+    (define-key map (kbd "s") #'beads-list-toggle-sort-mode)
     (define-key map (kbd "n") #'org-next-visible-heading)
     (define-key map (kbd "p") #'org-previous-visible-heading)
     (define-key map (kbd "TAB") #'org-cycle)
@@ -631,9 +633,16 @@ Must be called with a `beads-org-list-mode' buffer current."
          (saved-start-line (when-let ((win (get-buffer-window (current-buffer))))
                              (line-number-at-pos (window-start win))))
          (folded-ids (beads-list--org-folded-ids))
-         (model (beads-list-model-build all-issues :sort-mode 'sectioned))
+         (effective-sort-mode (beads-list--effective-sort-mode))
+         (model (beads-list-model-build
+                 all-issues
+                 :filter beads-list--filter
+                 :marked-ids beads-list--marked
+                 :show-only-marked beads-list--show-only-marked
+                 :sort-mode effective-sort-mode))
          (display-issues (beads-list-model-display-issues model))
-         (org-text (beads-list-render-org display-issues))
+         (org-text (beads-list-render-org
+                    display-issues nil (eq effective-sort-mode 'sectioned)))
          (inhibit-read-only t))
     (setq beads-list--issues (beads-list-model-issues model))
     (erase-buffer)
@@ -659,9 +668,15 @@ Must be called with a `beads-org-list-mode' buffer current."
         (set-window-start win (point))))
     (beads-list--update-mode-line (beads-list-model-stats model))
     (unless silent
-      (message "%s %d issues (org)"
-               (or message-prefix "Refreshed")
-               (length beads-list--issues)))))
+      (let ((filter-msg (if beads-list--filter
+                            (format " [%s]" (beads-filter-name beads-list--filter))
+                          ""))
+            (sort-msg (if (eq effective-sort-mode 'sectioned)
+                          " (sectioned)"
+                        "")))
+        (message "%s %d issues%s%s (org)"
+                 (or message-prefix "Refreshed")
+                 (length beads-list--issues) filter-msg sort-msg)))))
 
 (defun beads-list-refresh (&optional silent)
   "Fetch issues from daemon and refresh the display.
@@ -915,15 +930,57 @@ org heading depth."
                (beads-list--org-render-node node (or level 1)))
              forest "\n"))
 
-(defun beads-list-render-org (issues &optional level)
+(defun beads-list--org-section-name (section)
+  "Return the org section heading name for SECTION number."
+  (pcase section
+    (0 "Ready")
+    (1 "Blocked")
+    (2 "Completed")
+    (_ "Other")))
+
+(defun beads-list--org-render-sectioned-forest (forest &optional level)
+  "Return org text for FOREST grouped by root issue section.
+
+Only root nodes are grouped.  Descendants remain nested under their
+parent regardless of their own status, preserving the one-heading-per-
+issue tree invariant and avoiding duplicate children across sections.
+Section headings intentionally omit `BEADS_ID' properties so issue-at-
+point commands skip them."
+  (let ((level (or level 1))
+        (sections (list (cons 0 nil) (cons 1 nil) (cons 2 nil))))
+    (dolist (node forest)
+      (let* ((issue (alist-get 'issue node))
+             (section (beads-list-model-issue-section issue))
+             (cell (assq section sections)))
+        (when cell
+          (setcdr cell (append (cdr cell) (list node))))))
+    (mapconcat
+     #'identity
+     (delq nil
+           (mapcar (lambda (section)
+                     (when (cdr section)
+                       (concat (make-string level ?*) " "
+                               (beads-list--org-section-name (car section))
+                               "\n"
+                               (beads-list--org-render-forest
+                                (cdr section) (1+ level)))))
+                   sections))
+     "\n")))
+
+(defun beads-list-render-org (issues &optional level sectioned)
   "Return deterministic org text rendering ISSUES as nested headings.
 ISSUES is a flat list of issue alists.  Parent-child nesting is built
 with `beads-list-model-flat-issues-to-forest', preserving orphaned
 issues as roots while keeping their parent metadata in the property
-drawer.  LEVEL defaults to 1."
-  (beads-list--org-render-forest
-   (beads-list-model-flat-issues-to-forest issues)
-   level))
+drawer.  LEVEL defaults to 1.
+
+When SECTIONED is non-nil, group only root issues under Ready, Blocked,
+and Completed headings.  Child issues always stay below their parent and
+are never repeated in another section."
+  (let ((forest (beads-list-model-flat-issues-to-forest issues)))
+    (if sectioned
+        (beads-list--org-render-sectioned-forest forest level)
+      (beads-list--org-render-forest forest level))))
 
 (defun beads-list--format-id (issue)
   "Format ID column for ISSUE."
@@ -1167,7 +1224,7 @@ First clears active filters, then closes preview, then kills the buffer."
    ((beads-list--has-active-filter)
     (setq beads-list--filter nil)
     (setq beads-list--show-only-marked nil)
-    (beads-list-refresh t)
+    (beads-list--refresh-current-view t)
     (message "Filter cleared"))
    (beads-preview-mode
     (beads-preview-mode -1))
@@ -1175,15 +1232,21 @@ First clears active filters, then closes preview, then kills the buffer."
     (beads-core-quit-window-kill-buffer))))
 
 (defun beads-list-toggle-sort-mode ()
-  "Toggle between sectioned and column sort modes."
+  "Toggle between sectioned and unsectioned sort modes.
+
+In the table view, unsectioned mode uses normal tabulated-list column
+sorting.  In the org view, unsectioned mode preserves fetched issue
+order and keeps parent-child nesting; arbitrary column sorting is not
+applied because it would conflict with hierarchy."
   (interactive)
   (setq beads-list--sort-mode-override
         (if (eq (beads-list--effective-sort-mode) 'sectioned)
             'column
           'sectioned))
-  (if (eq beads-list--sort-mode-override 'column)
+  (if (and (derived-mode-p 'beads-list-mode)
+           (eq beads-list--sort-mode-override 'column))
       (setq tabulated-list-sort-key (cons "Date" t)))
-  (beads-list-refresh t)
+  (beads-list--refresh-current-view t)
   (message "Sort mode: %s" beads-list--sort-mode-override))
 
 (defun beads-list-cycle-sort ()
@@ -1279,7 +1342,7 @@ If in sectioned mode, first switches to column mode."
   (if (null beads-list--marked)
       (message "No marked issues")
     (setq beads-list--show-only-marked (not beads-list--show-only-marked))
-    (beads-list-refresh t)
+    (beads-list--refresh-current-view t)
     (message "%s" (if beads-list--show-only-marked
                       (format "Showing %d marked issue(s)" (length beads-list--marked))
                     "Showing all issues"))))

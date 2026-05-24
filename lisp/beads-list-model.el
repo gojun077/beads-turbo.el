@@ -88,11 +88,17 @@ When FILTER is nil, return ISSUES unchanged."
     issues))
 
 (defun beads-list-model-issue-section (issue)
-  "Return section number for ISSUE: 0=unblocked, 1=blocked, 2=closed."
-  (let ((status (alist-get 'status issue)))
+  "Return section number for ISSUE: 0=ready/open, 1=blocked, 2=closed.
+
+Open issues with positive `dependency_count' are treated as blocked,
+matching `beads-list-model-compute-stats'."
+  (let ((status (alist-get 'status issue))
+        (dep-count (or (alist-get 'dependency_count issue) 0)))
     (cond
      ((string= status "closed") 2)
-     ((string= status "blocked") 1)
+     ((or (string= status "blocked")
+          (> dep-count 0))
+      1)
      (t 0))))
 
 (defun beads-list-model-sectioned-sort (issues)

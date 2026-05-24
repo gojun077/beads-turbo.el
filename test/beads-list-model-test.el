@@ -55,6 +55,13 @@
     (should (= 1 (beads-list-model-issue-section (cadr issues))))
     (should (= 2 (beads-list-model-issue-section (caddr issues))))))
 
+(ert-deftest beads-list-model-test-open-issue-with-dependencies-is-blocked-section ()
+  "Open issues with incomplete blockers sort into the blocked section."
+  (should (= 1 (beads-list-model-issue-section
+                '((id . "blocked-open")
+                  (status . "open")
+                  (dependency_count . 2))))))
+
 (ert-deftest beads-list-model-test-flat-issues-to-forest-roots-and-nested-children ()
   "Flat issues become deterministic roots with nested children."
   (let* ((issues '(((id . "root") (title . "Root"))

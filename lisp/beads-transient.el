@@ -52,6 +52,7 @@
 
 (declare-function beads-list "beads-list")
 (declare-function beads-list-refresh "beads-list")
+(declare-function beads-list--refresh-current-view "beads-list")
 (declare-function beads-list-edit-form "beads-list")
 (declare-function beads-list--build-format "beads-list")
 (declare-function beads-list--column-names "beads-list")
@@ -69,6 +70,11 @@
 (defgroup beads-transient nil
   "Transient menus for Beads issue tracker."
   :group 'beads)
+
+(defun beads-transient--list-view-p ()
+  "Return non-nil when the current buffer is a Beads list view."
+  (or (derived-mode-p 'beads-list-mode)
+      (derived-mode-p 'beads-org-list-mode)))
 
 (defun beads-transient--truncate-middle (str max-len)
   "Truncate STR to MAX-LEN using middle ellipsis.
@@ -370,7 +376,7 @@ Press `q' to close the stats window."
   "Filter issues by status.
 Select a status to filter, or \"all\" to clear the filter."
   (interactive)
-  (unless (derived-mode-p 'beads-list-mode)
+  (unless (beads-transient--list-view-p)
     (user-error "Not in beads list mode"))
   (let* ((choices '("all" "open" "in_progress" "blocked" "hooked" "closed"))
          (current (when beads-list--filter
@@ -380,13 +386,13 @@ Select a status to filter, or \"all\" to clear the filter."
     (setq beads-list--filter
           (unless (string= status "all")
             (beads-filter-by-status status)))
-    (beads-list-refresh)))
+    (beads-list--refresh-current-view)))
 
 (defun beads-filter-priority ()
   "Filter issues by priority.
 Select a priority to filter, or \"all\" to clear the filter."
   (interactive)
-  (unless (derived-mode-p 'beads-list-mode)
+  (unless (beads-transient--list-view-p)
     (user-error "Not in beads list mode"))
   (let* ((choices '("all" "P0" "P1" "P2" "P3" "P4"))
          (current (when beads-list--filter
@@ -398,13 +404,13 @@ Select a priority to filter, or \"all\" to clear the filter."
           (unless (string= priority-str "all")
             (beads-filter-by-priority
              (string-to-number (substring priority-str 1)))))
-    (beads-list-refresh)))
+    (beads-list--refresh-current-view)))
 
 (defun beads-filter-type ()
   "Filter issues by type.
 Includes built-in types and any custom types found in current issues."
   (interactive)
-  (unless (derived-mode-p 'beads-list-mode)
+  (unless (beads-transient--list-view-p)
     (user-error "Not in beads list mode"))
   (let* ((types (beads-list-available-types))
          (choices (cons "all" types))
@@ -412,12 +418,12 @@ Includes built-in types and any custom types found in current issues."
     (setq beads-list--filter
           (unless (string= type "all")
             (beads-filter-by-type type)))
-    (beads-list-refresh)))
+    (beads-list--refresh-current-view)))
 
 (defun beads-filter-assignee ()
   "Filter issues by assignee."
   (interactive)
-  (unless (derived-mode-p 'beads-list-mode)
+  (unless (beads-transient--list-view-p)
     (user-error "Not in beads list mode"))
   (let* ((issues (beads-client-list))
          (assignees (seq-uniq
@@ -430,12 +436,12 @@ Includes built-in types and any custom types found in current issues."
            ((string= assignee "all") nil)
            ((string= assignee "unassigned") (beads-filter-unassigned))
            (t (beads-filter-by-assignee assignee))))
-    (beads-list-refresh)))
+    (beads-list--refresh-current-view)))
 
 (defun beads-filter-label ()
   "Filter issues by label."
   (interactive)
-  (unless (derived-mode-p 'beads-list-mode)
+  (unless (beads-transient--list-view-p)
     (user-error "Not in beads list mode"))
   (let* ((issues (beads-client-list))
          (labels (seq-uniq
@@ -446,12 +452,12 @@ Includes built-in types and any custom types found in current issues."
     (setq beads-list--filter
           (unless (string= label "all")
             (beads-filter-by-label label)))
-    (beads-list-refresh)))
+    (beads-list--refresh-current-view)))
 
 (defun beads-filter-parent ()
   "Filter issues by parent (for epic-scoped views)."
   (interactive)
-  (unless (derived-mode-p 'beads-list-mode)
+  (unless (beads-transient--list-view-p)
     (user-error "Not in beads list mode"))
   (let* ((issues (beads-client-list '(:issue-type "epic")))
          (epics (mapcar (lambda (i)
@@ -467,7 +473,7 @@ Includes built-in types and any custom types found in current issues."
     (setq beads-list--filter
           (when parent-id
             (beads-filter-by-parent parent-id)))
-    (beads-list-refresh)
+    (beads-list--refresh-current-view)
     (if parent-id
         (message "Showing children of %s" parent-id)
       (message "Showing all issues"))))
@@ -475,44 +481,44 @@ Includes built-in types and any custom types found in current issues."
 (defun beads-filter-ready-issues ()
   "Filter to show only ready issues (no blockers)."
   (interactive)
-  (unless (derived-mode-p 'beads-list-mode)
+  (unless (beads-transient--list-view-p)
     (user-error "Not in beads list mode"))
   (setq beads-list--filter (beads-filter-ready))
-  (beads-list-refresh)
+  (beads-list--refresh-current-view)
   (message "Showing ready issues only"))
 
 (defun beads-filter-blocked-issues ()
   "Filter to show only blocked issues."
   (interactive)
-  (unless (derived-mode-p 'beads-list-mode)
+  (unless (beads-transient--list-view-p)
     (user-error "Not in beads list mode"))
   (setq beads-list--filter (beads-filter-blocked))
-  (beads-list-refresh)
+  (beads-list--refresh-current-view)
   (message "Showing blocked issues only"))
 
 (defun beads-filter-clear ()
   "Clear all filters."
   (interactive)
-  (unless (derived-mode-p 'beads-list-mode)
+  (unless (beads-transient--list-view-p)
     (user-error "Not in beads list mode"))
   (setq beads-list--filter nil)
-  (beads-list-refresh)
+  (beads-list--refresh-current-view)
   (message "Filters cleared"))
 
 (defun beads-search ()
   "Search issues by title or description.
 Prompts for a search query and filters the list to matching issues."
   (interactive)
-  (unless (derived-mode-p 'beads-list-mode)
+  (unless (beads-transient--list-view-p)
     (user-error "Not in beads list mode"))
   (let ((query (read-string "Search issues: ")))
     (if (string-empty-p query)
         (progn
           (setq beads-list--filter nil)
-          (beads-list-refresh)
+          (beads-list--refresh-current-view)
           (message "Search cleared"))
       (setq beads-list--filter (beads-filter-by-search query))
-      (beads-list-refresh))))
+      (beads-list--refresh-current-view))))
 
 ;;; Column configuration
 
