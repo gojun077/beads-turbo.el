@@ -27,6 +27,7 @@
 (require 'beads-client)
 (require 'beads-cache)
 (require 'beads-detail)
+(require 'beads-list-model)
 
 (declare-function beads-client-types "beads-client")
 (require 'beads-filter)
@@ -406,27 +407,7 @@ entries with no incomplete blocking deps.
 Note: counts reflect the issues currently fetched into the list
 view.  List refreshes request all normal issues explicitly, so closed
 issues are included when the backend supports the all-issues contract."
-  (let ((total (length issues))
-        (open 0) (in-progress 0) (blocked 0)
-        (closed 0) (ready 0))
-    (dolist (issue issues)
-      (let ((status (alist-get 'status issue))
-            (dep-count (or (alist-get 'dependency_count issue) 0)))
-        (pcase status
-          ("open"
-           (cl-incf open)
-           (if (> dep-count 0)
-               (cl-incf blocked)
-             (cl-incf ready)))
-          ("in_progress" (cl-incf in-progress))
-          ("blocked" (cl-incf blocked))
-          ("closed" (cl-incf closed)))))
-    `((total_issues . ,total)
-      (open_issues . ,open)
-      (in_progress_issues . ,in-progress)
-      (blocked_issues . ,blocked)
-      (closed_issues . ,closed)
-      (ready_issues . ,ready))))
+  (beads-list-model-compute-stats issues))
 
 (defun beads-list--update-mode-line (&optional stats)
   "Update the mode line with current stats.
@@ -525,25 +506,21 @@ Shared by `beads-list-refresh' (sync) and `beads-list-refresh-async'
          (saved-line (line-number-at-pos))
          (saved-start (when-let ((win (get-buffer-window (current-buffer))))
                         (window-start win)))
-         (issues (if beads-list--filter
-                     (beads-filter-apply beads-list--filter all-issues)
-                   all-issues))
-         (display-issues (if beads-list--show-only-marked
-                             (seq-filter (lambda (issue)
-                                           (member (alist-get 'id issue) beads-list--marked))
-                                         issues)
-                           issues))
          (effective-sort-mode (beads-list--effective-sort-mode))
-         (sorted-issues (if (eq effective-sort-mode 'sectioned)
-                            (beads-list--sectioned-sort display-issues)
-                          display-issues))
+         (model (beads-list-model-build
+                 all-issues
+                 :filter beads-list--filter
+                 :marked-ids beads-list--marked
+                 :show-only-marked beads-list--show-only-marked
+                 :sort-mode effective-sort-mode))
+         (display-issues (beads-list-model-display-issues model))
          (id-width (beads-list--max-id-width display-issues)))
-    (setq beads-list--issues (append issues nil))
+    (setq beads-list--issues (beads-list-model-issues model))
     (setq tabulated-list-format (beads-list--build-format id-width))
     (tabulated-list-init-header)
     (when (eq effective-sort-mode 'sectioned)
       (setq tabulated-list-sort-key nil))
-    (setq tabulated-list-entries (beads-list-entries sorted-issues))
+    (setq tabulated-list-entries (beads-list-entries display-issues))
     (tabulated-list-print t)
     (beads-list--add-section-separators)
     ;; Restore point: prefer matching the issue id, then the line
@@ -558,8 +535,7 @@ Shared by `beads-list-refresh' (sync) and `beads-list-refresh-async'
     (when-let ((win (get-buffer-window (current-buffer)))
                (start saved-start))
       (set-window-start win (min start (point-max))))
-    (beads-list--update-mode-line
-     (beads-list--compute-stats all-issues))
+    (beads-list--update-mode-line (beads-list-model-stats model))
     (unless silent
       (let ((filter-msg (if beads-list--filter
                             (format " [%s]" (beads-filter-name beads-list--filter))
@@ -770,49 +746,14 @@ Returns non-nil if A should come before B."
 
 (defun beads-list--issue-section (issue)
   "Return section number for ISSUE: 0=unblocked, 1=blocked, 2=closed."
-  (let ((status (alist-get 'status issue)))
-    (cond
-     ((string= status "closed") 2)
-     ((string= status "blocked") 1)
-     (t 0))))
+  (beads-list-model-issue-section issue))
 
 (defun beads-list--sectioned-sort (issues)
   "Sort ISSUES into sections: unblocked, blocked, closed.
 ISSUES can be a list or vector.
 Within unblocked and blocked sections, sort by priority (ascending).
 Within closed section, sort by closed_at date (most recent first)."
-  (let ((unblocked nil)
-        (blocked nil)
-        (closed nil))
-    (seq-doseq (issue issues)
-      (pcase (beads-list--issue-section issue)
-        (0 (push issue unblocked))
-        (1 (push issue blocked))
-        (2 (push issue closed))))
-    (setq unblocked (sort unblocked
-                          (lambda (a b)
-                            (let ((status-a (alist-get 'status a))
-                                  (status-b (alist-get 'status b))
-                                  (prio-a (alist-get 'priority a 2))
-                                  (prio-b (alist-get 'priority b 2)))
-                              (cond
-                               ((and (string= status-a "in_progress")
-                                     (not (string= status-b "in_progress")))
-                                t)
-                               ((and (not (string= status-a "in_progress"))
-                                     (string= status-b "in_progress"))
-                                nil)
-                               (t (< prio-a prio-b)))))))
-    (setq blocked (sort blocked
-                        (lambda (a b)
-                          (< (alist-get 'priority a 2)
-                             (alist-get 'priority b 2)))))
-    (setq closed (sort closed
-                       (lambda (a b)
-                         (let ((date-a (or (alist-get 'closed_at a) ""))
-                               (date-b (or (alist-get 'closed_at b) "")))
-                           (string> date-a date-b)))))
-    (append unblocked blocked closed)))
+  (beads-list-model-sectioned-sort issues))
 
 (defun beads-list--clear-section-overlays ()
   "Remove all section separator overlays."
@@ -923,9 +864,7 @@ Shows ↑ for has parents, ↓ for has children, ↕ for both."
   "Get issue data at current line.
 Returns the issue alist or nil if not found."
   (when-let ((id (beads-list--tabulated-id-at-point)))
-    (seq-find (lambda (issue)
-                (string= (alist-get 'id issue) id))
-              beads-list--issues)))
+    (beads-list-model-find-by-id beads-list--issues id)))
 
 (defun beads-list--has-active-filter ()
   "Return non-nil if any filter is currently active."
