@@ -15,7 +15,7 @@ DOLT_PORT   := 3310
 MAIN_REPO   := $(shell git rev-parse --git-common-dir | sed 's|/\.git$$||')
 IS_WORKTREE := $(shell [ "$$(git rev-parse --git-common-dir)" = ".git" ] && echo no || echo yes)
 
-.PHONY: setup push lint test build check clean interactive docs docs-view new-test check-parens lint-defun
+.PHONY: setup push lint test build check clean interactive docs docs-view new-test check-parens lint-defun perf-test benchmark
 
 help:
 	@echo "beads.el Makefile targets:"
@@ -25,8 +25,10 @@ help:
 	@echo "  check-parens - Run parenthesis and syntax checks (delegates to scripts/elisp-lint)"
 	@echo "  lint-defun   - Check for nested defun forms (paren mismatch detector)"
 	@echo "  test         - Run ERT test suite"
+	@echo "  perf-test    - Run hermetic ERT performance regression tests"
+	@echo "  benchmark    - Run exploratory dolt SQL wall-clock benchmark"
 	@echo "  build        - Byte-compile all .el files"
-	@echo "  check        - Run lint + test (full quality gate)"
+	@echo "  check        - Run lint + test + perf-test (full quality gate)"
 	@echo "  clean        - Remove byte-compiled files"
 	@echo "  interactive  - Launch Emacs with beads.el loaded"
 	@echo "  docs         - Build texinfo documentation"
@@ -136,10 +138,16 @@ lint-defun:
 test:
 	@scripts/elisp-test
 
+perf-test:
+	@scripts/elisp-perf-test
+
+benchmark:
+	@scripts/benchmark-dolt-sql
+
 build:
 	@scripts/elisp-build
 
-check: lint test
+check: lint test perf-test
 
 clean:
 	@echo "Removing byte-compiled files..."

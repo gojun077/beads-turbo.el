@@ -9,6 +9,7 @@
 
 (require 'cl-lib)
 (require 'ert)
+(require 'beads-client)
 (require 'beads-filter)
 (require 'beads-list-model)
 
@@ -266,6 +267,178 @@ noise in batch runs."
     (beads-perf-test--assert-under deep-larger 3.0)
     (beads-perf-test--assert-growth-under broad-base broad-larger 8.0)
     (beads-perf-test--assert-growth-under deep-base deep-larger 12.0)))
+
+(defun beads-perf-test--expected-filter-count (issues filter-fn)
+  "Return the count of ISSUES for which FILTER-FN returns non-nil.
+
+FILTER-FN is a plain Elisp predicate, not a `beads-filter' object.
+Used as a reference implementation to verify `beads-filter-apply'
+returns the same set."
+  (cl-count-if filter-fn issues))
+
+(ert-deftest beads-perf-test-filter-common-predicates ()
+  "Common `beads-filter' predicates stay correct and near-linear.
+
+Exercises the hot filter paths used by the list view:
+- `beads-filter-not-closed' (status pipeline)
+- `beads-filter-by-status' open
+- `beads-filter-by-priority' P1
+- `beads-filter-by-label' on a known generated label
+- `beads-filter-compose' of not-closed + priority + label
+
+Result sets are validated against simple reference predicates on
+the generated fixtures, and timing growth is bounded by a generous
+ratio so this catches accidental O(n^2) regressions without
+flaking on noisy machines."
+  (let* ((base-size (beads-perf-test--scaled-size 400))
+         (larger-size (beads-perf-test--scaled-size 1600))
+         (base-issues (beads-perf-test--flat-issues base-size))
+         (larger-issues (beads-perf-test--flat-issues larger-size))
+         (not-closed (beads-filter-not-closed))
+         (open (beads-filter-by-status "open"))
+         (p1 (beads-filter-by-priority 1))
+         (label-area-0 (beads-filter-by-label "area-0"))
+         (composed (beads-filter-compose not-closed p1 label-area-0))
+         (filters (list (cons "not-closed" not-closed)
+                        (cons "status:open" open)
+                        (cons "priority:P1" p1)
+                        (cons "label:area-0" label-area-0)
+                        (cons "composed" composed)))
+         (references
+          (list (cons "not-closed"
+                      (lambda (i)
+                        (not (string= (alist-get 'status i) "closed"))))
+                (cons "status:open"
+                      (lambda (i)
+                        (string= (alist-get 'status i) "open")))
+                (cons "priority:P1"
+                      (lambda (i) (= 1 (alist-get 'priority i))))
+                (cons "label:area-0"
+                      (lambda (i)
+                        (member "area-0" (alist-get 'labels i))))
+                (cons "composed"
+                      (lambda (i)
+                        (and (not (string= (alist-get 'status i) "closed"))
+                             (= 1 (alist-get 'priority i))
+                             (member "area-0" (alist-get 'labels i))))))))
+    (dolist (entry filters)
+      (let* ((label (car entry))
+             (filter (cdr entry))
+             (reference (alist-get label references nil nil #'string=))
+             (base (beads-perf-test--measure
+                    (format "beads-filter-apply %s" label) base-size
+                    (lambda () (beads-filter-apply filter base-issues))))
+             (larger (beads-perf-test--measure
+                      (format "beads-filter-apply %s" label) larger-size
+                      (lambda () (beads-filter-apply filter larger-issues)))))
+        (should (= (beads-perf-test--expected-filter-count base-issues reference)
+                   (length (plist-get base :result))))
+        (should (= (beads-perf-test--expected-filter-count larger-issues reference)
+                   (length (plist-get larger :result))))
+        ;; Caps and growth ratio are intentionally generous; the goal is
+        ;; to catch accidental superlinear regressions, not to enforce
+        ;; absolute timings on any particular machine.
+        (beads-perf-test--assert-under base 1.0)
+        (beads-perf-test--assert-under larger 3.0)
+        (beads-perf-test--assert-growth-under base larger 8.0)))))
+
+(defun beads-perf-test--make-fake-projects (root project-count nested-depth)
+  "Create PROJECT-COUNT fake beads projects under ROOT.
+
+Each project has a `.beads/metadata.json' marker and a nested
+directory chain NESTED-DEPTH levels deep used as `default-directory'
+for lookups.  Returns a list of plists describing each project:
+  (:db PATH :leaf-dir DIR)
+where DB is the metadata.json path the discovery should return,
+and LEAF-DIR is the deepest subdirectory the test should chdir to."
+  (let (projects)
+    (dotimes (p project-count)
+      (let* ((proj-dir (expand-file-name (format "proj-%03d" p) root))
+             (beads-dir (expand-file-name ".beads" proj-dir))
+             (metadata (expand-file-name "metadata.json" beads-dir))
+             (leaf-dir proj-dir))
+        (make-directory beads-dir t)
+        (with-temp-file metadata
+          (insert "{\"version\":\"perf-test\"}"))
+        (dotimes (d nested-depth)
+          (setq leaf-dir (expand-file-name (format "sub-%02d" d) leaf-dir))
+          (make-directory leaf-dir t))
+        (push (list :db metadata :leaf-dir leaf-dir) projects)))
+    (nreverse projects)))
+
+(defun beads-perf-test--lookup-from (dir)
+  "Resolve a beads database with `default-directory' temporarily set to DIR.
+
+Hermetic: unsets `BEADS_DIR'/`BEADS_DB' for the call so only the
+on-disk fixture under DIR is consulted."
+  (let ((default-directory (file-name-as-directory dir))
+        ;; Without `=', these entries unset the variable rather than
+        ;; setting it to empty (which would be truthy and short-circuit
+        ;; the discovery code into returning `default-directory').
+        (process-environment (cons "BEADS_DIR" (cons "BEADS_DB" process-environment))))
+    (beads-client--find-database)))
+
+(ert-deftest beads-perf-test-client-find-database-cache ()
+  "`beads-client--find-database' returns correct per-project paths fast.
+
+Creates a tree of fake projects, each with a `.beads/metadata.json'
+marker and a nested chain of subdirectories.  Walks every leaf
+once to populate the per-search-directory cache, verifies the
+returned database path matches the expected metadata file, then
+repeats the same walks N times and asserts the cached pass is at
+least roughly as cheap as the cold pass and well under absolute
+caps.  Bounds are intentionally generous — the goal is to catch
+regressions like a broken cache or quadratic path-walk, not to
+enforce machine-specific timings."
+  (let* ((tmp-root (make-temp-file "beads-perf-find-db-" t))
+         (project-count (beads-perf-test--scaled-size 6))
+         (nested-depth 5)
+         (repeat-count (beads-perf-test--scaled-size 20)))
+    (unwind-protect
+        (let* ((projects (beads-perf-test--make-fake-projects
+                          tmp-root project-count nested-depth))
+               (leaves (mapcar (lambda (p) (plist-get p :leaf-dir)) projects))
+               (fixture-size (* project-count nested-depth)))
+          (clrhash beads-client--db-cache)
+          ;; Cold pass: each unique leaf dir is a cache miss that walks
+          ;; the tree.  Verify correctness as we go.
+          (let ((cold (beads-perf-test--measure
+                       "beads-client--find-database cold" fixture-size
+                       (lambda ()
+                         (dolist (proj projects)
+                           (let ((expected (plist-get proj :db))
+                                 (got (beads-perf-test--lookup-from
+                                       (plist-get proj :leaf-dir))))
+                             (should (file-equal-p expected got))))
+                         t))))
+            ;; Warm pass: repeatedly chdir into every leaf and resolve
+            ;; from the cache.  This is the path real interactive use
+            ;; hits on every list refresh.
+            (let ((warm (beads-perf-test--measure
+                         "beads-client--find-database cached"
+                         (* repeat-count (length leaves))
+                         (lambda ()
+                           (dotimes (_ repeat-count)
+                             (dolist (leaf leaves)
+                               (beads-perf-test--lookup-from leaf)))
+                           t))))
+              (beads-perf-test--assert-under cold 2.0)
+              (beads-perf-test--assert-under warm 2.0)
+              ;; Cached lookups should not blow past a small multiple of
+              ;; the cold cost when normalized per call.  Be generous to
+              ;; avoid flakes on noisy machines.
+              (let* ((cold-per-call (/ (plist-get cold :elapsed)
+                                       (max 1 (length projects))))
+                     (warm-per-call (/ (plist-get warm :elapsed)
+                                       (max 1 (* repeat-count
+                                                 (length leaves)))))
+                     (ratio (/ warm-per-call (max 1e-9 cold-per-call))))
+                (when (> ratio 2.0)
+                  (ert-fail
+                   (format
+                    "cached lookup %.6fs/call exceeded 2x cold %.6fs/call"
+                    warm-per-call cold-per-call)))))))
+      (delete-directory tmp-root t))))
 
 (provide 'beads-perf-test)
 ;;; beads-perf-test.el ends here
