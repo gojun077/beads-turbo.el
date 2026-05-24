@@ -91,6 +91,9 @@ in `list' results."
 (defvar beads-dolt-sql--params-time nil
   "Time when `beads-dolt-sql--params' was last refreshed.")
 
+(defvar beads-dolt-sql--params-root nil
+  "Canonical project root for `beads-dolt-sql--params'.")
+
 (defvar beads-dolt-sql--available t
   "Nil if last attempt to reach Dolt SQL server failed.
 Set back to t periodically so we retry after transient failures.")
@@ -651,12 +654,16 @@ ORDER BY i.priority ASC, i.created_at DESC"
     (setq beads-dolt-sql--mysql-output "")
     proc))
 
-(defun beads-dolt-sql--ensure-mysql-connected ()
-  (if (and beads-dolt-sql--mysql-proc (process-live-p beads-dolt-sql--mysql-proc))
-      beads-dolt-sql--mysql-proc
-    (let ((dolt (beads-backend-dolt-sql--fetch-dolt-params)))
-      (unless dolt (signal 'beads-backend-error '("Dolt SQL server not available")))
-      (when beads-dolt-sql--mysql-proc (delete-process beads-dolt-sql--mysql-proc))
+(defun beads-dolt-sql--ensure-mysql-connected (&optional dolt)
+  "Return a live persistent mariadb process for DOLT params."
+  (let ((dolt (or dolt (beads-backend-dolt-sql--fetch-dolt-params))))
+    (unless dolt (signal 'beads-backend-error '("Dolt SQL server not available")))
+    (if (and beads-dolt-sql--mysql-proc
+             (process-live-p beads-dolt-sql--mysql-proc)
+             (equal beads-dolt-sql--mysql-params dolt))
+        beads-dolt-sql--mysql-proc
+      (when beads-dolt-sql--mysql-proc
+        (delete-process beads-dolt-sql--mysql-proc))
       (beads-dolt-sql--start-mysql-proc dolt))))
 
 (defun beads-dolt-sql--strip-banner (output)
@@ -672,7 +679,7 @@ or ssl-verify-server-cert warnings, which are not SQL errors."
       (replace-match ""))
     (string-trim (buffer-string))))
 
-(defun beads-dolt-sql--mysql-query (sql)
+(defun beads-dolt-sql--mysql-query (sql &optional dolt)
   "Send SQL to the persistent mysql/mariadb subprocess and parse the JSON.
 Appends a sentinel `SELECT '<marker>'' query so the polling loop can
 detect end-of-response by matching `beads-dolt-sql--mysql-end-marker'
@@ -680,7 +687,7 @@ in the buffered output, instead of guessing from a trailing newline.
 This is both faster (no 50ms pad after the last chunk) and more
 correct (intermediate chunks ending with \\n no longer terminate the
 loop early)."
-  (let* ((proc (beads-dolt-sql--ensure-mysql-connected))
+  (let* ((proc (beads-dolt-sql--ensure-mysql-connected dolt))
          (marker beads-dolt-sql--mysql-end-marker))
     (setq beads-dolt-sql--mysql-output "")
     (process-send-string proc
@@ -699,36 +706,46 @@ loop early)."
         (signal 'beads-backend-error (list raw)))
       (beads-dolt-sql--parse-json-output raw))))
 
-(cl-defun beads-backend-dolt-sql--fetch-dolt-params ()
+(defun beads-backend-dolt-sql--canonical-project-root (&optional project-root)
+  "Return the canonical project root used to scope SQL connection state."
+  (file-name-as-directory
+   (expand-file-name
+    (or project-root (beads-client--project-root) default-directory))))
+
+(cl-defun beads-backend-dolt-sql--fetch-dolt-params (&optional project-root)
   "Fetch Dolt SQL server connection params from `bd dolt show --json'.
 Returns nil and sets `beads-dolt-sql--available' to nil on failure.
 Caches result for 60 seconds."
-  (when (and beads-dolt-sql--params
-             beads-dolt-sql--params-time
-             (< (float-time (time-since beads-dolt-sql--params-time)) 60))
-    (cl-return-from beads-backend-dolt-sql--fetch-dolt-params
-      beads-dolt-sql--params))
-  (let ((default-directory (or (beads-client--project-root) default-directory)))
-    (ignore-errors
-      (with-temp-buffer
-        (let ((exit-code (call-process "bd" nil t nil
-                                       "dolt" "show" "--json")))
-          (goto-char (point-min))
-          (if (zerop exit-code)
-              (let ((parsed (json-read)))
-                (if (and (eq t (alist-get 'connection_ok parsed))
-                         (equal "dolt" (alist-get 'backend parsed)))
+  (let ((root (beads-backend-dolt-sql--canonical-project-root project-root)))
+    (when (and beads-dolt-sql--params
+               beads-dolt-sql--params-time
+               (or (null beads-dolt-sql--params-root)
+                   (equal beads-dolt-sql--params-root root))
+               (< (float-time (time-since beads-dolt-sql--params-time)) 60))
+      (cl-return-from beads-backend-dolt-sql--fetch-dolt-params
+        beads-dolt-sql--params))
+    (let ((default-directory root))
+      (ignore-errors
+        (with-temp-buffer
+          (let ((exit-code (call-process "bd" nil t nil
+                                         "dolt" "show" "--json")))
+            (goto-char (point-min))
+            (if (zerop exit-code)
+                (let ((parsed (json-read)))
+                  (if (and (eq t (alist-get 'connection_ok parsed))
+                           (equal "dolt" (alist-get 'backend parsed)))
+                      (progn
+                        (setq beads-dolt-sql--params parsed)
+                        (setq beads-dolt-sql--params-time (current-time))
+                        (setq beads-dolt-sql--params-root root)
+                        (setq beads-dolt-sql--available t)
+                        parsed)
                     (progn
-                      (setq beads-dolt-sql--params parsed)
-                      (setq beads-dolt-sql--params-time (current-time))
-                      (setq beads-dolt-sql--available t)
-                      parsed)
-                  (progn
-                    (setq beads-dolt-sql--available nil)
-                    nil)))
-            (progn
-              (setq beads-dolt-sql--available nil)
-              nil)))))))
+                      (setq beads-dolt-sql--available nil)
+                      nil)))
+              (progn
+                (setq beads-dolt-sql--available nil)
+                nil))))))))
 
 (cl-defun beads-backend-dolt-sql--available-p ()
   "Return non-nil if Dolt SQL transport is available."
@@ -758,8 +775,8 @@ Caches result for 60 seconds."
         (goto-char (point-min))
         (beads-dolt-sql--parse-json-output (buffer-string))))))
 
-(defun beads-backend-dolt-sql--execute-sql (sql &optional params)
-  (let ((dolt (beads-backend-dolt-sql--fetch-dolt-params)))
+(defun beads-backend-dolt-sql--execute-sql (sql &optional params project-root)
+  (let ((dolt (beads-backend-dolt-sql--fetch-dolt-params project-root)))
     (unless dolt (signal 'beads-backend-error '("Dolt SQL server not available")))
     (let ((sql-str sql))
       (when params (dolist (param params) (setq sql-str (replace-regexp-in-string "\\?" (if (stringp param) (concat "'" (replace-regexp-in-string "'" "''" param) "'") (format "%s" param)) sql-str t t))))
@@ -772,20 +789,20 @@ Caches result for 60 seconds."
            (cond
             ((executable-find "mariadb")
              (condition-case _fallback-err
-                 (beads-dolt-sql--mysql-query sql-str)
+                 (beads-dolt-sql--mysql-query sql-str dolt)
                (error (beads-backend-dolt-sql--one-shot-mariadb sql-str dolt))))
             (t
              (signal 'beads-backend-error
                      '("mysql.el query failed and the mariadb client is not on PATH; install it (e.g. `brew install mariadb')")))))))
        ((executable-find "mariadb")
         (condition-case _err
-            (beads-dolt-sql--mysql-query sql-str)
+            (beads-dolt-sql--mysql-query sql-str dolt)
           (error (beads-backend-dolt-sql--one-shot-mariadb sql-str dolt))))
        (t
         (signal 'beads-backend-error
                 '("Neither mysql.el nor the mariadb client is available; install mariadb (e.g. `brew install mariadb')")))))))
 
-(defun beads-backend-dolt-sql--execute-list (_args _project-root)
+(defun beads-backend-dolt-sql--execute-list (_args project-root)
   "Execute `list' operation via direct SQL.
 Uses `beads-dolt-sql--list-lite-sql' when `beads-dolt-sql-list-lite'
 is non-nil (the default), otherwise falls back to the full
@@ -797,42 +814,48 @@ backend when callers pass `:all t'."
   (beads-backend-dolt-sql--execute-sql
    (if beads-dolt-sql-list-lite
        beads-dolt-sql--list-lite-sql
-     beads-dolt-sql--list-sql)))
+     beads-dolt-sql--list-sql)
+   nil project-root))
 
-(defun beads-backend-dolt-sql--execute-show (args _project-root)
+(defun beads-backend-dolt-sql--execute-show (args project-root)
   "Execute `show' operation via direct SQL."
   (let ((id (alist-get 'id args)))
     (unless id
       (signal 'beads-backend-error '("show requires an id")))
     (beads-backend-dolt-sql--execute-sql beads-dolt-sql--show-sql
-                                         (list id))))
+                                         (list id) project-root)))
 
-(defun beads-backend-dolt-sql--execute-stats (_args _project-root)
+(defun beads-backend-dolt-sql--execute-stats (_args project-root)
   "Execute `stats' operation via direct SQL."
-  (beads-backend-dolt-sql--execute-sql beads-dolt-sql--stats-sql))
+  (beads-backend-dolt-sql--execute-sql beads-dolt-sql--stats-sql
+                                       nil project-root))
 
-(defun beads-backend-dolt-sql--execute-ready (_args _project-root)
+(defun beads-backend-dolt-sql--execute-ready (_args project-root)
   "Execute `ready' operation via direct SQL."
-  (beads-backend-dolt-sql--execute-sql beads-dolt-sql--ready-sql))
+  (beads-backend-dolt-sql--execute-sql beads-dolt-sql--ready-sql
+                                       nil project-root))
 
-(defun beads-backend-dolt-sql--execute-count (_args _project-root)
+(defun beads-backend-dolt-sql--execute-count (_args project-root)
   "Execute `count' operation via direct SQL."
-  (beads-backend-dolt-sql--execute-sql beads-dolt-sql--count-sql))
+  (beads-backend-dolt-sql--execute-sql beads-dolt-sql--count-sql
+                                       nil project-root))
 
-(defun beads-backend-dolt-sql--execute-stale (args _project-root)
+(defun beads-backend-dolt-sql--execute-stale (args project-root)
   "Execute `stale' operation via direct SQL."
   (let ((days (or (alist-get 'days args) 14)))
     (beads-backend-dolt-sql--execute-sql beads-dolt-sql--stale-sql
-                                         (list days))))
+                                         (list days) project-root)))
 
-(defun beads-backend-dolt-sql--execute-epic-status (_args _project-root)
+(defun beads-backend-dolt-sql--execute-epic-status (_args project-root)
   "Execute `epic_status' operation via direct SQL."
-  (beads-backend-dolt-sql--execute-sql beads-dolt-sql--epic-status-sql))
+  (beads-backend-dolt-sql--execute-sql beads-dolt-sql--epic-status-sql
+                                       nil project-root))
 
-(defun beads-backend-dolt-sql--execute-freshness (_args _project-root)
+(defun beads-backend-dolt-sql--execute-freshness (_args project-root)
   "Execute `freshness' operation via direct SQL.
 Returns a small alist (counts + max timestamps) used as a cache token."
-  (beads-backend-dolt-sql--execute-sql beads-dolt-sql--freshness-sql))
+  (beads-backend-dolt-sql--execute-sql beads-dolt-sql--freshness-sql
+                                       nil project-root))
 
 (defun beads-backend-dolt-sql--operation-to-sql-fn (operation)
   "Return the SQL executor function for OPERATION, or nil."
@@ -972,6 +995,7 @@ availability per operation and falls back to `bd' when needed."
   (setq beads-dolt-sql--available t)
   (setq beads-dolt-sql--params nil)
   (setq beads-dolt-sql--params-time nil)
+  (setq beads-dolt-sql--params-root nil)
   (beads-dolt-sql--native-mysql-disconnect)
   (when beads-dolt-sql--mysql-proc (delete-process beads-dolt-sql--mysql-proc))
   (setq beads-dolt-sql--mysql-proc nil)
@@ -987,6 +1011,7 @@ availability per operation and falls back to `bd' when needed."
   (interactive)
   (setq beads-dolt-sql-enabled nil)
   (setq beads-dolt-sql--available nil)
+  (setq beads-dolt-sql--params-root nil)
   (beads-dolt-sql--native-mysql-disconnect)
   (when beads-dolt-sql--mysql-proc (delete-process beads-dolt-sql--mysql-proc) (setq beads-dolt-sql--mysql-proc nil) (setq beads-dolt-sql--mysql-output nil) (setq beads-dolt-sql--mysql-params nil))
   (advice-remove 'beads-backend--auto-detect
