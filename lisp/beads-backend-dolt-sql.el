@@ -514,6 +514,7 @@ ORDER BY i.priority ASC, i.created_at DESC"
 (defun beads-dolt-sql--normalize-json-value (value)
   "Normalize VALUE to the backend's public alist/list representation."
   (cond
+   ((eq value :null) nil)
    ((hash-table-p value)
     (let (alist)
       (maphash (lambda (key val)
