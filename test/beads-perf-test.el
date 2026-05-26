@@ -11,6 +11,7 @@
 (require 'ert)
 (require 'beads-client)
 (require 'beads-filter)
+(require 'beads-list)
 (require 'beads-list-model)
 
 (defun beads-perf-test--scale ()
@@ -99,6 +100,15 @@ noise in batch runs."
   (cl-count-if (lambda (issue)
                  (string= (alist-get 'status issue) status))
                issues))
+
+(defun beads-perf-test--count-matches (regexp string)
+  "Return the number of REGEXP matches in STRING."
+  (let ((start 0)
+        (count 0))
+    (while (string-match regexp string start)
+      (cl-incf count)
+      (setq start (match-end 0)))
+    count))
 
 (defun beads-perf-test--assert-flat-model-correct (model all-issues)
   "Assert MODEL has expected counts for ALL-ISSUES."
@@ -213,6 +223,9 @@ noise in batch runs."
      (plist-get base :result) base-issues)
     (beads-perf-test--assert-flat-model-correct
      (plist-get larger :result) larger-issues)
+    ;; These broad caps leave two orders of magnitude of headroom on a
+    ;; typical developer machine.  The relative 4x-size/8x-time check is
+    ;; the primary regression guard; absolute caps catch runaway behavior.
     (beads-perf-test--assert-under base 1.0)
     (beads-perf-test--assert-under larger 3.0)
     (beads-perf-test--assert-growth-under base larger 8.0)))
@@ -263,6 +276,10 @@ noise in batch runs."
      (plist-get deep-base :result) (length deep-base-issues))
     (beads-perf-test--assert-deep-forest-correct
      (plist-get deep-larger :result) (length deep-larger-issues))
+    ;; Forest construction should scale close to linearly.  Keep the
+    ;; wall-clock caps intentionally loose and use the growth ratios to
+    ;; flag obvious O(n^2) regressions while avoiding machine-specific
+    ;; timing requirements in the default gate.
     (beads-perf-test--assert-under broad-larger 3.0)
     (beads-perf-test--assert-under deep-larger 3.0)
     (beads-perf-test--assert-growth-under broad-base broad-larger 8.0)
@@ -341,6 +358,41 @@ flaking on noisy machines."
         (beads-perf-test--assert-under base 1.0)
         (beads-perf-test--assert-under larger 3.0)
         (beads-perf-test--assert-growth-under base larger 8.0)))))
+
+(ert-deftest beads-perf-test-org-render-large-sectioned-list ()
+  "Org list rendering stays correct and near-linear on large fixtures.
+
+This exercises the default `beads-list-render-org' path used by the
+interactive org list view, but keeps the test hermetic by rendering
+generated issue alists directly into a string instead of creating a
+display buffer or calling `bd'."
+  (let* ((base-size (beads-perf-test--scaled-size 300))
+         (larger-size (beads-perf-test--scaled-size 1200))
+         (base-issues (beads-perf-test--flat-issues base-size))
+         (larger-issues (beads-perf-test--flat-issues larger-size))
+         (base (beads-perf-test--measure
+                "beads-list-render-org sectioned" base-size
+                (lambda ()
+                  (beads-list-render-org base-issues 1 t))))
+         (larger (beads-perf-test--measure
+                  "beads-list-render-org sectioned" larger-size
+                  (lambda ()
+                    (beads-list-render-org larger-issues 1 t))))
+         (base-text (plist-get base :result))
+         (larger-text (plist-get larger :result)))
+    (should (= base-size
+               (beads-perf-test--count-matches "^:BEADS_ID: " base-text)))
+    (should (= larger-size
+               (beads-perf-test--count-matches "^:BEADS_ID: " larger-text)))
+    (should (string-match-p "^\* Ready" larger-text))
+    (should (string-match-p "^\* Blocked" larger-text))
+    (should (string-match-p "^\* Completed" larger-text))
+    ;; Rendering produces a sizeable org string, so the cap is deliberately
+    ;; broad.  The 4x-size/8x-time growth check is the useful regression
+    ;; signal for accidental quadratic string/tree handling.
+    (beads-perf-test--assert-under base 1.0)
+    (beads-perf-test--assert-under larger 3.0)
+    (beads-perf-test--assert-growth-under base larger 8.0)))
 
 (defun beads-perf-test--make-fake-projects (root project-count nested-depth)
   "Create PROJECT-COUNT fake beads projects under ROOT.

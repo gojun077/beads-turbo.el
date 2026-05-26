@@ -11,13 +11,21 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ITERS=${ITERS:-10}
-RESULTS_DIR="$ROOT/history/benchmark-$(date +%Y%m%d-%H%M%S)"
+BENCHMARK_ISSUE_ID=${BENCHMARK_ISSUE_ID:-bdel-4c4.1}
+BENCHMARK_ISSUE_ID_SQL=$(printf "%s" "$BENCHMARK_ISSUE_ID" | sed "s/'/''/g")
+RESULTS_DIR=${BENCHMARK_RESULTS_DIR:-"$ROOT/history/benchmark-$(date +%Y%m%d-%H%M%S)"}
+export ITERS BENCHMARK_ISSUE_ID
 mkdir -p "$RESULTS_DIR"
 
 echo "=== Dolt SQL Transport Benchmark ==="
 echo "Date: $(date -Iseconds)"
 echo "Iterations per test: $ITERS"
+echo "Issue ID for show benchmark: $BENCHMARK_ISSUE_ID"
 echo "Results dir: $RESULTS_DIR"
+echo
+
+echo "Prerequisites: running Dolt SQL server, bd CLI, mariadb/mysql client, and a valid benchmark issue ID."
+echo "Overrides: ITERS, BENCHMARK_RESULTS_DIR, BENCHMARK_ISSUE_ID"
 echo
 
 cd "$ROOT"
@@ -80,10 +88,10 @@ benchmark_shell "mariadb " mariadb -h "$DOLT_HOST" -P "$DOLT_PORT" -u "$DOLT_USE
 echo
 
 echo "[show]"
-benchmark_shell "bd-cli  " bd show bdel-4c4.1 --json
+benchmark_shell "bd-cli  " bd show "$BENCHMARK_ISSUE_ID" --json
 benchmark_shell "mariadb " mariadb -h "$DOLT_HOST" -P "$DOLT_PORT" -u "$DOLT_USER" "$DOLT_DB" \
     --batch --skip-column-names --raw -e \
-    "SELECT JSON_OBJECT('id',id,'title',title,'status',status) FROM issues WHERE id='bdel-4c4.1' AND ephemeral=0"
+    "SELECT JSON_OBJECT('id',id,'title',title,'status',status) FROM issues WHERE id='$BENCHMARK_ISSUE_ID_SQL' AND ephemeral=0"
 echo
 
 echo "[ready]"
@@ -176,8 +184,30 @@ cat > "$ELISP_BENCH" <<'ELISP_EOF'
 (require 'beads-backend-dolt-sql)
 (require 'beads-client)
 
-(defvar bench-iters 10)
+(defvar bench-iters (string-to-number (or (getenv "ITERS") "10")))
+(defvar bench-issue-id (or (getenv "BENCHMARK_ISSUE_ID") "bdel-4c4.1"))
 (defvar bench-results nil)
+
+(defun bench--strip-warning-banners (raw)
+  "Strip non-JSON client warning banners from RAW command output."
+  (if (fboundp 'beads-dolt-sql--strip-banner)
+      (beads-dolt-sql--strip-banner raw)
+    (with-temp-buffer
+      (insert raw)
+      (goto-char (point-min))
+      (while (re-search-forward
+              "^/.*: Deprecated program name.*\n\|WARNING: option --ssl-verify-server-cert.*\n?"
+              nil t)
+        (replace-match ""))
+      (string-trim (buffer-string)))))
+
+(defun bench--read-json-buffer ()
+  "Read JSON from current buffer after stripping known client banners."
+  (let ((raw (bench--strip-warning-banners (buffer-string))))
+    (erase-buffer)
+    (insert raw)
+    (goto-char (point-min))
+    (json-read)))
 
 (defun bench--time-it (fn)
   (let ((times nil))
@@ -245,7 +275,7 @@ cat > "$ELISP_BENCH" <<'ELISP_EOF'
                        (with-temp-buffer
                          (apply #'call-process "bd" nil t nil '("list" "--json"))
                          (goto-char (point-min))
-                         (json-read))))))
+                         (bench--read-json-buffer))))))
        (cli-stats (bench--stats cli-times))
        (sql-times (bench--time-it
                    (lambda ()
@@ -264,13 +294,14 @@ cat > "$ELISP_BENCH" <<'ELISP_EOF'
                    (lambda ()
                      (let ((default-directory (or (beads-client--project-root) default-directory)))
                        (with-temp-buffer
-                         (apply #'call-process "bd" nil t nil '("show" "bdel-4c4.1" "--json"))
+                         (apply #'call-process "bd" nil t nil (list "show" bench-issue-id "--json"))
                          (goto-char (point-min))
-                         (json-read))))))
+                         (bench--read-json-buffer))))))
        (cli-stats (bench--stats cli-times))
        (sql-times (bench--time-it
                    (lambda ()
-                     (beads-backend-dolt-sql--execute-show '((id . "bdel-4c4.1")) default-directory))))
+                     (beads-backend-dolt-sql--execute-show
+                      `((id . ,bench-issue-id)) default-directory))))
        (sql-stats (bench--stats sql-times))
        (cli-avg (plist-get cli-stats :avg))
        (sql-avg (plist-get sql-stats :avg))
@@ -287,7 +318,7 @@ cat > "$ELISP_BENCH" <<'ELISP_EOF'
                        (with-temp-buffer
                          (apply #'call-process "bd" nil t nil '("ready" "--json"))
                          (goto-char (point-min))
-                         (json-read))))))
+                         (bench--read-json-buffer))))))
        (cli-stats (bench--stats cli-times))
        (sql-times (bench--time-it
                    (lambda ()
@@ -308,7 +339,7 @@ cat > "$ELISP_BENCH" <<'ELISP_EOF'
                        (with-temp-buffer
                          (apply #'call-process "bd" nil t nil '("stats" "--json"))
                          (goto-char (point-min))
-                         (json-read))))))
+                         (bench--read-json-buffer))))))
        (cli-stats (bench--stats cli-times))
        (sql-times (bench--time-it
                    (lambda ()
@@ -329,7 +360,7 @@ cat > "$ELISP_BENCH" <<'ELISP_EOF'
                        (with-temp-buffer
                          (apply #'call-process "bd" nil t nil '("list" "--json" "--limit" "1"))
                          (goto-char (point-min))
-                         (json-read))))))
+                         (bench--read-json-buffer))))))
        (cli-stats (bench--stats cli-times))
        (sql-times (bench--time-it
                    (lambda ()
@@ -350,7 +381,7 @@ cat > "$ELISP_BENCH" <<'ELISP_EOF'
                        (with-temp-buffer
                          (apply #'call-process "bd" nil t nil '("stale" "--json"))
                          (goto-char (point-min))
-                         (json-read))))))
+                         (bench--read-json-buffer))))))
        (cli-stats (bench--stats cli-times))
        (sql-times (bench--time-it
                    (lambda ()

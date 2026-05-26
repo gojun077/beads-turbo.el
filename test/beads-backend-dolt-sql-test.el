@@ -387,6 +387,26 @@ easy to mock)."
        (should-error (beads-backend-dolt-sql--execute-sql "SELECT 1")
                      :type 'beads-backend-error)))))
 
+(ert-deftest beads-dolt-sql-test-one-shot-mariadb-strips-warning-banners ()
+  "One-shot mariadb parsing ignores known non-JSON client warnings."
+  (cl-letf (((symbol-function 'call-process)
+             (lambda (program &optional _infile dest _display &rest _)
+               (should (equal program "mariadb"))
+               (let ((buf (beads-dolt-sql-test--dest-buffer dest)))
+                 (when buf
+                   (with-current-buffer buf
+                     (insert "/opt/homebrew/bin/mariadb: Deprecated program name. It will be removed in a future release, use '/opt/homebrew/bin/mariadb' instead\n")
+                     (insert "WARNING: option --ssl-verify-server-cert is disabled, because of an insecure passwordless login.\n")
+                     (insert "[{\"id\":\"warning-ok\"}]"))))
+               0)))
+    (let ((result (beads-backend-dolt-sql--one-shot-mariadb
+                   "SELECT 1"
+                   '((host . "127.0.0.1")
+                     (port . 3310)
+                     (user . "root")
+                     (database . "db")))))
+      (should (equal (alist-get 'id (car result)) "warning-ok")))))
+
 (ert-deftest beads-dolt-sql-test-execute-sql-param-replacement ()
   "Test that ? placeholders are replaced with escaped values."
   (let ((captured-sql nil))

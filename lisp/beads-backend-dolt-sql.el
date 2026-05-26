@@ -790,7 +790,8 @@ Caches result for 60 seconds."
         (goto-char (point-min))
         (unless (zerop exit-code) (signal 'beads-backend-error (list (format "mariadb failed with exit code %d: %s" exit-code (string-trim (buffer-string))))))
         (goto-char (point-min))
-        (beads-dolt-sql--parse-json-output (buffer-string))))))
+        (beads-dolt-sql--parse-json-output
+         (beads-dolt-sql--strip-banner (buffer-string)))))))
 
 (defun beads-backend-dolt-sql--execute-sql (sql &optional params project-root)
   (let ((dolt (beads-backend-dolt-sql--fetch-dolt-params project-root)))
