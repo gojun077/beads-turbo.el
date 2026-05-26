@@ -1,20 +1,13 @@
-beads-turbo.el - Emacs Client for Beads Issue Tracker
-=======================================================================
-
-[![Codeberg Repository](https://img.shields.io/badge/Codeberg-Repository-2185D0?logo=codeberg&logoColor=white)](https://codeberg.org/gojun077/beads.el)
+beads-turbo.el - Fast Emacs Client for Beads
+===================================================================
 
 ## Overview
 
-beads-turbo.el is an actively developed fork of beads.el that provides an Emacs
-interface to the [Beads](https://github.com/gastownhall/beads) issue tracking
-system.  Beads is a lightweight, Git-backed issue tracker that stores data
-locally in `.beads/` alongside your code. It works well with AI coding
-assistants but doesn't require them—you can use it entirely from Emacs or the
-command line.
+`beads-turbo.el` is an actively developed fork of [ctietze/beads.el](https://codeberg.org/ctietze/beads.el) that supports the latest [Beads](https://github.com/gastownhall/beads) issue tracking system which now uses Dolt DB backend instead of sqlite and JSONL for storing the task Graph. `beads-turbo.el` provides a fast Emacs interface to Beads the dolt-backed issue tracker that stores data locally in `.beads/dolt` alongside your code and also supports git-backed `dolt` remotes on DoltHub and Git forges like Github and Codeberg (but not Bitbucket). It works well with AI coding assistants but doesn't require them—you can use it entirely from Emacs or the command line.
 
-The fork keeps the concise `beads-*` Emacs command and symbol namespace for
-continuity, while using the `beads-turbo.el` project name to distinguish this
-maintained version from the original project.
+The fork keeps the concise `beads-*` Emacs command and symbol namespace for continuity, while using the `beads-turbo.el` project name to distinguish this maintained version from the original project which does not support dolt DB backend.
+
+This fork is renamed *-turbo* because it does not shell out to `bd` CLI for read operations, but instead uses `mysql.el` native mysql wire protocol written in Elisp by Lucius Chen to query the Dolt DB for beads issues. The speed-up over synchronous sub-process calls to `bd` is considerable. In my benchmark tests, using `mysql.el` is more than 50x times faster than calling `bd list` in a sub-process.
 
 ## Screenshots
 
@@ -28,13 +21,12 @@ M-x beads-org-list
 
 ### Issue Details
 
-View full issue details including description, design notes, and metadata:
+From the list view, press *ENTER* on any org-header to see full issue details including all the newer fields included in recent beads versions 1.0+
 
 
 ### Editing
 
-Edit long-form fields (description, design, notes) in dedicated buffers with
-`markdown-mode` support:
+Edit long-form fields (description, design, notes) in dedicated buffers with `markdown-mode` support:
 
 
 ## Installation
@@ -53,12 +45,7 @@ TODO
 (require 'beads)
 ```
 
-> **Note:** When cloning the repository, make sure to also pull the
-> vendored `vui.el` submodule under `vendor/vui.el`. Either clone with
-> `git clone --recurse-submodules <url>`, or, if you've already cloned,
-> run `git submodule update --init --recursive` from the repo root.
-> A leading `-` in `git submodule status` indicates the submodule has
-> not been initialized yet.
+> **Note:** When cloning the repository, make sure to also pull the vendored `vui.el` submodule under `vendor/vui.el`. Either clone with `git clone --recurse-submodules <url>`, or, if you've already cloned, run `git submodule update --init --recursive` from the repo root.  A leading `-` in `git submodule status` indicates the submodule has not been initialized yet.
 
 ### With straight.el
 
@@ -111,9 +98,7 @@ TODO
 
 ### Text Field Edit Buffers
 
-Long text fields such as descriptions, design notes, acceptance criteria, and
-notes open a temporary editable buffer from the list or detail view.  This is a
-helper for those fields, not a separate issue editing workflow.
+Long text fields such as descriptions, design notes, acceptance criteria, and notes open a temporary editable buffer from the list or detail view.  This is a helper for those fields, not a separate issue editing workflow.
 
 | Key | Command | Description |
 |-----|---------|-------------|
@@ -154,18 +139,11 @@ Shows issues referenced in git commits but not marked as closed.
 
 The list view refreshes automatically when:
 
-- A write happens through any beads command (transient menu, edit
-  commands, detail-mode actions, forms).
-- You return to a `beads-list-mode` window from another buffer (e.g.
-  closing a detail view). This event-driven refresh uses an async,
-  cursor-preserving fetch that short-circuits via the cache freshness
-  token when nothing has changed, so it is essentially free in the
-  common case.
+- A write happens through any beads command (transient menu, edit commands, detail-mode actions, forms).
+- You return to a `beads-list-mode` window from another buffer (e.g.  closing a detail view).
+  - This event-driven refresh uses an async, cursor-preserving fetch that short-circuits via the cache freshness token when nothing has changed, so it is essentially free in the common case.
 
-Press `g` in the list buffer for a manual refresh — useful when an
-external `bd` invocation or another Emacs session has mutated the DB
-and you want to pick up the change without leaving and re-entering
-the buffer.
+Press `g` in the list buffer for a manual refresh — useful when an external `bd` invocation or another Emacs session has mutated the DB and you want to pick up the change without leaving and re-entering the buffer.
 
 
 ### Stale Issues (`beads-stale`)
@@ -200,8 +178,7 @@ the buffer.
 
 ### Detail View Rendering (`beads-detail`)
 
-When `markdown-mode` is installed, the detail view renders descriptions, design
-notes, acceptance criteria, and comments with markdown syntax highlighting.
+When `markdown-mode` is installed, the detail view renders descriptions, design notes, acceptance criteria, and comments with markdown syntax highlighting.
 
 ```elisp
 ;; Disable markdown rendering in detail view
@@ -234,23 +211,13 @@ notes, acceptance criteria, and comments with markdown syntax highlighting.
 
 ### Direct Dolt SQL read path (optional)
 
-`beads-backend-dolt-sql` is a read-path accelerator that
-sends `list`/`show`/`ready`/`stats`/`count`/`stale` queries directly
-to the local Dolt SQL server. [mysql.el](https://github.com/LuciusChen/mysql.el) package is vendored,
-so that `beads-turbo.el` can use its native Emacs Lisp MySQL wire-protocol client.
-A fall-back is a long-lived `mysql`/`mariadb` client session as well as
-one-shot `mariadb -e`.  Writes always fall back to the `bd` CLI.
+`beads-backend-dolt-sql` is a read-path accelerator that sends `list`/`show`/`ready`/`stats`/`count`/`stale` queries directly to the local Dolt SQL server. [mysql.el](https://github.com/LuciusChen/mysql.el) package is vendored, so that `beads-turbo.el` can use its native Emacs Lisp MySQL wire-protocol client.  A fall-back is a long-lived `mysql`/`mariadb` client session as well as one-shot `mariadb -e`.  Writes always fall back to the `bd` CLI.
 
-Toggle it from the menu: `M-x beads-menu` → `,` (Config…) → `d`
-(`[ ] Dolt SQL read path` / `[x] Dolt SQL read path`). The toggle
-calls `beads-backend-dolt-sql-activate` /
-`beads-backend-dolt-sql-deactivate` and respects the
-`beads-dolt-sql-enabled` custom variable.
+Toggle it from the menu: `M-x beads-menu` → `,` (Config…) → `d` (`[ ] Dolt SQL read path` / `[x] Dolt SQL read path`). The toggle calls `beads-backend-dolt-sql-activate` / `beads-backend-dolt-sql-deactivate` and respects the `beads-dolt-sql-enabled` custom variable.
 
 ## Development
 
-This project uses [Beads](https://github.com/gastownhall/beads) itself for issue tracking.
-You can check out the beads-turbo.el repository and view the project's issues:
+This project uses [Beads](https://github.com/gastownhall/beads) itself for issue tracking.  You can check out the beads-turbo.el repository and view the project's issues:
 
 ```bash
 # Launch Emacs with beads-turbo.el loaded
