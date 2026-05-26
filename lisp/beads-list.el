@@ -882,6 +882,16 @@ Returns t if found, nil otherwise."
   (or (cadr (member todo beads-list--org-todo-cycle))
       (car beads-list--org-todo-cycle)))
 
+(defun beads-list--org-current-todo-keyword ()
+  "Return the editable beads org TODO keyword at the current heading."
+  (save-excursion
+    (org-back-to-heading t)
+    (let ((regexp (concat "^\\*+\\s-+\\("
+                          (regexp-opt beads-list--org-todo-cycle)
+                          "\\)\\(?:\\s-\\|$\\)")))
+      (when (looking-at regexp)
+        (match-string-no-properties 1)))))
+
 (defun beads-org-list-todo ()
   "Cycle the current org list issue through TODO, WAIT, and DONE.
 
@@ -895,9 +905,7 @@ place.  The mapping is TODO -> open, WAIT -> blocked, and DONE -> closed."
          (id (alist-get 'id issue)))
     (unless id
       (user-error "No issue at point"))
-    (let* ((current-todo (save-excursion
-                           (org-back-to-heading t)
-                           (org-get-todo-state)))
+    (let* ((current-todo (beads-list--org-current-todo-keyword))
            (next-todo (beads-list--org-next-todo-keyword current-todo))
            (status (beads-list--org-status-for-todo-keyword next-todo)))
       (beads-client-update id :status status)

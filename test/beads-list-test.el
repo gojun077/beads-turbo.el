@@ -595,6 +595,10 @@ Use a key that is not overridden by `beads-list-mode-map' (e.g. `n')."
     (beads-org-list-mode)
     (should (derived-mode-p 'org-mode))
     (should (derived-mode-p 'beads-org-list-mode))
+    (let ((inhibit-read-only t))
+      (insert "* WAIT Waiting\n")
+      (goto-char (point-min))
+      (should (equal (beads-list--org-current-todo-keyword) "WAIT")))
     (should buffer-read-only)
     (should (local-variable-p 'beads-org-list--project-root))))
 
@@ -770,6 +774,26 @@ Use a key that is not overridden by `beads-list-mode-map' (e.g. `n')."
                    (lambda (&optional _silent) (setq refreshed t))))
           (beads-org-list-todo)
           (should (equal updated '("bd-a" :status "blocked")))
+          (should refreshed))))))
+
+(ert-deftest beads-list-test-org-todo-command-cycles-wait-to-closed ()
+  "C-c C-t in org list cycles WAIT headings to the closed beads status."
+  (let ((updated nil)
+        (refreshed nil)
+        (issues '(((id . "bd-a") (title . "First") (status . "blocked")))))
+    (with-temp-buffer
+      (beads-org-list-mode)
+      (let ((inhibit-read-only t)
+            (beads-list--issues issues))
+        (insert "* WAIT First\n:PROPERTIES:\n:BEADS_ID: bd-a\n:END:\n")
+        (goto-char (point-min))
+        (cl-letf (((symbol-function 'beads-client-update)
+                   (lambda (id &rest args)
+                     (setq updated (cons id args))))
+                  ((symbol-function 'beads-org-list-refresh)
+                   (lambda (&optional _silent) (setq refreshed t))))
+          (beads-org-list-todo)
+          (should (equal updated '("bd-a" :status "closed")))
           (should refreshed))))))
 
 (ert-deftest beads-list-test-org-todo-command-targets-containing-heading ()
