@@ -1,13 +1,19 @@
-# beads.el - Emacs Client for Beads Issue Tracker
+# beads-turbo.el - Emacs Client for Beads Issue Tracker
 
-[![Codeberg Repository](https://img.shields.io/badge/Codeberg-Repository-2185D0?logo=codeberg&logoColor=white)](https://codeberg.org/ctietze/beads.el)
+[![Codeberg Repository](https://img.shields.io/badge/Codeberg-Repository-2185D0?logo=codeberg&logoColor=white)](https://codeberg.org/gojun077/beads.el)
 
 ## Overview
 
-beads.el provides an Emacs interface to the [Beads](https://github.com/gastownhall/beads) issue tracking system.
-Beads is a lightweight, Git-backed issue tracker that stores data locally in
-`.beads/` alongside your code. It works well with AI coding assistants but
-doesn't require them—you can use it entirely from Emacs or the command line.
+beads-turbo.el is an actively developed fork of beads.el that provides an Emacs
+interface to the [Beads](https://github.com/gastownhall/beads) issue tracking
+system.  Beads is a lightweight, Git-backed issue tracker that stores data
+locally in `.beads/` alongside your code. It works well with AI coding
+assistants but doesn't require them—you can use it entirely from Emacs or the
+command line.
+
+The fork keeps the concise `beads-*` Emacs command and symbol namespace for
+continuity, while using the beads-turbo.el project name to distinguish this
+maintained version from the original upstream project.
 
 ## Screenshots
 
@@ -46,9 +52,10 @@ Or use the form editor (`E`) to edit all fields at once:
 
 ## Installation
 
-### From MELPA (Recommended)
+### From MELPA
 
-Once available on MELPA:
+beads-turbo.el is not yet published on MELPA. Once package distribution is
+finalized, installation will look like a normal package install:
 
 ```elisp
 (use-package beads
@@ -67,13 +74,13 @@ With the built-in `:vc` keyword:
 
 ```elisp
 (use-package beads
-  :vc (:url "https://codeberg.org/ctietze/beads.el" :lisp-dir "lisp" :rev :newest))
+  :vc (:url "https://codeberg.org/gojun077/beads.el" :lisp-dir "lisp" :rev :newest))
 ```
 
 ### Manual Installation
 
 ```elisp
-(add-to-list 'load-path "/path/to/beads.el/lisp")
+(add-to-list 'load-path "/path/to/beads-turbo.el/lisp")
 (require 'beads)
 ```
 
@@ -88,7 +95,7 @@ With the built-in `:vc` keyword:
 
 ```elisp
 (straight-use-package
- '(beads :type git :host github :repo "ChristianTietze/beads.el"
+ '(beads :type git :repo "https://codeberg.org/gojun077/beads.el"
          :files ("lisp/*.el")))
 ```
 
@@ -294,7 +301,7 @@ Acceptance Criteria, epics need Success Criteria.
 
 The list view refreshes automatically when:
 
-- A write happens through any beads.el command (transient menu, edit
+- A write happens through any beads command (transient menu, edit
   commands, detail-mode actions, forms).
 - You return to a `beads-list-mode` window from another buffer (e.g.
   closing a detail view). This event-driven refresh uses an async,
@@ -414,7 +421,7 @@ notes, acceptance criteria, and comments with markdown syntax highlighting.
 
 ### CLI Backends
 
-beads.el supports two CLI backends:
+beads-turbo.el supports two CLI backends:
 
 - **`bd`** (default) — Full-featured. Uses a persistent Dolt SQL server
   backend (auto-started transparently) for fast operations. Supports `bd batch`
@@ -441,7 +448,7 @@ Or globally:
 sends `list`/`show`/`ready`/`stats`/`count`/`stale` queries directly
 to the local Dolt SQL server.  If the optional
 [mysql.el](https://github.com/LuciusChen/mysql.el) package is installed,
-beads.el uses its native Emacs Lisp MySQL wire-protocol client.  Otherwise
+beads-turbo.el uses its native Emacs Lisp MySQL wire-protocol client.  Otherwise
 it falls back to a long-lived `mysql`/`mariadb` client session, then to
 one-shot `mariadb -e`.  Writes always fall back to the `bd` CLI.
 
@@ -454,11 +461,11 @@ calls `beads-backend-dolt-sql-activate` /
 ## Development
 
 This project uses [Beads](https://github.com/gastownhall/beads) itself for issue tracking.
-You can check out the repository and view the project's issues:
+You can check out the beads-turbo.el repository and view the project's issues:
 
 ```bash
-# Launch Emacs with beads.el loaded
+# Launch Emacs with beads-turbo.el loaded
 make interactive
 ```
 
-Then run `M-x beads-list` to see the beads.el development issues.
+Then run `M-x beads-list` to see the beads-turbo.el development issues.
