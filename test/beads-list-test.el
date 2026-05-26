@@ -333,14 +333,14 @@
                    "* TODO [#B] Open issue :task:"))))
 
 (ert-deftest beads-list-test-org-heading-in-progress-issue ()
-  "In-progress issues render with NEXT TODO keyword."
+  "In-progress issues render with TODO keyword while preserving raw status metadata."
   (let ((issue '((id . "bd-next")
                  (title . "Doing it")
                  (status . "in_progress")
                  (priority . 0)
                  (issue_type . "feature"))))
     (should (equal (beads-list--org-heading issue 2)
-                   "** NEXT [#A] Doing it :feature:"))))
+                   "** TODO [#A] Doing it :feature:"))))
 
 (ert-deftest beads-list-test-org-heading-blocked-issue ()
   "Blocked issues render with WAIT TODO keyword."
@@ -366,6 +366,18 @@
   "Hooked and deferred statuses share the WAIT org TODO keyword."
   (should (equal (beads-list--org-todo-keyword '((status . "hooked"))) "WAIT"))
   (should (equal (beads-list--org-todo-keyword '((status . "deferred"))) "WAIT")))
+
+(ert-deftest beads-list-test-org-todo-status-edit-mapping ()
+  "Editable org TODO keywords map back to beads statuses."
+  (should (equal (beads-list--org-status-for-todo-keyword "TODO") "open"))
+  (should (equal (beads-list--org-status-for-todo-keyword "WAIT") "blocked"))
+  (should (equal (beads-list--org-status-for-todo-keyword "DONE") "closed")))
+
+(ert-deftest beads-list-test-org-todo-cycle-keywords ()
+  "Org list status editing cycles through TODO, WAIT, and DONE."
+  (should (equal (beads-list--org-next-todo-keyword "TODO") "WAIT"))
+  (should (equal (beads-list--org-next-todo-keyword "WAIT") "DONE"))
+  (should (equal (beads-list--org-next-todo-keyword "DONE") "TODO")))
 
 (ert-deftest beads-list-test-org-properties-include-stable-lookup-and-metadata ()
   "Org properties include BEADS_ID and non-noisy metadata."
@@ -420,7 +432,7 @@
                    (priority . 0)
                    (issue_type . "feature")))))
     (should (equal (beads-list-render-org issues)
-                   "* TODO [#B] First :task:\n:PROPERTIES:\n:BEADS_ID: bd-a\n:BEADS_STATUS: open\n:BEADS_TYPE: task\n:BEADS_PRIORITY: 1\n:END:\n* NEXT [#A] Second :feature:\n:PROPERTIES:\n:BEADS_ID: bd-b\n:BEADS_STATUS: in_progress\n:BEADS_TYPE: feature\n:BEADS_PRIORITY: 0\n:END:"))))
+                   "* TODO [#B] First :task:\n:PROPERTIES:\n:BEADS_ID: bd-a\n:BEADS_STATUS: open\n:BEADS_TYPE: task\n:BEADS_PRIORITY: 1\n:END:\n* TODO [#A] Second :feature:\n:PROPERTIES:\n:BEADS_ID: bd-b\n:BEADS_STATUS: in_progress\n:BEADS_TYPE: feature\n:BEADS_PRIORITY: 0\n:END:"))))
 
 (ert-deftest beads-list-test-org-render-nested-issues-use-heading-depth ()
   "Parent-child relationships render with nested heading levels."
@@ -606,6 +618,8 @@ Use a key that is not overridden by `beads-list-mode-map' (e.g. `n')."
                 #'beads-preview-mode))
     (should (eq (lookup-key beads-org-list-mode-map (kbd "H"))
                 #'beads-org-list-hierarchy-show))
+    (should (eq (lookup-key beads-org-list-mode-map (kbd "C-c C-t"))
+                #'beads-org-list-todo))
     (should (eq (lookup-key beads-org-list-mode-map (kbd "s"))
                 #'beads-list-toggle-sort-mode))
     (should (eq (lookup-key beads-org-list-mode-map (kbd "m"))
@@ -736,6 +750,46 @@ Use a key that is not overridden by `beads-list-mode-map' (e.g. `n')."
           (should (string-match-p "Second" (buffer-string)))
           (should-not (string-match-p "First" (buffer-string)))
           (should (= (length beads-list--org-mark-overlays) 1)))))))
+
+(ert-deftest beads-list-test-org-todo-command-updates-status-at-point ()
+  "C-c C-t in org list cycles the current issue status through bd statuses."
+  (let ((updated nil)
+        (refreshed nil)
+        (issues '(((id . "bd-a") (title . "First") (status . "open"))
+                  ((id . "bd-b") (title . "Second") (status . "blocked")))))
+    (with-temp-buffer
+      (beads-org-list-mode)
+      (let ((inhibit-read-only t)
+            (beads-list--issues issues))
+        (insert "* TODO First\n:PROPERTIES:\n:BEADS_ID: bd-a\n:END:\n* WAIT Second\n:PROPERTIES:\n:BEADS_ID: bd-b\n:END:\n")
+        (should (beads-list--org-goto-id "bd-a"))
+        (cl-letf (((symbol-function 'beads-client-update)
+                   (lambda (id &rest args)
+                     (setq updated (cons id args))))
+                  ((symbol-function 'beads-org-list-refresh)
+                   (lambda (&optional _silent) (setq refreshed t))))
+          (beads-org-list-todo)
+          (should (equal updated '("bd-a" :status "blocked")))
+          (should refreshed))))))
+
+(ert-deftest beads-list-test-org-todo-command-targets-containing-heading ()
+  "Org list TODO editing resolves the containing issue from body text."
+  (let ((updated nil)
+        (issues '(((id . "bd-a") (title . "First") (status . "closed")))))
+    (with-temp-buffer
+      (beads-org-list-mode)
+      (let ((inhibit-read-only t)
+            (beads-list--issues issues))
+        (insert "* DONE First\n:PROPERTIES:\n:BEADS_ID: bd-a\n:END:\nBody\n")
+        (goto-char (point-min))
+        (search-forward "Body")
+        (cl-letf (((symbol-function 'beads-client-update)
+                   (lambda (id &rest args)
+                     (setq updated (cons id args))))
+                  ((symbol-function 'beads-org-list-refresh)
+                   (lambda (&optional _silent) nil)))
+          (beads-org-list-todo)
+          (should (equal updated '("bd-a" :status "open"))))))))
 
 (ert-deftest beads-list-test-org-bulk-status-targets-issue-at-point-without-marks ()
   "Org bulk operations use the heading at point when no marks exist."

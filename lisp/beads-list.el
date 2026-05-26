@@ -173,7 +173,6 @@ Each entry is (SYMBOL . (HEADER WIDTH SORTABLE FORMATTER)).")
 
 (defconst beads-list--org-status-todo-map
   '(("open" . "TODO")
-    ("in_progress" . "NEXT")
     ("blocked" . "WAIT")
     ("hooked" . "WAIT")
     ("deferred" . "WAIT")
@@ -181,6 +180,15 @@ Each entry is (SYMBOL . (HEADER WIDTH SORTABLE FORMATTER)).")
   "Mapping from beads issue status strings to org TODO keywords.
 Unknown or missing statuses use TODO in headings and keep their raw
 status only in the `BEADS_STATUS' property.")
+
+(defconst beads-list--org-todo-status-map
+  '(("TODO" . "open")
+    ("WAIT" . "blocked")
+    ("DONE" . "closed"))
+  "Mapping from org TODO keywords to beads issue status strings.")
+
+(defconst beads-list--org-todo-cycle '("TODO" "WAIT" "DONE")
+  "TODO keywords cycled by `beads-org-list-todo'.")
 
 (defconst beads-list--org-property-fields
   '((BEADS_ID . id)
@@ -388,6 +396,7 @@ Used to ensure refresh uses the correct project context.")
     (define-key map (kbd "H") #'beads-org-list-hierarchy-show)
     (define-key map (kbd "P") #'beads-preview-mode)
     (define-key map (kbd "S") #'beads-stats)
+    (define-key map (kbd "C-c C-t") #'beads-org-list-todo)
     (define-key map (kbd "T") #'beads-types-edit)
     (define-key map (kbd "D") #'beads-org-list-delete-issue)
     (define-key map (kbd "R") #'beads-org-list-reopen-issue)
@@ -563,7 +572,7 @@ it does not visit or require an org file on disk.  The legacy table view
 remains available through `beads-list-legacy'.
 
 \\{beads-org-list-mode-map}"
-  (setq-local org-todo-keywords '((sequence "TODO" "NEXT" "WAIT" "|" "DONE")))
+  (setq-local org-todo-keywords '((sequence "TODO" "WAIT" "|" "DONE")))
   (setq-local org-startup-folded nil)
   (setq-local beads-org-list--project-root nil)
   (setq buffer-read-only t)
@@ -674,7 +683,7 @@ Must be called with a `beads-org-list-mode' buffer current."
     (setq beads-list--issues (beads-list-model-issues model))
     (erase-buffer)
     (insert "#+TITLE: Beads Issues\n")
-    (insert "#+TODO: TODO NEXT WAIT | DONE\n\n")
+    (insert "#+TODO: TODO WAIT | DONE\n\n")
     (unless (string= org-text "")
       (insert org-text)
       (insert "\n"))
@@ -863,6 +872,37 @@ Returns t if found, nil otherwise."
   "Return the org TODO keyword for ISSUE's beads status."
   (or (cdr (assoc (alist-get 'status issue) beads-list--org-status-todo-map))
       "TODO"))
+
+(defun beads-list--org-status-for-todo-keyword (todo)
+  "Return the beads status represented by org TODO keyword TODO."
+  (cdr (assoc todo beads-list--org-todo-status-map)))
+
+(defun beads-list--org-next-todo-keyword (todo)
+  "Return the next editable beads org TODO keyword after TODO."
+  (or (cadr (member todo beads-list--org-todo-cycle))
+      (car beads-list--org-todo-cycle)))
+
+(defun beads-org-list-todo ()
+  "Cycle the current org list issue through TODO, WAIT, and DONE.
+
+The generated `beads-org-list-mode' buffer is read-only, so this command
+updates the underlying beads issue instead of editing the buffer text in
+place.  The mapping is TODO -> open, WAIT -> blocked, and DONE -> closed."
+  (interactive)
+  (unless (derived-mode-p 'beads-org-list-mode)
+    (user-error "Not in a beads org list buffer"))
+  (let* ((issue (beads-list--get-issue-at-point))
+         (id (alist-get 'id issue)))
+    (unless id
+      (user-error "No issue at point"))
+    (let* ((current-todo (save-excursion
+                           (org-back-to-heading t)
+                           (org-get-todo-state)))
+           (next-todo (beads-list--org-next-todo-keyword current-todo))
+           (status (beads-list--org-status-for-todo-keyword next-todo)))
+      (beads-client-update id :status status)
+      (beads-org-list-refresh t)
+      (message "Updated %s to %s" id status))))
 
 (defun beads-list--org-priority-cookie (issue)
   "Return an org priority cookie for ISSUE, or nil when absent.
