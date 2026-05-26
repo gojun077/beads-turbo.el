@@ -1,4 +1,5 @@
-# beads-turbo.el - Emacs Client for Beads Issue Tracker
+beads-turbo.el - Emacs Client for Beads Issue Tracker
+=======================================================================
 
 [![Codeberg Repository](https://img.shields.io/badge/Codeberg-Repository-2185D0?logo=codeberg&logoColor=white)](https://codeberg.org/gojun077/beads.el)
 
@@ -12,70 +13,38 @@ assistants but doesn't require them—you can use it entirely from Emacs or the
 command line.
 
 The fork keeps the concise `beads-*` Emacs command and symbol namespace for
-continuity, while using the beads-turbo.el project name to distinguish this
-maintained version from the original upstream project.
+continuity, while using the `beads-turbo.el` project name to distinguish this
+maintained version from the original project.
 
 ## Screenshots
 
-*(Screenshots use [modus-themes](https://protesilaos.com/emacs/modus-themes))*
+TODO
 
 ### Issue List
 
-Browse issues in a sortable, filterable table. Press `P` to toggle preview mode.
+M-x beads-org-list
 
-![Issue List](screenshots/beads-list.png)
 
-### Preview Mode
-
-Navigate issues with live preview in a side window:
-
-![Preview Mode](screenshots/beads-preview-mode-demo.gif)
-
-([View full quality video](screenshots/beads-preview-mode-demo.mp4))
 
 ### Issue Details
 
 View full issue details including description, design notes, and metadata:
 
-![Issue Details](screenshots/beads-details.png)
 
 ### Editing
 
 Edit long-form fields (description, design, notes) in dedicated buffers with
 `markdown-mode` support:
 
-![Edit Description](screenshots/beads-edit-description.png)
-
-Or use the form editor (`E`) to edit all fields at once:
-
-![Form Editor](screenshots/beads-edit-widgets.png)
 
 ## Installation
 
-### From MELPA
+### MELPA
 
-beads-turbo.el is not yet published on MELPA. Once package distribution is
-finalized, installation will look like a normal package install:
+TODO
 
-```elisp
-(use-package beads
-  :ensure t)
-```
+### Straight
 
-Or with `package.el`:
-
-```elisp
-(package-install 'beads)
-```
-
-### From Git (Emacs 30+)
-
-With the built-in `:vc` keyword:
-
-```elisp
-(use-package beads
-  :vc (:url "https://codeberg.org/gojun077/beads.el" :lisp-dir "lisp" :rev :newest))
-```
 
 ### Manual Installation
 
@@ -101,14 +70,7 @@ With the built-in `:vc` keyword:
 
 ## Usage
 
-- `M-x beads` or `M-x beads-list` - Open the issue list
-- `M-x beads-project-list` - Open issue list for current project
-- `M-x beads-stale` - Show stale issues (not updated recently)
-- `M-x beads-orphans` - Show orphaned issues (referenced in commits but not closed)
-- `M-x beads-duplicates` - Find and merge duplicate issues
-- `M-x beads-conflicts` - View and resolve JSONL merge conflicts (unavailable in bd 1.0+)
-- `M-x beads-lint` - Show issues missing required template sections
-- `M-x beads-create-issue-preview` - Create issue with preview
+- `M-x beads` or `M-x beads-org-list` - Open the issue list (org-mode default)
 
 ## Keybindings
 
@@ -117,14 +79,6 @@ With the built-in `:vc` keyword:
 | Key | Command | Description |
 |-----|---------|-------------|
 | `RET` | `beads-list-goto-issue` | Open issue in detail view |
-| `E` | `beads-list-edit-form` | Open form editor for issue |
-| `e t` | `beads-list-edit-title` | Edit title |
-| `e s` | `beads-list-edit-status` | Edit status |
-| `e p` | `beads-list-edit-priority` | Edit priority |
-| `e T` | `beads-list-edit-type` | Edit type |
-| `e d` | `beads-list-edit-description` | Edit description |
-| `a` | `beads-list-quick-assign` | Assign issue (with completion) |
-| `A` | `beads-list-assign-to-me` | Assign issue to self |
 | `/` | `beads-search` | Search issues by title/description |
 | `f` | `beads-filter-menu` | Open filter menu |
 | `f s` | `beads-filter-status` | Filter by status |
@@ -138,14 +92,10 @@ With the built-in `:vc` keyword:
 | `s` | `beads-list-toggle-sort-mode` | Toggle sectioned/column sort |
 | `o` | `beads-list-cycle-sort` | Cycle through sort columns |
 | `O` | `beads-list-reverse-sort` | Reverse sort direction |
-| `H` | `beads-hierarchy-show` | Show dependency tree |
-| `P` | `beads-preview-mode` | Toggle preview mode |
 | `S` | `beads-stats` | Show project statistics |
 | `D` | `beads-delete-issue` | Delete issue (with confirmation) |
 | `R` | `beads-reopen-issue` | Reopen closed issue |
 | `g` | `beads-list-refresh` | Refresh issue list |
-| `M-n` | `beads-list-next-section` | Jump to next section |
-| `M-p` | `beads-list-previous-section` | Jump to previous section |
 | `?` | `beads-menu` | Show transient menu |
 | `q` | `beads-list-quit` | Quit |
 
@@ -153,39 +103,11 @@ With the built-in `:vc` keyword:
 
 | Key | Command | Description |
 |-----|---------|-------------|
-| `E` | `beads-detail-edit-form` | Open form editor |
-| `e d` | `beads-detail-edit-description` | Edit description |
-| `e D` | `beads-detail-edit-design` | Edit design notes |
-| `e a` | `beads-detail-edit-acceptance` | Edit acceptance criteria |
-| `e n` | `beads-detail-edit-notes` | Edit notes |
-| `e t` | `beads-detail-edit-title` | Edit title |
-| `e s` | `beads-detail-edit-status` | Edit status |
-| `e p` | `beads-detail-edit-priority` | Edit priority |
-| `e T` | `beads-detail-edit-type` | Edit type |
-| `e A` | `beads-detail-edit-assignee` | Edit assignee |
-| `e x` | `beads-detail-edit-external-ref` | Edit external reference |
-| `e l a` | `beads-detail-edit-label-add` | Add label |
-| `e l r` | `beads-detail-edit-label-remove` | Remove label |
-| `c` | `beads-detail-add-comment` | Add comment |
-| `H` | `beads-hierarchy-show` | Show dependency tree |
-| `P` | `beads-detail-goto-parent` | Navigate to parent issue |
-| `C` | `beads-detail-view-children` | View children in filtered list |
 | `D` | `beads-delete-issue` | Delete issue (with confirmation) |
 | `R` | `beads-reopen-issue` | Reopen closed issue |
 | `g` | `beads-detail-refresh` | Refresh detail view |
-| `M-n` | `beads-detail-next-section` | Jump to next section |
-| `M-p` | `beads-detail-previous-section` | Jump to previous section |
 | `?` | `beads-menu` | Show transient menu |
 | `q` | `quit-window` | Quit |
-
-### Form Editor (`beads-form-mode`)
-
-| Key | Command | Description |
-|-----|---------|-------------|
-| `TAB` | `widget-forward` | Next field |
-| `S-TAB` | `widget-backward` | Previous field |
-| `C-c C-c` | `beads-form-commit` | Save all changes |
-| `C-c C-k` | `beads-form-cancel` | Discard and close |
 
 ### Text Field Edit Buffers
 
@@ -198,20 +120,8 @@ helper for those fields, not a separate issue editing workflow.
 | `C-c C-c` | `beads-edit-commit` | Save changes |
 | `C-c C-k` | `beads-edit-abort` | Discard changes |
 
-### Create Preview (`beads-create-preview-mode`)
-
-Preview an issue before creating it. Shows what the issue will look like,
-then confirm to actually create it.
-
-| Key | Command | Description |
-|-----|---------|-------------|
-| `C-c C-c` | `beads-create-preview-confirm` | Create the issue |
-| `C-c C-k` | `beads-create-preview-cancel` | Cancel without creating |
-| `q` | `beads-create-preview-cancel` | Cancel without creating |
 
 ### Stale Issues (`beads-stale-mode`)
-
-<!-- TODO: Add screenshot for stale issues view (see bdel-4hp) -->
 
 Shows issues not updated within a configurable number of days.
 
@@ -226,7 +136,6 @@ Shows issues not updated within a configurable number of days.
 
 ### Orphaned Issues (`beads-orphans-mode`)
 
-<!-- TODO: Add screenshot for orphans view (see bdel-4hp) -->
 
 Shows issues referenced in git commits but not marked as closed.
 
@@ -237,65 +146,9 @@ Shows issues referenced in git commits but not marked as closed.
 | `g` | `beads-orphans-refresh` | Refresh list |
 | `q` | `quit-window` | Quit |
 
-### Duplicate Issues (`beads-duplicates-mode`)
-
-<!-- TODO: Add screenshot for duplicates view (see bdel-4hp) -->
-
-Find issues with identical content and merge them. Issues are grouped by content
-hash. Each group shows a suggested merge target (the issue with most references)
-and sources (duplicates to be closed).
-
-| Key | Command | Description |
-|-----|---------|-------------|
-| `RET` | `beads-duplicates-goto-issue` | Open issue in detail view |
-| `m` | `beads-duplicates-merge-at-point` | Merge issue at point into target |
-| `M` | `beads-duplicates-merge-group` | Merge all sources in group |
-| `g` | `beads-duplicates-refresh` | Refresh list |
-| `q` | `quit-window` | Quit |
-
-### Merge Conflicts (`beads-conflicts-mode`)
-
-The `bd resolve-conflicts` command was removed in bd 1.0+. This feature
-is not available with the current beads version.
-
-### Hierarchy View (`beads-hierarchy-mode`)
-
-Show the full dependency tree for any issue, with ancestors above and descendants below.
-Press `H` from the list or detail view to open.
-
-| Key | Command | Description |
-|-----|---------|-------------|
-| `RET` | `beads-hierarchy-goto-issue` | Open issue in detail view |
-| `TAB` | `beads-hierarchy-next` | Move to next issue |
-| `S-TAB` | `beads-hierarchy-previous` | Move to previous issue |
-| `g` | `beads-hierarchy-refresh` | Refresh tree |
-| `q` | `quit-window` | Quit |
-
-### Issue Lint Report (`beads-lint-mode`)
-
-<!-- TODO: Add screenshot for lint report (see bdel-4hp) -->
-
-Check issues for missing recommended template sections based on issue type.
-Bugs need Steps to Reproduce and Acceptance Criteria, tasks/features need
-Acceptance Criteria, epics need Success Criteria.
-
-| Key | Command | Description |
-|-----|---------|-------------|
-| `RET` | `beads-lint-goto-issue` | Open issue in detail view |
-| `f` | `beads-lint-filter-type` | Filter by issue type |
-| `n` | `beads-lint-next-issue` | Move to next issue |
-| `p` | `beads-lint-prev-issue` | Move to previous issue |
-| `g` | `beads-lint-refresh` | Refresh report |
-| `q` | `quit-window` | Quit |
 
 ## Customization
 
-### General
-
-```elisp
-;; Disable keybinding hints in minibuffer
-(setq beads-verbose nil)
-```
 
 ### Refreshing the List
 
@@ -314,26 +167,6 @@ external `bd` invocation or another Emacs session has mutated the DB
 and you want to pick up the change without leaving and re-entering
 the buffer.
 
-### Project Integration (`beads-project`)
-
-```elisp
-;; Disable per-project buffers (use single global buffer)
-(setq beads-project-per-project-buffers nil)
-
-;; Disable adding to project-switch-commands
-(setq beads-project-add-switch-command nil)
-
-;; Custom buffer name function
-(setq beads-project-buffer-name-function
-      (lambda (root)
-        (format "*Issues: %s*" (beads-project-name root))))
-```
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `beads-project-per-project-buffers` | `t` | Create separate buffer per project |
-| `beads-project-add-switch-command` | `t` | Add to project-switch-commands |
-| `beads-project-buffer-name-function` | `beads-project-default-buffer-name` | Function to generate buffer name |
 
 ### Stale Issues (`beads-stale`)
 
@@ -365,20 +198,6 @@ the buffer.
 | `beads-type-style` | `'full` | `'full` for full names, `'short` for 4-char |
 | `beads-type-glyph` | `nil` | Show unicode glyphs for special types |
 
-### P0 Priority Highlighting
-
-```elisp
-;; Disable whole-row highlighting for P0 issues
-(setq beads-list-highlight-p0-rows nil)
-
-;; Customize the P0 row background color
-(set-face-attribute 'beads-list-row-p0 nil :background "#ff0000")
-```
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `beads-list-highlight-p0-rows` | `t` | Highlight entire row for P0 issues |
-
 ### Detail View Rendering (`beads-detail`)
 
 When `markdown-mode` is installed, the detail view renders descriptions, design
@@ -399,57 +218,27 @@ notes, acceptance criteria, and comments with markdown syntax highlighting.
 | `beads-detail-vui-editable` | `t` | Show inline edit buttons in vui mode |
 | `beads-detail-section-style` | `'heading` | `'heading` (compact) or `'separator` (with rules) |
 
-### Form Editor (`beads-form`)
-
-```elisp
-;; Disable vui.el and use traditional widget.el forms
-(setq beads-form-use-vui nil)
-```
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `beads-form-use-vui` | `t` | Use vui.el declarative components |
-
 ## Requirements
 
-- Emacs 28.1+
-- [Beads](https://github.com/gastownhall/beads) CLI: `bd` 1.0.3+ (recommended) or `br` (beads_rust)
-- `hierarchy` package (for dependency tree view)
+- Emacs 30+
+- [Beads](https://github.com/gastownhall/beads) CLI: `bd` 1.0.3+ (recommended)
 - `transient` package (for menus)
 - `vui` package (for declarative UI components)
 - `markdown-mode` (optional, for editing long text fields)
 
 ### CLI Backends
 
-beads-turbo.el supports two CLI backends:
+`beads-turbo.el` supports the `bd` CLI backend.
 
-- **`bd`** (default) — Full-featured. Uses a persistent Dolt SQL server
-  backend (auto-started transparently) for fast operations. Supports `bd batch`
-  for multi-op transactions and native multi-ID update/close/delete.
-- **`br`** (beads_rust) — CLI-only, no daemon support. Reduced operation set
-  (no activity feed, comments, or reopen). Useful if you only have `br` installed.
-
-Auto-detection tries `bd` first, then `br`. Override per-project via
-`.dir-locals.el`:
-
-```elisp
-((nil . ((beads-cli-program . "br"))))
-```
-
-Or globally:
-
-```elisp
-(setq beads-cli-program "br")
-```
+- **`bd`** (default) — Full-featured.
 
 ### Direct Dolt SQL read path (optional)
 
-`beads-backend-dolt-sql` is an optional read-path accelerator that
+`beads-backend-dolt-sql` is a read-path accelerator that
 sends `list`/`show`/`ready`/`stats`/`count`/`stale` queries directly
-to the local Dolt SQL server.  If the optional
-[mysql.el](https://github.com/LuciusChen/mysql.el) package is installed,
-beads-turbo.el uses its native Emacs Lisp MySQL wire-protocol client.  Otherwise
-it falls back to a long-lived `mysql`/`mariadb` client session, then to
+to the local Dolt SQL server. [mysql.el](https://github.com/LuciusChen/mysql.el) package is vendored,
+so that `beads-turbo.el` can use its native Emacs Lisp MySQL wire-protocol client.
+A fall-back is a long-lived `mysql`/`mariadb` client session as well as
 one-shot `mariadb -e`.  Writes always fall back to the `bd` CLI.
 
 Toggle it from the menu: `M-x beads-menu` → `,` (Config…) → `d`
@@ -468,4 +257,4 @@ You can check out the beads-turbo.el repository and view the project's issues:
 make interactive
 ```
 
-Then run `M-x beads-list` to see the beads-turbo.el development issues.
+Then run `M-x beads-org-list` to see the `beads-turbo.el` development issues.
