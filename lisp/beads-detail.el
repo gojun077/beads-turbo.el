@@ -338,7 +338,7 @@ Uses CLI fallback since RPC does not support comment_add."
   (let* ((issue (beads-detail--require-issue))
          (id (alist-get 'id issue))
          (description (alist-get 'description issue)))
-    (beads-edit-field-markdown id :description description)))
+    (beads-edit-field-markdown id :description description t)))
 
 (defun beads-detail-edit-design ()
   "Edit the design notes of the current issue."
@@ -346,7 +346,7 @@ Uses CLI fallback since RPC does not support comment_add."
   (let* ((issue (beads-detail--require-issue))
          (id (alist-get 'id issue))
          (design (alist-get 'design issue)))
-    (beads-edit-field-markdown id :design design)))
+    (beads-edit-field-markdown id :design design t)))
 
 (defun beads-detail-edit-acceptance ()
   "Edit the acceptance criteria of the current issue."
@@ -354,7 +354,7 @@ Uses CLI fallback since RPC does not support comment_add."
   (let* ((issue (beads-detail--require-issue))
          (id (alist-get 'id issue))
          (acceptance (alist-get 'acceptance_criteria issue)))
-    (beads-edit-field-markdown id :acceptance-criteria acceptance)))
+    (beads-edit-field-markdown id :acceptance-criteria acceptance t)))
 
 (defun beads-detail-edit-notes ()
   "Edit the notes of the current issue."
@@ -362,7 +362,7 @@ Uses CLI fallback since RPC does not support comment_add."
   (let* ((issue (beads-detail--require-issue))
          (id (alist-get 'id issue))
          (notes (alist-get 'notes issue)))
-    (beads-edit-field-markdown id :notes notes)))
+    (beads-edit-field-markdown id :notes notes t)))
 
 (defun beads-detail-edit-title ()
   "Edit the title of the current issue."

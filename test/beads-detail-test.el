@@ -690,6 +690,27 @@ Discovered, Related, Depends on, Dependents)."
     (should (eq (lookup-key beads-detail-mode-map (kbd "e d"))
                 #'beads-detail-edit-description))))
 
+(ert-deftest beads-detail-test-edit-description-starts-with-newline ()
+  "Editing description from detail view starts the markdown buffer with a newline."
+  (let ((buffer nil))
+    (unwind-protect
+        (with-temp-buffer
+          (beads-detail-mode)
+          (setq beads-detail--current-issue '((id . "test-123")
+                                              (title . "Test")
+                                              (status . "open")
+                                              (priority . 2)
+                                              (issue_type . "task")
+                                              (description . "Existing description")))
+          (cl-letf (((symbol-function 'pop-to-buffer)
+                     (lambda (buf) (setq buffer buf))))
+            (beads-detail-edit-description))
+          (with-current-buffer buffer
+            (should (string= (buffer-substring-no-properties (point-min) (point-max))
+                             "\nExisting description"))))
+      (when (and buffer (buffer-live-p buffer))
+        (kill-buffer buffer)))))
+
 (ert-deftest beads-detail-test-mode-keybinding-label-prefix ()
   "Test that 'e l' is a prefix map for label commands."
   (with-temp-buffer
@@ -1067,6 +1088,25 @@ unknown-vnode error."
         (funcall handler)
         (should (equal rpc-args '("test-123" "new-label")))
         (should refreshed)))))
+
+(ert-deftest beads-detail-test-vui-description-edit-starts-with-newline ()
+  "VUI detail edit handler starts markdown fields with a newline."
+  (require 'beads-vui)
+  (let ((buffer nil))
+    (unwind-protect
+        (let ((handler (beads-vui-make-edit-handler
+                        '((id . "test-123")
+                          (description . "Existing description"))
+                        'description
+                        nil)))
+          (cl-letf (((symbol-function 'pop-to-buffer)
+                     (lambda (buf) (setq buffer buf))))
+            (funcall handler))
+          (with-current-buffer buffer
+            (should (string= (buffer-substring-no-properties (point-min) (point-max))
+                             "\nExisting description"))))
+      (when (and buffer (buffer-live-p buffer))
+        (kill-buffer buffer)))))
 
 (ert-deftest beads-detail-test-vui-label-remove-handler-calls-rpc ()
   "Test that the vui label remove handler calls beads-client-label-remove."

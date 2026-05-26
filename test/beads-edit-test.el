@@ -87,6 +87,35 @@
       (when (and buffer (buffer-live-p buffer))
         (kill-buffer buffer)))))
 
+(ert-deftest beads-edit-test-markdown-leading-newline ()
+  "Markdown edit buffers can opt into a leading newline."
+  (let ((buffer nil))
+    (unwind-protect
+        (progn
+          (cl-letf (((symbol-function 'pop-to-buffer)
+                     (lambda (buf) (setq buffer buf))))
+            (beads-edit-field-markdown "test-md" :description "Body" t))
+          (with-current-buffer buffer
+            (should (string= (buffer-substring-no-properties (point-min) (point-max))
+                             "\nBody"))
+            (should (string= beads-edit--original-content "\nBody"))))
+      (when (and buffer (buffer-live-p buffer))
+        (kill-buffer buffer)))))
+
+(ert-deftest beads-edit-test-markdown-leading-newline-not-duplicated ()
+  "Markdown leading-newline opt-in preserves existing leading newlines."
+  (let ((buffer nil))
+    (unwind-protect
+        (progn
+          (cl-letf (((symbol-function 'pop-to-buffer)
+                     (lambda (buf) (setq buffer buf))))
+            (beads-edit-field-markdown "test-md" :description "\nBody" t))
+          (with-current-buffer buffer
+            (should (string= (buffer-substring-no-properties (point-min) (point-max))
+                             "\nBody"))))
+      (when (and buffer (buffer-live-p buffer))
+        (kill-buffer buffer)))))
+
 (ert-deftest beads-edit-test-mode-sets-header-line ()
   "Test that enabling mode sets header-line-format."
   (with-temp-buffer

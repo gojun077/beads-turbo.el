@@ -166,9 +166,22 @@ Returns the edit buffer."
     (pop-to-buffer buffer)
     buffer))
 
-(defun beads-edit-field-markdown (issue-id field content)
-  "Open dedicated markdown buffer to edit FIELD of ISSUE-ID with CONTENT."
-  (beads-edit-field issue-id field content
+(defun beads-edit--ensure-leading-newline (content)
+  "Return CONTENT with at least one leading newline.
+Nil CONTENT is treated as an empty string."
+  (let ((text (or content "")))
+    (if (string-prefix-p "\n" text)
+        text
+      (concat "\n" text))))
+
+(defun beads-edit-field-markdown (issue-id field content &optional leading-newline)
+  "Open dedicated markdown buffer to edit FIELD of ISSUE-ID with CONTENT.
+When LEADING-NEWLINE is non-nil, start the edit buffer with a newline
+unless CONTENT already starts with one."
+  (beads-edit-field issue-id field
+                    (if leading-newline
+                        (beads-edit--ensure-leading-newline content)
+                      content)
                     (if (fboundp 'markdown-mode)
                         #'markdown-mode
                       #'text-mode)))

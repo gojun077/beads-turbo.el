@@ -92,7 +92,7 @@ Calls ON-REFRESH after successful edit."
            (value (alist-get field-key issue)))
       (pcase field-key
         ((or 'description 'design 'acceptance_criteria 'notes)
-         (beads-edit-field-markdown id (beads-vui--field-to-keyword field-key) value))
+         (beads-edit-field-markdown id (beads-vui--field-to-keyword field-key) value t))
         ((or 'title 'assignee 'external_ref)
          (when (beads-edit-field-minibuffer
                 id (beads-vui--field-to-keyword field-key) value
