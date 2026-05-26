@@ -20,6 +20,12 @@
 (require 'beads-detail)
 (require 'beads-test-helpers)
 
+(declare-function beads-vui-make-edit-handler "beads-vui")
+(declare-function beads-vui-make-label-add-handler "beads-vui")
+(declare-function beads-vui-make-label-remove-handler "beads-vui")
+(declare-function vui-component "vui")
+(declare-function vui-render "vui")
+
 ;;; Face definition tests (no daemon needed)
 
 (ert-deftest beads-detail-test-faces-defined ()
