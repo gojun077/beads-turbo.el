@@ -1353,103 +1353,204 @@ correctness bug fixed alongside the performance fix in bdel-dgy."
 
 ;;; Integration tests (only when live Dolt server is available)
 
+(defmacro beads-dolt-sql-test--with-live-mariadb-sql (&rest body)
+  "Evaluate BODY against the live project using the mariadb SQL path.
+The native mysql.el path is disabled so these integration tests exercise
+the same direct mariadb transport used on systems without mysql.el."
+  (declare (indent 0))
+  `(let ((beads-dolt-sql--params nil)
+         (beads-dolt-sql--params-time nil)
+         (beads-dolt-sql--params-root nil)
+         (beads-dolt-sql--available t)
+         (beads-dolt-sql-enabled t))
+     (cl-letf (((symbol-function 'beads-client--project-root)
+                (lambda () default-directory))
+               ((symbol-function 'beads-dolt-sql--native-mysql-available-p)
+                (lambda () nil)))
+       (unwind-protect
+           (progn ,@body)
+         (beads-dolt-sql--stop-mysql-proc)))))
+
+(defun beads-dolt-sql-test--cli (operation args)
+  "Execute OPERATION with ARGS through the bd CLI fallback."
+  (beads-backend-dolt-sql--execute-fallback operation args default-directory))
+
+(defun beads-dolt-sql-test--unwrap-single (result)
+  "Return the only object in RESULT when RESULT is a single-item list."
+  (if (and (listp result)
+           (= (length result) 1)
+           (listp (car result)))
+      (car result)
+    result))
+
+(defun beads-dolt-sql-test--ids (issues)
+  "Return sorted issue ids from ISSUES."
+  (sort (mapcar (lambda (issue) (alist-get 'id issue)) issues)
+        #'string<))
+
+(defun beads-dolt-sql-test--assert-issue-summary-shape (issue)
+  "Assert ISSUE has the fields used by SQL-backed list views."
+  (should (stringp (alist-get 'id issue)))
+  (should (stringp (alist-get 'title issue)))
+  (should (stringp (alist-get 'status issue)))
+  (should (integerp (alist-get 'priority issue)))
+  (should (integerp (alist-get 'dependency_count issue)))
+  (should (integerp (alist-get 'dependent_count issue)))
+  (should (integerp (alist-get 'comment_count issue)))
+  (should (or (null (alist-get 'parent issue))
+              (stringp (alist-get 'parent issue)))))
+
+(defun beads-dolt-sql-test--assert-show-shape (issue)
+  "Assert ISSUE has detail fields used by comments and hierarchy views."
+  (beads-dolt-sql-test--assert-issue-summary-shape issue)
+  (should (listp (alist-get 'comments issue)))
+  (should (listp (alist-get 'dependencies issue)))
+  (dolist (comment (alist-get 'comments issue))
+    (should (integerp (alist-get 'id comment)))
+    (should (stringp (alist-get 'author comment)))
+    (should (stringp (alist-get 'text comment)))
+    (should (stringp (alist-get 'created_at comment))))
+  (dolist (dep (alist-get 'dependencies issue))
+    (should (stringp (alist-get 'issue_id dep)))
+    (should (stringp (alist-get 'depends_on_id dep)))
+    (should (stringp (alist-get 'type dep)))))
+
+(defun beads-dolt-sql-test--assert-epic-shape (issue)
+  "Assert ISSUE has the fields returned for epic status entries."
+  (should (stringp (alist-get 'id issue)))
+  (should (stringp (alist-get 'title issue)))
+  (should (stringp (alist-get 'status issue)))
+  (should (integerp (alist-get 'priority issue)))
+  (should (equal (alist-get 'issue_type issue) "epic")))
+
 (ert-deftest beads-dolt-sql-test-integration-list ()
-  "Integration: list operation returns issues from live Dolt server."
+  "Integration: SQL list matches bd CLI ids and exposes view fields."
   :tags '(:integration)
   (skip-unless (beads-test-integration-enabled-p))
   (skip-unless (beads-dolt-sql-test--live-dolt-sql-available-p))
-  (let ((beads-dolt-sql--params nil)
-        (beads-dolt-sql--params-time nil)
-        (beads-dolt-sql--available t)
-        (beads-dolt-sql-enabled t))
-    (cl-letf (((symbol-function 'beads-client--project-root)
-               (lambda () default-directory)))
-      (let ((result (beads-backend-dolt-sql--execute-list nil nil)))
-        (should (listp result))
-        (should (> (length result) 0))
-        (let ((issue (car result)))
-          (should (stringp (alist-get 'id issue)))
-          (should (stringp (alist-get 'title issue)))
-          (should (integerp (alist-get 'priority issue))))))))
+  (beads-dolt-sql-test--with-live-mariadb-sql
+    (let ((sql-result (beads-backend-dolt-sql--execute-list nil nil))
+          (cli-result (beads-dolt-sql-test--cli
+                       "list" '((all . t) (limit . 0)))))
+      (should (listp sql-result))
+      (should (> (length sql-result) 0))
+      (should (equal (beads-dolt-sql-test--ids sql-result)
+                     (beads-dolt-sql-test--ids cli-result)))
+      (beads-dolt-sql-test--assert-issue-summary-shape (car sql-result)))))
 
 (ert-deftest beads-dolt-sql-test-integration-show ()
-  "Integration: show operation returns a known issue."
+  "Integration: SQL show matches CLI details for comments and hierarchy."
   :tags '(:integration)
   (skip-unless (beads-test-integration-enabled-p))
   (skip-unless (beads-dolt-sql-test--live-dolt-sql-available-p))
-  (let ((beads-dolt-sql--params nil)
-        (beads-dolt-sql--params-time nil)
-        (beads-dolt-sql--available t)
-        (beads-dolt-sql-enabled t))
-    (cl-letf (((symbol-function 'beads-client--project-root)
-               (lambda () default-directory)))
-      ;; Use a known existing issue
-      (let ((result (beads-backend-dolt-sql--execute-show
-                     '((id . "bdel-4c4.1")) nil)))
-        (should result)
-        (should (equal (alist-get 'id result) "bdel-4c4.1"))
-        (should (stringp (alist-get 'title result)))))))
+  (beads-dolt-sql-test--with-live-mariadb-sql
+    (let* ((id (alist-get 'id (car (beads-backend-dolt-sql--execute-list nil nil))))
+           (sql-result (beads-backend-dolt-sql--execute-show
+                        `((id . ,id)) nil))
+           (cli-result (beads-dolt-sql-test--unwrap-single
+                        (beads-dolt-sql-test--cli "show" `((id . ,id))))))
+      (should sql-result)
+      (should (equal (alist-get 'id sql-result) id))
+      (dolist (field '(id title status priority issue_type))
+        (should (equal (alist-get field sql-result)
+                       (alist-get field cli-result))))
+      (should (= (length (alist-get 'comments sql-result))
+                 (length (alist-get 'comments cli-result))))
+      (should (= (length (alist-get 'dependencies sql-result))
+                 (length (alist-get 'dependencies cli-result))))
+      (beads-dolt-sql-test--assert-show-shape sql-result))))
 
 (ert-deftest beads-dolt-sql-test-integration-stats ()
   "Integration: stats operation returns summary."
   :tags '(:integration)
   (skip-unless (beads-test-integration-enabled-p))
   (skip-unless (beads-dolt-sql-test--live-dolt-sql-available-p))
-  (let ((beads-dolt-sql--params nil)
-        (beads-dolt-sql--params-time nil)
-        (beads-dolt-sql--available t)
-        (beads-dolt-sql-enabled t))
-    (cl-letf (((symbol-function 'beads-client--project-root)
-               (lambda () default-directory)))
-      (let ((result (beads-backend-dolt-sql--execute-stats nil nil)))
-        (should result)
-        (let ((s (alist-get 'summary result)))
-          (should (integerp (alist-get 'total_issues s)))
-          (should (integerp (alist-get 'open_issues s))))))))
+  (beads-dolt-sql-test--with-live-mariadb-sql
+    (let* ((result (beads-backend-dolt-sql--execute-stats nil nil))
+           (summary (alist-get 'summary result))
+           (count (beads-backend-dolt-sql--execute-count nil nil)))
+      (should result)
+      (should (integerp (alist-get 'total_issues summary)))
+      (should (integerp (alist-get 'open_issues summary)))
+      (should (= (alist-get 'total_issues summary)
+                 (alist-get 'count count))))))
 
 (ert-deftest beads-dolt-sql-test-integration-ready ()
-  "Integration: ready operation returns ready issues."
+  "Integration: SQL ready matches the bd CLI ready issue set."
   :tags '(:integration)
   (skip-unless (beads-test-integration-enabled-p))
   (skip-unless (beads-dolt-sql-test--live-dolt-sql-available-p))
-  (let ((beads-dolt-sql--params nil)
-        (beads-dolt-sql--params-time nil)
-        (beads-dolt-sql--available t)
-        (beads-dolt-sql-enabled t))
-    (cl-letf (((symbol-function 'beads-client--project-root)
-               (lambda () default-directory)))
-      (let ((result (beads-backend-dolt-sql--execute-ready nil nil)))
-        (should (listp result))
-        (should (> (length result) 0))))))
+  (beads-dolt-sql-test--with-live-mariadb-sql
+    (let ((sql-result (beads-backend-dolt-sql--execute-ready nil nil))
+          (cli-result (beads-dolt-sql-test--cli "ready" nil)))
+      (should (listp sql-result))
+      (should (equal (beads-dolt-sql-test--ids sql-result)
+                     (beads-dolt-sql-test--ids cli-result)))
+      (when sql-result
+        (beads-dolt-sql-test--assert-issue-summary-shape (car sql-result))))))
 
 (ert-deftest beads-dolt-sql-test-integration-stale ()
-  "Integration: stale operation returns stale issues."
+  "Integration: SQL stale honors the days filter and matches the CLI."
   :tags '(:integration)
   (skip-unless (beads-test-integration-enabled-p))
   (skip-unless (beads-dolt-sql-test--live-dolt-sql-available-p))
-  (let ((beads-dolt-sql--params nil)
-        (beads-dolt-sql--params-time nil)
-        (beads-dolt-sql--available t)
-        (beads-dolt-sql-enabled t))
-    (cl-letf (((symbol-function 'beads-client--project-root)
-               (lambda () default-directory)))
-      (let ((result (beads-backend-dolt-sql--execute-stale '((days . 365)) nil)))
-        (should (listp result))))))
+  (beads-dolt-sql-test--with-live-mariadb-sql
+    (let ((sql-result (beads-backend-dolt-sql--execute-stale '((days . 365)) nil))
+          (cli-result (beads-dolt-sql-test--cli "stale" '((days . 365)))))
+      (should (listp sql-result))
+      (should (equal (beads-dolt-sql-test--ids sql-result)
+                     (beads-dolt-sql-test--ids cli-result)))
+      (when sql-result
+        (beads-dolt-sql-test--assert-issue-summary-shape (car sql-result))))))
 
 (ert-deftest beads-dolt-sql-test-integration-count ()
   "Integration: count operation returns count."
   :tags '(:integration)
   (skip-unless (beads-test-integration-enabled-p))
   (skip-unless (beads-dolt-sql-test--live-dolt-sql-available-p))
-  (let ((beads-dolt-sql--params nil)
-        (beads-dolt-sql--params-time nil)
-        (beads-dolt-sql--available t)
-        (beads-dolt-sql-enabled t))
-    (cl-letf (((symbol-function 'beads-client--project-root)
-               (lambda () default-directory)))
-      (let ((result (beads-backend-dolt-sql--execute-count nil nil)))
-        (should (integerp (alist-get 'count result)))
-        (should (> (alist-get 'count result) 0))))))
+  (beads-dolt-sql-test--with-live-mariadb-sql
+    (let ((sql-result (beads-backend-dolt-sql--execute-count nil nil))
+          (cli-result (beads-dolt-sql-test--cli "count" nil)))
+      (should (integerp (alist-get 'count sql-result)))
+      (should (> (alist-get 'count sql-result) 0))
+      (should (= (alist-get 'count sql-result)
+                 (alist-get 'count cli-result))))))
+
+(ert-deftest beads-dolt-sql-test-integration-epic-status ()
+  "Integration: SQL epic status matches the bd CLI epic set."
+  :tags '(:integration)
+  (skip-unless (beads-test-integration-enabled-p))
+  (skip-unless (beads-dolt-sql-test--live-dolt-sql-available-p))
+  (beads-dolt-sql-test--with-live-mariadb-sql
+    (let ((sql-result (beads-backend-dolt-sql--execute-epic-status nil nil))
+          (cli-result (beads-dolt-sql-test--cli "epic_status" nil)))
+      (should (listp sql-result))
+      (should (equal (beads-dolt-sql-test--ids
+                      (mapcar (lambda (entry) (alist-get 'epic entry)) sql-result))
+                     (beads-dolt-sql-test--ids
+                      (mapcar (lambda (entry) (alist-get 'epic entry)) cli-result))))
+      (when sql-result
+        (let ((entry (car sql-result)))
+          (beads-dolt-sql-test--assert-epic-shape (alist-get 'epic entry))
+          (should (integerp (alist-get 'total_children entry)))
+          (should (integerp (alist-get 'closed_children entry)))
+          (should (memq (alist-get 'eligible_for_close entry) '(t nil))))))))
+
+(ert-deftest beads-dolt-sql-test-integration-freshness ()
+  "Integration: SQL freshness returns read-cache tokens for all tables."
+  :tags '(:integration)
+  (skip-unless (beads-test-integration-enabled-p))
+  (skip-unless (beads-dolt-sql-test--live-dolt-sql-available-p))
+  (beads-dolt-sql-test--with-live-mariadb-sql
+    (let ((freshness (beads-backend-dolt-sql--execute-freshness nil nil))
+          (count (beads-backend-dolt-sql--execute-count nil nil)))
+      (should (= (alist-get 'issues_count freshness)
+                 (alist-get 'count count)))
+      (dolist (field '(labels_count deps_count comments_count))
+        (should (integerp (alist-get field freshness))))
+      (dolist (field '(issues_max_updated deps_max_created comments_max_created))
+        (should (or (null (alist-get field freshness))
+                    (stringp (alist-get field freshness))))))))
 
 (ert-deftest beads-dolt-sql-test-integration-executor-fallback ()
   "Integration: executor falls back to bd CLI for non-SQL ops."
