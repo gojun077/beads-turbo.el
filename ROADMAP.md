@@ -1,21 +1,14 @@
-# beads.el Roadmap
+# beads.el / beads-turbo.el Roadmap
 
-## Architecture Strategy: Dolt SQL as Stable FFI
+This roadmap records the current direction of the Emacs client after the Dolt
+SQL backend, caching layer, and org-mode list work.  Detailed task state lives
+in beads; use `bd show <id>` for the authoritative issue record.
 
-`bd` CLI is a fast-moving target — 200k+ lines of Go, rapid iteration, frequent
-flag and output format changes. Every `bd` invocation is a fresh Go binary that
-connects to Dolt, executes a query, serializes JSON, and exits. The per-call
-overhead is dominated by Go runtime startup (~50ms) + MySQL handshake (~10ms),
-not the query itself (~1ms).
+## Current Architecture Direction
 
-**Dolt SQL is the more stable interface:**
-
-- Dolt schema has versioned migrations (`schema_migrations` table)
-- Core tables (`issues`, `dependencies`, `labels`) are structurally stable
-- The `ready_issues` view already materializes complex recursive CTEs
-- Dolt speaks standard MySQL protocol — any MySQL-compatible client works
-
-**Recommended long-term architecture:**
+`bd` remains the source of truth for issue semantics, validation, writes, and
+sync.  beads.el optimizes the high-volume interactive read paths by talking to
+the local Dolt SQL server when available.
 
 ```
                     beads.el
@@ -23,107 +16,129 @@ not the query itself (~1ms).
          ┌─────────────┼─────────────┐
          ▼             ▼             ▼
     Dolt SQL DB    bd CLI        bd CLI
-    (reads, 80%)  (writes, 15%)  (complex, 5%)
-     direct TCP   subprocess     subprocess
+    (reads)       (writes)      (complex ops)
+     direct TCP   subprocess    subprocess
 ```
 
-- **Reads** (list, show, ready, stats, stale, count) → direct SQL queries
-  against the Dolt MySQL server. No Go binary, no intermediate serialization.
-- **Writes** (create, update, close, delete) → `bd` CLI for Go-side
-  validation, JSONL sync, and orchestration logic.
-- **Complex ops** (orphans, lint, batch, epic close-eligible) → `bd` CLI
-  for operations that need git scanning or cross-table validation.
+- **Reads** use `beads-backend-dolt-sql.el` when `beads-dolt-sql-enabled` is
+  non-nil and a Dolt SQL server is reachable.
+- **Writes** still go through `bd` CLI so Go-side validation, task graph rules,
+  JSONL sync, and Dolt commits stay authoritative.
+- **Complex operations** that need git scanning or command-specific `bd` logic
+  continue to use `bd` CLI.
+- **Fallbacks** remain in place: native `mysql.el` is preferred, a persistent
+  `mysql`/`mariadb` subprocess is the next fallback, one-shot `mariadb -e` is
+  the final SQL fallback, and plain `bd` CLI remains the compatibility path.
 
-## Performance: Direct SQL vs bd CLI
+## Completed Work
 
-Benchmarked with mariadb 11.8.6, bd 1.0.3, 88 issues:
+### Direct Dolt SQL Backend — complete
 
-| Operation | `bd` CLI | Direct SQL | Speedup |
-|-----------|----------|------------|---------|
-| list      | 64ms     | 12ms       | 5.3x    |
-| show      | 51ms     | 9ms        | 5.7x    |
-| ready     | 47ms     | 7ms        | 6.7x    |
-| stats     | 210ms    | 8ms        | 26.3x   |
-| orphans   | 216ms    | N/A (git)  | -       |
-| stale     | 244ms    | SQL doable | -       |
+The direct SQL read backend is implemented and the parent epic is closed
+(`bdel-4c4`).
 
-Even with `mariadb` subprocess overhead (~10ms), direct SQL is 5-26x faster.
-With a native MySQL protocol client (see Tier 2 below), latency would drop
-below 1ms — making auto-refresh and preview near-instant.
+- `bdel-4c4.1` — core `beads-backend-dolt-sql.el` module implemented.
+- `bdel-4c4.2` — read operations expanded beyond list to show, ready, stats,
+  count, and stale.
+- `bdel-4c4.3` — opt-in custom variable, persistent CLI transport, and CLI
+  fallback integrated.
+- `bdel-4c4.4` — end-to-end backend benchmarking completed.
+- `bdel-4c4.5` — optional native MySQL wire-protocol path via `mysql.el`
+  integrated.
 
-## Implementation Plan
+### Client-side Caching and Smart Refresh — complete
 
-### Tier 1: `mariadb -e` Transport
+The read-side cache work is complete and the parent epic is closed
+(`bdel-hba`).
 
-Create `beads-backend-dolt-sql.el` that issues SELECT queries via the
-`mariadb` CLI subprocess. Reads Dolt connection params from `bd dolt show`
-(host, port, user, database). Returns results in JSON matching `bd` CLI
-format so existing elisp callers work unchanged.
+- Stats are computed locally from fetched list data instead of making a separate
+  stats call (`bdel-hba.1`, implemented via `bdel-ie8`).
+- Project-scoped issue list caching with Dolt-backed freshness tokens is in
+  place (`bdel-hba.2`).
+- List-to-detail navigation uses full-issue caching plus lazy async loading,
+  giving instant partial render and zero subprocess calls on cache hits
+  (`bdel-hba.3`).
 
-- **Effort:** ~200 lines of elisp
-- **Speedup:** 5-26x vs `bd` CLI
-- **Risk:** Low — thin wrapper, falls back to `bd` if Dolt is down
-- **Status:** [bdel-4c4.1][] (core), [bdel-4c4.2][] (expand ops)
+### Org-mode List View — largely implemented
 
-### Tier 1.5: Persistent CLI Transport (current fallback)
+The list view has moved from the original tabulated-list interface toward an
+org-mode based interface (`bdel-7ja`).  The current implementation includes:
 
-Keep a long-lived `mysql`/`mariadb --batch --skip-column-names --raw`
-process and send each SELECT over stdin.  This avoids per-query process
-startup and handshake overhead while preserving the same SQL query catalog
-and JSON result shape.
+- `beads-org-list-mode`, derived from `org-mode`.
+- Nested org headings for parent-child issue structure.
+- Org TODO keyword mapping for open, blocked, and closed issues.
+- Property drawers containing stable issue metadata such as `BEADS_ID`.
+- Filtering, marking, bulk actions, hierarchy actions, delete/reopen, and
+  detail navigation from the org list.
+- Refresh-on-select behavior using the same cache/freshness path as the
+  regular list refresh.
 
-- **Effort:** ~150 lines of elisp
-- **Speedup:** 30-50x vs `bd` CLI
-- **Risk:** Low — still delegates protocol details to the mysql/mariadb CLI
-- **Status:** implemented
+Remaining org-list work is tracked under the `bdel-7ja` and `bdel-91f` issue
+families rather than duplicated here.
 
-### Tier 2: Native MySQL Protocol via mysql.el (current preferred path)
+## Active Fork Work
 
-Use Lucius Chen's [mysql.el](https://github.com/LuciusChen/mysql.el), a
-pure Emacs Lisp MySQL wire-protocol client using `make-network-process`,
-when it is installed.  This lets beads.el talk MySQL protocol directly to
-Dolt over TCP without maintaining its own protocol implementation.  The
-persistent CLI and one-shot CLI transports remain fallbacks.
+### beads-turbo.el fork — in progress
 
-- **Effort:** small integration layer; mysql.el owns handshake + result parsing
-- **Speedup:** 50x+ vs `bd` CLI, ~10x vs Tier 1
-- **Status:** [bdel-4c4.5][]
+The fork/repositioning epic is in progress (`bdel-261`).  The goal is to make
+the increasingly divergent app distinguishable from the unmaintained upstream
+while keeping churn low.
 
-### Opt-in Gate
+Current child work:
 
-All direct-SQL transports are gated behind `beads-dolt-sql-enabled`
-(defcustom, default `nil`). When disabled or when Dolt server is unreachable,
-beads.el silently falls back to `bd` CLI. This ensures zero risk for existing
-users while allowing early adopters to opt in.
+- `bdel-261.1` — refactor `README.md` for the new project identity and remove
+  stale references.
+- `bdel-261.2` — update this roadmap to reflect completed work and current
+  direction.
+- `bdel-v3z` — publish/package work remains open, but package metadata and
+  distribution details should be revisited after the fork identity is settled.
+
+Naming policy recorded in `bdel-261.3`:
+
+- Keep existing `beads-*` symbols by default.
+- Use `beads-turbo.el` / `beads-turbo` for repository, package, README, and
+  other user-facing project identity where the fork must be distinguished.
+- Consider compact new prefixes such as `bdtel-*` only for genuinely new
+  turbo-specific APIs or internals.
+- Avoid wholesale symbol renames unless there is a concrete namespace,
+  packaging, or user-clarity reason.
+
+## Open Work Areas
+
+### Documentation and packaging
+
+- Update README installation URLs, badges, package naming, and project overview
+  for the fork (`bdel-261.1`).
+- Revisit MELPA or other package distribution once the fork name and package
+  metadata are final (`bdel-v3z`).
+- Keep Texinfo/org documentation in sync with the org-list-first workflow.
+
+### Usability bugs
+
+Open usability work is tracked under `bdel-91f`.  Current high-signal items
+include multi-workspace org-list buffer behavior and section population bugs in
+sorted views.
+
+### Feature backlog
+
+Feature epics such as comments support (`bdel-5as`) and UI polish such as P0
+whole-line highlighting (`bdel-zor`) remain open, but are lower priority than
+stabilizing the fork identity and documentation.
 
 ## Schema Stability Notes
 
-The Dolt tables used by the SQL transport:
+The Dolt tables used by the SQL transport remain the stable read contract:
 
-| Table / View    | Stability | Notes |
-|-----------------|-----------|-------|
-| `issues`        | High      | Core entity, columns rarely change |
-| `dependencies`  | High      | Graph edges, type enum may grow |
-| `labels`        | High      | Simple many-to-many junction |
-| `comments`      | High      | Append-only log |
-| `ready_issues`  | High      | Materialized Dolt view |
-| `blocked_issues`| Medium    | Auto-generated; column set stable |
-| `config`        | Medium    | Key-value; keys may evolve |
-| `child_counters`| Low       | Internal counter; avoid direct use |
+| Table / View     | Stability | Notes |
+|------------------|-----------|-------|
+| `issues`         | High      | Core entity, columns rarely change |
+| `dependencies`   | High      | Graph edges, type enum may grow |
+| `labels`         | High      | Simple many-to-many junction |
+| `comments`       | High      | Append-only log |
+| `ready_issues`   | High      | Materialized Dolt view |
+| `blocked_issues` | Medium    | Auto-generated; column set stable |
+| `config`         | Medium    | Key-value; keys may evolve |
+| `child_counters` | Low       | Internal counter; avoid direct use |
 
-The `bd` binary will continue to evolve — new flags, changed output format,
-additional subcommands. By anchoring beads.el to the Dolt schema for reads,
-we decouple from that velocity and only need to track schema migrations.
-
-## Related Issues
-
-All tracked in beads (`bd show <id>` for details):
-
-- `bdel-4c4` — Epic: Investigate direct Dolt SQL transport
-- `bdel-4c4.1` — Implement `beads-backend-dolt-sql.el` core
-- `bdel-4c4.2` — Expand to show, ready, stats, count, stale
-- `bdel-4c4.3` — Opt-in custom variable + CLI fallback
-- `bdel-4c4.4` — Benchmark end-to-end
-- `bdel-4c4.5` — Native MySQL protocol (stretch)
-- `bdel-hba.1` — Compute stats locally (eliminate 2nd CLI call)
-- `bdel-hba.3` — Avoid re-fetching list→detail (cache list data)
+The practical rule is unchanged: use Dolt SQL for fast reads when available,
+but keep `bd` CLI as the authoritative compatibility and write path.
