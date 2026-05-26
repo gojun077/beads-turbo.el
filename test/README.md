@@ -85,6 +85,28 @@ Dedicated ephemeral `dolt sql-server` processes should be introduced
 only for SQL transport CI coverage that cannot be exercised through
 embedded `bd` projects.
 
+## CI Automation for Live SQL Tests
+
+Keep `make check` as the required every-PR gate until the full opt-in
+integration suite is batch-stable. To exercise the live Dolt SQL read
+path in CI without also running unrelated legacy integration tests, use
+the focused SQL selector from `beads-backend-dolt-sql-test.el`:
+
+```bash
+BEADS_RUN_INTEGRATION_TESTS=1 \
+emacs -Q --batch \
+  -L lisp -L test -L vendor/vui.el -L vendor/mysql.el \
+  -l test/beads-backend-dolt-sql-test.el \
+  --eval '(ert-run-tests-batch-and-exit "beads-dolt-sql-test-integration-")'
+```
+
+Run that job first as a scheduled/manual or protected-branch job with a
+fresh CI workspace, pinned `bd`/Dolt versions, `mariadb-client`, explicit
+`bd dolt test` readiness polling, and `bd dolt stop || true` teardown.
+See `history/e2e-ci-automation-20260526.md` for the staged CI plan,
+port-conflict notes, startup/caching recommendations, and GitHub Actions
+/ Codeberg Woodpecker sketches.
+
 ## Adding E2E Coverage
 
 Before adding an E2E or live integration test:
