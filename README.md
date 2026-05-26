@@ -60,6 +60,7 @@ TODO
 ## Usage
 
 - `M-x beads` or `M-x beads-org-list` - Open the issue list (org-mode default)
+- `M-x beads-about` - Show Beads Turbo version/source diagnostics and project ASCII art
 
 ## Keybindings
 

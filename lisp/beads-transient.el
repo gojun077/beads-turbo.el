@@ -63,6 +63,7 @@
 (declare-function beads-detail-refresh "beads-detail")
 (declare-function beads-detail-edit-form "beads-detail")
 (declare-function beads-hierarchy-show "beads-hierarchy")
+(autoload 'beads-about "beads" "Display version and source information for Beads Turbo." t)
 
 (defvar beads-dolt-sql-enabled)
 (declare-function beads-backend-dolt-sql-activate "beads-backend-dolt-sql")
@@ -838,6 +839,7 @@ See `beads-backend-dolt-sql-activate' and
     ("B" "Bulk menu..." beads-mark-menu)
     ("V" "Views..." beads-views-menu)
     ("," "Config..." beads-config-menu)
+    ("i" "About Beads Turbo" beads-about)
     ""
     ("?" "Describe mode" describe-mode)
     ("q" "Quit" transient-quit-one)]])
@@ -871,6 +873,7 @@ See `beads-backend-dolt-sql-activate' and
     ("R" "Reopen issue" beads-reopen-issue)
     ("D" "Delete issue" beads-delete-issue)
     ("," "Config..." beads-config-menu)
+    ("i" "About Beads Turbo" beads-about)
     ""
     ("?" "Describe mode" describe-mode)
     ("q" "Quit" transient-quit-one)]])

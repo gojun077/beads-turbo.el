@@ -49,6 +49,7 @@
 
 ;;; Code:
 
+(require 'subr-x)
 (require 'vui)
 
 (defgroup beads nil
@@ -70,6 +71,88 @@
   "Activate Dolt SQL transport for the current Emacs session." t)
 (autoload 'beads-backend-dolt-sql-deactivate "beads-backend-dolt-sql"
   "Deactivate Dolt SQL transport, reverting to bd CLI for all operations." t)
+
+(defconst beads-about--buffer-name "*Beads Turbo About*"
+  "Name of the Beads Turbo about buffer.")
+
+(defconst beads-about--ascii-art
+  "            ____________/  __                     __
+           ____________/  / /_  ___  ____ _____ _/ /____
+          ____________/  / __ \/ _ \/ __ `/ __ `/ / ___/
+         ____________/  / /_/ /  __/ /_/ / /_/ / (__  )
+        ____________/  /_.___/\___/\__,_/\__,_/_/____/
+       ____________/  / / / / / / / / / / / / / / / /
+      ____________/ ________  ______  ____  ____            __
+     ____________/ /_  __/ / / / __ \/ __ )/ __ \     ___  / /
+    ____________/   / / / / / / /_/ / __  / / / /    / _ \/ /
+   ____________/   / / / /_/ / _, _/ /_/ / /_/ / _  /  __/ /
+  ____________/   /_/  \____/_/ |_/_____/\____/ (_) \___/_/
+                  / / / / / / / / / / / / / / / / / / /
+                (O) (O) (O) (O) (O) (O) (O) (O) (O) (O)"
+  "ASCII art displayed by `beads-about'.")
+
+(defun beads-about--source-file ()
+  "Return the loaded Beads source file, or nil if it cannot be found."
+  (locate-library "beads"))
+
+(defun beads-about--git-root ()
+  "Return the Git root for the loaded Beads source, or nil if unavailable."
+  (when-let* ((source (beads-about--source-file)))
+    (locate-dominating-file source ".git")))
+
+(defun beads-about--process-output (program &rest args)
+  "Run PROGRAM with ARGS and return trimmed stdout, or nil on failure."
+  (when (executable-find program)
+    (with-temp-buffer
+      (when (zerop (apply #'process-file program nil t nil args))
+        (let ((output (string-trim (buffer-string))))
+          (unless (string-empty-p output)
+            output))))))
+
+(defun beads-about--git-output (&rest args)
+  "Run Git with ARGS in the Beads source checkout."
+  (when-let* ((root (beads-about--git-root)))
+    (apply #'beads-about--process-output "git" "-C" root args)))
+
+(defun beads-about--insert-field (label value)
+  "Insert an about buffer field named LABEL with VALUE."
+  (insert (format "%-19s %s\n" (concat label ":") (or value "unknown"))))
+
+;;;###autoload
+(defun beads-about ()
+  "Display version and source information for Beads Turbo."
+  (interactive)
+  (let ((buffer (get-buffer-create beads-about--buffer-name)))
+    (with-current-buffer buffer
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (insert beads-about--ascii-art "\n\n")
+        (insert "beads-turbo.el\n\n")
+        (beads-about--insert-field "Package version" beads-client-version)
+        (beads-about--insert-field
+         "Git tag"
+         (beads-about--git-output "describe" "--tags" "--always" "--dirty"))
+        (beads-about--insert-field
+         "Commit"
+         (beads-about--git-output "rev-parse" "--short" "HEAD"))
+        (beads-about--insert-field
+         "Commit date"
+         (beads-about--git-output "log" "-1" "--format=%cs"))
+        (beads-about--insert-field "Loaded from" (beads-about--source-file))
+        (beads-about--insert-field
+         "bd version"
+         (car (split-string (or (beads-about--process-output "bd" "--version") "")
+                            "\n" t)))
+        (beads-about--insert-field
+         "Dolt SQL read path"
+         (if (bound-and-true-p beads-dolt-sql-enabled) "enabled" "disabled"))
+        (beads-about--insert-field
+         "Project database"
+         (or (ignore-errors (beads-client--find-database))
+             "not found from current directory")))
+      (goto-char (point-min))
+      (special-mode))
+    (pop-to-buffer buffer)))
 
 ;;;###autoload
 (defun beads ()
