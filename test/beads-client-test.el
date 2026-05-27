@@ -4,7 +4,7 @@
 ;; Tests for the Beads client module.
 ;;
 ;; Test categories:
-;; 1. Discovery tests - auto-discovery of .beads/ metadata.json (Dolt) with legacy beads.db fallback
+;; 1. Discovery tests - auto-discovery of .beads/ metadata.json (Dolt)
 ;; 2. Request dispatch tests - CLI dispatch (mocked)
 ;; 3. Integration tests - actual CLI communication (tagged :integration)
 ;;
@@ -58,28 +58,27 @@
       (delete-directory temp-dir t))))
 
 (ert-deftest beads-client-test-find-database-beads-db-env ()
-  "Test that BEADS_DB environment variable overrides auto-discovery."
+  "Test that BEADS_DB can point directly at the current metadata sentinel."
   (let ((temp-dir (make-temp-file "beads-test-" t)))
     (unwind-protect
-        (let* ((db-path (expand-file-name "custom/beads.db" temp-dir))
+        (let* ((db-path (expand-file-name "custom/metadata.json" temp-dir))
                (process-environment (cons (concat "BEADS_DB=" db-path)
                                          process-environment))
                (default-directory temp-dir))
           (make-directory (file-name-directory db-path) t)
-          (write-region "" nil db-path)
+          (write-region "{}" nil db-path)
           (should (equal (beads-client--find-database) db-path)))
       (delete-directory temp-dir t))))
 
-(ert-deftest beads-client-test-find-database-legacy-db-fallback ()
-  "Test that beads.db is found as a legacy fallback when metadata.json is absent."
+(ert-deftest beads-client-test-find-database-requires-metadata-sentinel ()
+  "Test that a .beads directory without metadata.json is ignored."
   (let ((temp-dir (make-temp-file "beads-test-" t)))
     (unwind-protect
         (let ((beads-dir (expand-file-name ".beads" temp-dir))
               (default-directory temp-dir))
           (make-directory beads-dir)
-          (write-region "" nil (expand-file-name "beads.db" beads-dir))
-          (should (equal (beads-client--find-database)
-                        (expand-file-name ".beads/beads.db" temp-dir))))
+          (write-region "" nil (expand-file-name "data.db" beads-dir))
+          (should (null (beads-client--find-database))))
       (delete-directory temp-dir t))))
 
 (ert-deftest beads-client-test-find-database-beads-dir-env ()
@@ -125,15 +124,15 @@
                         (expand-file-name ".beads/metadata.json" temp-dir))))
       (delete-directory temp-dir t))))
 
-(ert-deftest beads-client-test-find-database-metadata-preferred ()
-  "Test that metadata.json is preferred over beads.db."
+(ert-deftest beads-client-test-find-database-metadata-sentinel-wins-over-other-files ()
+  "Test that metadata.json remains the discovered project sentinel."
   (let ((temp-dir (make-temp-file "beads-test-" t)))
     (unwind-protect
         (let ((beads-dir (expand-file-name ".beads" temp-dir))
               (default-directory temp-dir))
           (make-directory beads-dir)
           (write-region "{}" nil (expand-file-name "metadata.json" beads-dir))
-          (write-region "" nil (expand-file-name "beads.db" beads-dir))
+          (write-region "" nil (expand-file-name "data.db" beads-dir))
           (should (equal (beads-client--find-database)
                         (expand-file-name ".beads/metadata.json" temp-dir))))
       (delete-directory temp-dir t))))
@@ -155,7 +154,7 @@
       (delete-directory temp-dir t))))
 
 (ert-deftest beads-client-test-find-database-redirect-absent-sentinel ()
-  "Test that redirect to a directory without metadata.json or beads.db returns nil."
+  "Test that redirect to a directory without metadata.json returns nil."
   (let ((temp-dir (make-temp-file "beads-test-" t)))
     (unwind-protect
         (let* ((empty-dir (expand-file-name "empty-beads" temp-dir))

@@ -163,21 +163,20 @@ behavior of older or newer beads CLI versions.
 | beads.el | beads CLI | Storage Backend           |
 |----------|-----------|---------------------------|
 | current  | 1.0.x     | Dolt SQL server (metadata.json) |
-| legacy   | 0.49.x    | Dolt (metadata.json)      |
 
 ## Storage Backend Discovery Priority
 
 The `beads-client--find-database` function discovers a beads project
-by checking for these sentinels in order:
+by checking for the current `metadata.json` sentinel. It first honors
+`BEADS_DIR`, then a `BEADS_DB` override that points directly at a
+`metadata.json` file, then walks up from `default-directory` looking for
+`.beads/metadata.json`.
 
-1. `metadata.json` — primary sentinel (Dolt backend, also present in some SQLite setups)
-2. `beads.db` — legacy SQLite fallback
-3. Any `.db` file (excluding `vc.db` and `*.backup`) — last-resort fallback
+Directories without `metadata.json` are ignored.
 
 ## Test Compatibility Notes
 
-- **Discovery tests** (`beads-client-test.el`): Reflect the Dolt-first priority.
-  Legacy `beads.db` fallback is tested separately. The legacy `.db` extension
-  scanning test was removed.
+- **Discovery tests** (`beads-client-test.el`): Reflect metadata-only project
+  discovery, including environment overrides, redirects, and cache behavior.
 - **All other test files**: Storage-backend agnostic. Test Emacs Lisp logic
   only (modes, keybindings, rendering, state management).

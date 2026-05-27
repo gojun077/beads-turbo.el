@@ -32,10 +32,8 @@
 ;; Usage:
 ;;   M-x beads  - Open the Beads issue list
 ;;
-;; The client automatically discovers the Beads database by walking up from
-;; `default-directory` looking for `.beads/beads.db`.  Multiple CLI backends
-;; are supported (bd, br) and auto-detected per project; see
-;; `beads-cli-program'.
+;; The client automatically discovers the Beads project by walking up from
+;; `default-directory` looking for `.beads/metadata.json`.
 ;;
 ;; You can use beads.el on multiple projects at the same time.
 ;;

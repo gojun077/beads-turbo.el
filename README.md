@@ -5,7 +5,7 @@ beads-turbo.el - Fast Emacs Client for Beads
 
 ## Overview
 
-`beads-turbo.el` is an actively developed fork of [ctietze/beads.el](https://codeberg.org/ctietze/beads.el) that supports the latest [Beads](https://github.com/gastownhall/beads) issue tracking system which now uses Dolt DB backend instead of sqlite and JSONL for storing the task Graph. `beads-turbo.el` provides a fast Emacs interface to Beads the dolt-backed issue tracker that stores data locally in `.beads/dolt` alongside your code and also supports git-backed `dolt` remotes on DoltHub and Git forges like Github and Codeberg (but not Bitbucket). It works well with AI coding assistants but doesn't require them—you can use it entirely from Emacs or the command line.
+`beads-turbo.el` is an actively developed fork of [ctietze/beads.el](https://codeberg.org/ctietze/beads.el) that supports the latest [Beads](https://github.com/gastownhall/beads) issue tracking system and its Dolt-backed task graph. `beads-turbo.el` provides a fast Emacs interface to Beads the dolt-backed issue tracker that stores data locally in `.beads/dolt` alongside your code and also supports git-backed `dolt` remotes on DoltHub and Git forges like Github and Codeberg (but not Bitbucket). It works well with AI coding assistants but doesn't require them—you can use it entirely from Emacs or the command line.
 
 The fork keeps the concise `beads-*` Emacs command and symbol namespace for continuity, while using the `beads-turbo.el` project name to distinguish this maintained version from the original project which does not support dolt DB backend.
 

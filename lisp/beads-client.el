@@ -49,9 +49,11 @@ cache poisoning another's lookup.")
 
 (cl-defun beads-client--find-database ()
   "Find the Beads database path using auto-discovery.
-Checks BEADS_DIR env, BEADS_DB env, then walks up from default-directory.
-Results are cached per search directory so multiple projects opened in
-the same Emacs session each resolve to their own database."
+Checks BEADS_DIR env, a BEADS_DB env override that points at
+metadata.json, then walks up from default-directory looking for the
+current metadata sentinel.  Results are cached per search directory so
+multiple projects opened in the same Emacs session each resolve to their
+own database."
   (let* ((search-dir (expand-file-name default-directory))
          (cached (gethash search-dir beads-client--db-cache)))
     (when (and cached
@@ -70,7 +72,11 @@ the same Emacs session each resolve to their own database."
 
             (let ((beads-db (getenv "BEADS_DB")))
               (when beads-db
-                (expand-file-name beads-db)))
+                (let ((metadata (expand-file-name beads-db)))
+                  (when (and (file-exists-p metadata)
+                             (string= (file-name-nondirectory metadata)
+                                      "metadata.json"))
+                    metadata))))
 
             (let ((dir search-dir)
                   (found nil))
@@ -102,22 +108,13 @@ the same Emacs session each resolve to their own database."
       beads-dir)))
 
 (defun beads-client--find-db-in-dir (beads-dir)
-  "Find database indicator in BEADS-DIR.
-Returns a path inside BEADS-DIR if a beads project is found, nil otherwise.
-Checks for metadata.json (present in both SQLite and Dolt setups),
-beads.db (legacy SQLite), or any .db file."
+  "Find the current metadata sentinel in BEADS-DIR.
+Returns BEADS-DIR/metadata.json if a current beads project is found,
+nil otherwise."
   (when (file-directory-p beads-dir)
     (let ((metadata (expand-file-name "metadata.json" beads-dir)))
-      (if (file-exists-p metadata)
-          metadata
-        (let ((default-db (expand-file-name "beads.db" beads-dir)))
-          (if (file-exists-p default-db)
-              default-db
-            (let ((db-files (directory-files beads-dir t "\\.db\\'")))
-              (cl-find-if (lambda (f)
-                            (and (not (string-match-p "\\.backup" f))
-                                 (not (string-match-p "vc\\.db\\'" f))))
-                          db-files))))))))
+      (when (file-exists-p metadata)
+        metadata))))
 
 (defun beads-client--project-root ()
   "Get the project root directory for the current Beads workspace.
