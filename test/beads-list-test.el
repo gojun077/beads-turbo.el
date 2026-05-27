@@ -96,6 +96,11 @@
       (should (equal result "closed"))
       (should (eq (get-text-property 0 'face result) 'beads-status-closed)))))
 
+(ert-deftest beads-list-test-closed-status-face-is-muted-gray ()
+  "Closed status uses a muted gray face instead of strong org green."
+  (should (equal (face-attribute 'beads-status-closed :foreground nil 'default)
+                 "light gray")))
+
 (ert-deftest beads-list-test-format-status-blocked ()
   "Test that beads--format-status formats blocked status with face."
   (let ((issue '((status . "blocked"))))
@@ -603,6 +608,8 @@ Use a key that is not overridden by `beads-list-mode-map' (e.g. `n')."
     (beads-org-list-mode)
     (should (derived-mode-p 'org-mode))
     (should (derived-mode-p 'beads-org-list-mode))
+    (should (equal (cdr (assoc "DONE" org-todo-keyword-faces))
+                   'beads-status-closed))
     (let ((inhibit-read-only t))
       (insert "* WAIT Waiting\n")
       (goto-char (point-min))

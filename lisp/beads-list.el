@@ -620,6 +620,7 @@ remains available through `beads-list-legacy'.
 
 \\{beads-org-list-mode-map}"
   (setq-local org-todo-keywords '((sequence "TODO" "WIP" "WAIT" "|" "DONE")))
+  (setq-local org-todo-keyword-faces '(("DONE" . beads-status-closed)))
   (setq-local org-startup-folded nil)
   (setq-local beads-org-list--project-root nil)
   (setq buffer-read-only t)

@@ -40,7 +40,7 @@
   :group 'beads-faces)
 
 (defface beads-status-closed
-  '((t :foreground "green"))
+  '((t :foreground "light gray"))
   "Face for closed status."
   :group 'beads-faces)
 
