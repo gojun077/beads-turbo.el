@@ -12,6 +12,25 @@
   "Test that `beads-about' is an interactive command."
   (should (commandp 'beads-about)))
 
+(ert-deftest beads-about-test-ascii-art-renders-literally ()
+  "Test that the about buffer ASCII art preserves literal backslashes."
+  (should
+   (string=
+    beads-about--ascii-art
+    "            ____________/  __                     __
+           ____________/  / /_  ___  ____ _____ _/ /____
+          ____________/  / __ \\/ _ \\/ __ `/ __ `/ / ___/
+         ____________/  / /_/ /  __/ /_/ / /_/ / (__  )
+        ____________/  /_.___/\\___/\\__,_/\\__,_/_/____/
+       ____________/  / / / / / / / / / / / / / / / /
+      ____________/ ________  ______  ____  ____            __
+     ____________/ /_  __/ / / / __ \\/ __ )/ __ \\     ___  / /
+    ____________/   / / / / / / /_/ / __  / / / /    / _ \\/ /
+   ____________/   / / / /_/ / _, _/ /_/ / /_/ / _  /  __/ /
+  ____________/   /_/  \\____/_/ |_/_____/\\____/ (_) \\___/_/
+                  / / / / / / / / / / / / / / / / / / /
+                (O) (O) (O) (O) (O) (O) (O) (O) (O) (O)")))
+
 (ert-deftest beads-about-test-renders-buffer ()
   "Test that `beads-about' renders identity and diagnostic information."
   (cl-letf (((symbol-function 'beads-about--git-output)
