@@ -334,14 +334,14 @@
                    "* TODO [#B] Open issue :task:"))))
 
 (ert-deftest beads-list-test-org-heading-in-progress-issue ()
-  "In-progress issues render with TODO keyword while preserving raw status metadata."
+  "In-progress issues render with WIP keyword while preserving raw status metadata."
   (let ((issue '((id . "bd-next")
                  (title . "Doing it")
                  (status . "in_progress")
                  (priority . 0)
                  (issue_type . "feature"))))
     (should (equal (beads-list--org-heading issue 2)
-                   "** TODO [#A] Doing it :feature:"))))
+                   "** WIP [#A] Doing it :feature:"))))
 
 (ert-deftest beads-list-test-org-heading-blocked-issue ()
   "Blocked issues render with WAIT TODO keyword."
@@ -371,12 +371,14 @@
 (ert-deftest beads-list-test-org-todo-status-edit-mapping ()
   "Editable org TODO keywords map back to beads statuses."
   (should (equal (beads-list--org-status-for-todo-keyword "TODO") "open"))
+  (should (equal (beads-list--org-status-for-todo-keyword "WIP") "in_progress"))
   (should (equal (beads-list--org-status-for-todo-keyword "WAIT") "blocked"))
   (should (equal (beads-list--org-status-for-todo-keyword "DONE") "closed")))
 
 (ert-deftest beads-list-test-org-todo-cycle-keywords ()
-  "Org list status editing cycles through TODO, WAIT, and DONE."
-  (should (equal (beads-list--org-next-todo-keyword "TODO") "WAIT"))
+  "Org list status editing cycles through TODO, WIP, WAIT, and DONE."
+  (should (equal (beads-list--org-next-todo-keyword "TODO") "WIP"))
+  (should (equal (beads-list--org-next-todo-keyword "WIP") "WAIT"))
   (should (equal (beads-list--org-next-todo-keyword "WAIT") "DONE"))
   (should (equal (beads-list--org-next-todo-keyword "DONE") "TODO")))
 
@@ -433,7 +435,7 @@
                    (priority . 0)
                    (issue_type . "feature")))))
     (should (equal (beads-list-render-org issues)
-                   "* TODO [#B] First :task:\n:PROPERTIES:\n:BEADS_ID: bd-a\n:BEADS_STATUS: open\n:BEADS_TYPE: task\n:BEADS_PRIORITY: 1\n:END:\n* TODO [#A] Second :feature:\n:PROPERTIES:\n:BEADS_ID: bd-b\n:BEADS_STATUS: in_progress\n:BEADS_TYPE: feature\n:BEADS_PRIORITY: 0\n:END:"))))
+                   "* TODO [#B] First :task:\n:PROPERTIES:\n:BEADS_ID: bd-a\n:BEADS_STATUS: open\n:BEADS_TYPE: task\n:BEADS_PRIORITY: 1\n:END:\n* WIP [#A] Second :feature:\n:PROPERTIES:\n:BEADS_ID: bd-b\n:BEADS_STATUS: in_progress\n:BEADS_TYPE: feature\n:BEADS_PRIORITY: 0\n:END:"))))
 
 (ert-deftest beads-list-test-org-render-nested-issues-use-heading-depth ()
   "Parent-child relationships render with nested heading levels."
@@ -512,6 +514,10 @@
                     (title . "Child")
                     (status . "closed")
                     (parent . "bd-parent"))
+                   ((id . "bd-wip")
+                    (title . "Doing")
+                    (status . "in_progress")
+                    (priority . 0))
                    ((id . "bd-blocked")
                     (title . "Blocked")
                     (status . "open")
@@ -523,6 +529,7 @@
                 (beads-list-model-sectioned-sort issues) nil t)))
     (should (string-match-p "^\\* Ready\n\\*\\* TODO \\[#B\\] Parent" text))
     (should (string-match-p "^\\*\\*\\* DONE Child" text))
+    (should (string-match-p "^\\* In Progress\n\\*\\* WIP \\[#A\\] Doing" text))
     (should (string-match-p "^\\* Blocked\n\\*\\* TODO Blocked" text))
     (should (string-match-p "^\\* Completed\n\\*\\* DONE Closed" text))
     (should-not (string-match-p "^\\*\\* DONE Child" text))))
@@ -658,7 +665,12 @@ Use a key that is not overridden by `beads-list-mode-map' (e.g. `n')."
                   ((id . "bd-b")
                    (title . "Second")
                    (status . "closed")
-                   (issue_type . "bug")))))
+                   (issue_type . "bug"))
+                  ((id . "bd-c")
+                   (title . "Third")
+                   (status . "in_progress")
+                   (priority . 0)
+                   (issue_type . "feature")))))
     (with-temp-buffer
       (beads-org-list-mode)
       (cl-letf (((symbol-function 'beads-cache-refresh)
@@ -667,8 +679,11 @@ Use a key that is not overridden by `beads-list-mode-map' (e.g. `n')."
         (should (equal beads-list--issues issues))
         (should (null buffer-file-name))
         (should (string-match-p "^#\\+TITLE: Beads Issues" (buffer-string)))
+        (should (string-match-p "^#\\+TODO: TODO WIP WAIT | DONE" (buffer-string)))
         (should (string-match-p "^\\* Ready" (buffer-string)))
         (should (string-match-p "^\\*\\* TODO \\[#B\\] First :task:" (buffer-string)))
+        (should (string-match-p "^\\* In Progress" (buffer-string)))
+        (should (string-match-p "^\\*\\* WIP \\[#A\\] Third :feature:" (buffer-string)))
         (should (string-match-p "^\\* Completed" (buffer-string)))
         (should (string-match-p "^\\*\\* DONE Second :bug:" (buffer-string)))))))
 
@@ -825,6 +840,26 @@ Use a key that is not overridden by `beads-list-mode-map' (e.g. `n')."
             (beads-list--issues issues))
         (insert "* TODO First\n:PROPERTIES:\n:BEADS_ID: bd-a\n:END:\n* WAIT Second\n:PROPERTIES:\n:BEADS_ID: bd-b\n:END:\n")
         (should (beads-list--org-goto-id "bd-a"))
+        (cl-letf (((symbol-function 'beads-client-update)
+                   (lambda (id &rest args)
+                     (setq updated (cons id args))))
+                  ((symbol-function 'beads-org-list-refresh)
+                   (lambda (&optional _silent) (setq refreshed t))))
+          (beads-org-list-todo)
+          (should (equal updated '("bd-a" :status "in_progress")))
+          (should refreshed))))))
+
+(ert-deftest beads-list-test-org-todo-command-cycles-wip-to-blocked ()
+  "C-c C-t in org list cycles WIP headings to the blocked beads status."
+  (let ((updated nil)
+        (refreshed nil)
+        (issues '(((id . "bd-a") (title . "First") (status . "in_progress")))))
+    (with-temp-buffer
+      (beads-org-list-mode)
+      (let ((inhibit-read-only t)
+            (beads-list--issues issues))
+        (insert "* WIP First\n:PROPERTIES:\n:BEADS_ID: bd-a\n:END:\n")
+        (goto-char (point-min))
         (cl-letf (((symbol-function 'beads-client-update)
                    (lambda (id &rest args)
                      (setq updated (cons id args))))

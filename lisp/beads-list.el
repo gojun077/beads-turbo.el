@@ -83,10 +83,9 @@ renders issue metadata in org property drawers instead of columns."
 
 (defcustom beads-list-sort-mode 'sectioned
   "How to sort issues in the list view.
-When `sectioned', group issues into three sections:
-  1. Unblocked (open/in_progress) - sorted by priority
-  2. Blocked - sorted by priority
-  3. Completed (closed) - sorted by completion date
+When `sectioned', group issues into status sections.  The org view
+renders Ready, In Progress, Blocked, and Completed headings.  The legacy
+table keeps the existing unblocked/blocked/completed sections.
 When `column', use standard tabulated-list column sorting."
   :type '(choice (const :tag "Sectioned (unblocked/blocked/closed)" sectioned)
                  (const :tag "Column-based" column))
@@ -173,6 +172,7 @@ Each entry is (SYMBOL . (HEADER WIDTH SORTABLE FORMATTER)).")
 
 (defconst beads-list--org-status-todo-map
   '(("open" . "TODO")
+    ("in_progress" . "WIP")
     ("blocked" . "WAIT")
     ("hooked" . "WAIT")
     ("deferred" . "WAIT")
@@ -183,11 +183,12 @@ status only in the `BEADS_STATUS' property.")
 
 (defconst beads-list--org-todo-status-map
   '(("TODO" . "open")
+    ("WIP" . "in_progress")
     ("WAIT" . "blocked")
     ("DONE" . "closed"))
   "Mapping from org TODO keywords to beads issue status strings.")
 
-(defconst beads-list--org-todo-cycle '("TODO" "WAIT" "DONE")
+(defconst beads-list--org-todo-cycle '("TODO" "WIP" "WAIT" "DONE")
   "TODO keywords cycled by `beads-org-list-todo'.")
 
 (defconst beads-list--org-property-fields
@@ -618,7 +619,7 @@ it does not visit or require an org file on disk.  The legacy table view
 remains available through `beads-list-legacy'.
 
 \\{beads-org-list-mode-map}"
-  (setq-local org-todo-keywords '((sequence "TODO" "WAIT" "|" "DONE")))
+  (setq-local org-todo-keywords '((sequence "TODO" "WIP" "WAIT" "|" "DONE")))
   (setq-local org-startup-folded nil)
   (setq-local beads-org-list--project-root nil)
   (setq buffer-read-only t)
@@ -735,7 +736,7 @@ Must be called with a `beads-org-list-mode' buffer current."
     (setq beads-list--issues (beads-list-model-issues model))
     (erase-buffer)
     (insert "#+TITLE: Beads Issues\n")
-    (insert "#+TODO: TODO WAIT | DONE\n\n")
+    (insert "#+TODO: TODO WIP WAIT | DONE\n\n")
     (unless (string= org-text "")
       (insert org-text)
       (insert "\n"))
@@ -951,11 +952,12 @@ Returns t if found, nil otherwise."
         (match-string-no-properties 1)))))
 
 (defun beads-org-list-todo ()
-  "Cycle the current org list issue through TODO, WAIT, and DONE.
+  "Cycle the current org list issue through TODO, WIP, WAIT, and DONE.
 
 The generated `beads-org-list-mode' buffer is read-only, so this command
 updates the underlying beads issue instead of editing the buffer text in
-place.  The mapping is TODO -> open, WAIT -> blocked, and DONE -> closed."
+place.  The mapping is TODO -> open, WIP -> in_progress,
+WAIT -> blocked, and DONE -> closed."
   (interactive)
   (unless (derived-mode-p 'beads-org-list-mode)
     (user-error "Not in a beads org list buffer"))
@@ -1073,9 +1075,26 @@ org heading depth."
   "Return the org section heading name for SECTION number."
   (pcase section
     (0 "Ready")
-    (1 "Blocked")
-    (2 "Completed")
+    (1 "In Progress")
+    (2 "Blocked")
+    (3 "Completed")
     (_ "Other")))
+
+(defun beads-list--org-issue-section (issue)
+  "Return org section number for ISSUE.
+Sections are 0=Ready, 1=In Progress, 2=Blocked, and 3=Completed.
+Org sections primarily follow the rendered TODO keyword.  Open issues
+with positive `dependency_count' remain in Blocked to preserve existing
+dependency grouping."
+  (let ((todo (beads-list--org-todo-keyword issue))
+        (dep-count (or (alist-get 'dependency_count issue) 0)))
+    (cond
+     ((string= todo "DONE") 3)
+     ((string= todo "WIP") 1)
+     ((or (string= todo "WAIT")
+          (> dep-count 0))
+      2)
+     (t 0))))
 
 (defun beads-list--org-render-sectioned-forest (forest &optional level)
   "Return org text for FOREST grouped by root issue section.
@@ -1086,10 +1105,10 @@ issue tree invariant and avoiding duplicate children across sections.
 Section headings intentionally omit `BEADS_ID' properties so issue-at-
 point commands skip them."
   (let ((level (or level 1))
-        (sections (list (cons 0 nil) (cons 1 nil) (cons 2 nil))))
+        (sections (list (cons 0 nil) (cons 1 nil) (cons 2 nil) (cons 3 nil))))
     (dolist (node forest)
       (let* ((issue (alist-get 'issue node))
-             (section (beads-list-model-issue-section issue))
+             (section (beads-list--org-issue-section issue))
              (cell (assq section sections)))
         (when cell
           (setcdr cell (append (cdr cell) (list node))))))
@@ -1113,9 +1132,9 @@ with `beads-list-model-flat-issues-to-forest', preserving orphaned
 issues as roots while keeping their parent metadata in the property
 drawer.  LEVEL defaults to 1.
 
-When SECTIONED is non-nil, group only root issues under Ready, Blocked,
-and Completed headings.  Child issues always stay below their parent and
-are never repeated in another section."
+When SECTIONED is non-nil, group only root issues under Ready,
+In Progress, Blocked, and Completed headings.  Child issues always stay
+below their parent and are never repeated in another section."
   (let ((forest (beads-list-model-flat-issues-to-forest issues)))
     (if sectioned
         (beads-list--org-render-sectioned-forest forest level)

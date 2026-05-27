@@ -385,6 +385,7 @@ display buffer or calling `bd'."
     (should (= larger-size
                (beads-perf-test--count-matches "^:BEADS_ID: " larger-text)))
     (should (string-match-p "^\* Ready" larger-text))
+    (should (string-match-p "^\* In Progress" larger-text))
     (should (string-match-p "^\* Blocked" larger-text))
     (should (string-match-p "^\* Completed" larger-text))
     ;; Rendering produces a sizeable org string, so the cap is deliberately
