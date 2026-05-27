@@ -33,11 +33,18 @@ Edit long-form fields (description, design, notes) in dedicated buffers with `ma
 
 ## Installation
 
+### use-package
+
+```elisp
+(use-package beads
+  :straight nil
+  :load-path ("/path/to/beads-turbo.el/lisp"
+              "/path/to/beads-turbo.el/vendor/vui.el"))
+```
+
 ### MELPA
 
 TODO
-
-### Straight
 
 
 ### Manual Installation
@@ -51,10 +58,34 @@ TODO
 
 ### With straight.el
 
+Using `straight-use-package` directly:
+
 ```elisp
 (straight-use-package
- '(beads :type git :repo "https://codeberg.org/gojun077/beads.el"
-         :files ("lisp/*.el")))
+ '(beads
+   :type git
+   :host github
+   :repo "gojun077/beads-turbo.el"
+   :files ("lisp/*.el"
+           "vendor/vui.el/*.el"
+           "vendor/mysql.el/mysql.el")
+   :includes (vui mysql)))
+```
+
+Or with `use-package` managed by straight.el:
+
+```elisp
+(straight-use-package 'use-package)
+
+(use-package beads
+  :straight '(beads
+              :type git
+              :host github
+              :repo "gojun077/beads-turbo.el"
+              :files ("lisp/*.el"
+                      "vendor/vui.el/*.el"
+                      "vendor/mysql.el/mysql.el")
+              :includes (vui mysql)))
 ```
 
 ## Usage
