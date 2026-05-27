@@ -699,10 +699,16 @@ Must be called with a `beads-org-list-mode' buffer current."
       (beads-list--org-goto-near-line saved-line)))
     (when-let ((win (get-buffer-window (current-buffer)))
                (line saved-start-line))
-      (save-excursion
-        (goto-char (point-min))
-        (forward-line (1- (min line (line-number-at-pos (point-max)))))
-        (set-window-start win (point))))
+      (let ((restored-point (point)))
+        (save-excursion
+          (goto-char (point-min))
+          (forward-line (1- (min line (line-number-at-pos (point-max)))))
+          (set-window-start win (point)))
+        (unless (pos-visible-in-window-p restored-point win)
+          (save-excursion
+            (goto-char restored-point)
+            (beginning-of-line)
+            (set-window-start win (point))))))
     (beads-list--update-mode-line (beads-list-model-stats model))
     (unless silent
       (let ((filter-msg (if beads-list--filter

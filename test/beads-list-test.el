@@ -872,6 +872,57 @@ Use a key that is not overridden by `beads-list-mode-map' (e.g. `n')."
         (beads-org-list-refresh t)
         (should (equal (beads-list--org-id-at-point) "bd-b"))))))
 
+(ert-deftest beads-list-test-org-list-refresh-keeps-moved-issue-visible ()
+  "Org refresh keeps the selected issue visible after it moves sections."
+  (let* ((buffer (generate-new-buffer " *beads-org-list-window-test*"))
+         (ready-issues
+          (cl-loop for i from 1 to 20
+                   collect `((id . ,(format "bd-ready-%02d" i))
+                             (title . ,(format "Ready %02d" i))
+                             (status . "open")
+                             (priority . 4)
+                             (dependency_count . 0))))
+         (initial-issues
+          (append ready-issues
+                  '(((id . "bd-moving")
+                     (title . "Moving issue")
+                     (status . "blocked")
+                     (priority . 4)
+                     (dependency_count . 0)))))
+         (updated-issues
+          (append ready-issues
+                  '(((id . "bd-moving")
+                     (title . "Moving issue")
+                     (status . "open")
+                     (priority . 0)
+                     (dependency_count . 0)))))
+         (previous-buffer (current-buffer))
+         (window (selected-window))
+         (calls 0))
+    (unwind-protect
+        (progn
+          (set-window-buffer window buffer)
+          (set-buffer buffer)
+          (beads-org-list-mode)
+          (cl-letf (((symbol-function 'beads-cache-refresh)
+                     (lambda (&rest _args)
+                       (cl-incf calls)
+                       (cons t (if (= calls 1)
+                                   initial-issues
+                                 updated-issues)))))
+            (beads-org-list-refresh t)
+            (should (beads-list--org-goto-id "bd-moving"))
+            (set-window-start window (line-beginning-position))
+            (beads-org-list-refresh t)
+            (should (equal (beads-list--org-id-at-point) "bd-moving"))
+            (should (= (line-number-at-pos (window-start window))
+                       (line-number-at-pos)))))
+      (when (buffer-live-p previous-buffer)
+        (set-window-buffer window previous-buffer)
+        (set-buffer previous-buffer))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
 (ert-deftest beads-list-test-org-list-refresh-falls-back-nearby-when-id-disappears ()
   "Org refresh falls back to a nearby issue heading instead of point-min."
   (let ((first '(((id . "bd-a") (title . "First") (status . "open"))
