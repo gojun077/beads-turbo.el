@@ -57,6 +57,7 @@
 (declare-function beads-list-edit-form "beads-list")
 (declare-function beads-list--build-format "beads-list")
 (declare-function beads-list--column-names "beads-list")
+(declare-function beads-list--sort-column-name "beads-list")
 (declare-function beads-list-available-types "beads-list")
 (declare-function beads-get-types "beads-client")
 (declare-function beads-preview-mode "beads-preview")
@@ -710,9 +711,12 @@ See `beads-backend-dolt-sql-activate' and
 (defun beads-sort-by-column (column &optional descending)
   "Sort list by COLUMN.  When DESCENDING is non-nil, reverse order."
   (setq beads-list--sort-mode-override 'column)
-  (setq tabulated-list-sort-key (cons column descending))
-  (tabulated-list-init-header)
-  (tabulated-list-print t)
+  (setq tabulated-list-sort-key
+        (cons (beads-list--sort-column-name column) descending))
+  (if (derived-mode-p 'beads-org-list-mode)
+      (beads-list--refresh-current-view t)
+    (tabulated-list-init-header)
+    (tabulated-list-print t))
   (message "Sorted by %s%s" column (if descending " (descending)" "")))
 
 (defun beads-sort-by-id ()
@@ -749,7 +753,7 @@ See `beads-backend-dolt-sql-activate' and
   "Use sectioned sort (unblocked/blocked/closed groups)."
   (interactive)
   (setq beads-list--sort-mode-override 'sectioned)
-  (beads-list-refresh t)
+  (beads-list--refresh-current-view t)
   (message "Sort mode: sectioned"))
 
 (defun beads-transient--sort-menu-description ()

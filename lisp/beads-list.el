@@ -297,6 +297,52 @@ When non-nil, overrides the global setting for this buffer.")
   "Return the effective sort mode for this buffer."
   (or beads-list--sort-mode-override beads-list-sort-mode))
 
+(defun beads-list--sort-column-name (column)
+  "Return the canonical list column name for COLUMN.
+Legacy sort commands historically used some long names, such as
+\"Priority\", while the table header currently displays the shorter
+\"Pri\"."
+  (pcase column
+    ((or "Priority" "Pri") "Pri")
+    (_ column)))
+
+(defun beads-list--sort-column-value (issue column)
+  "Return ISSUE's comparable value for list sort COLUMN."
+  (pcase (beads-list--sort-column-name column)
+    ("ID" (or (alist-get 'id issue) ""))
+    ("Date" (or (alist-get 'created_at issue) ""))
+    ("Status" (or (alist-get 'status issue) ""))
+    ("Pri" (or (alist-get 'priority issue) 99))
+    ("Type" (or (alist-get 'issue_type issue) ""))
+    ("Title" (or (alist-get 'title issue) ""))
+    (_ "")))
+
+(defun beads-list--compare-sort-values (a b)
+  "Return non-nil when sort value A should appear before B."
+  (cond
+   ((and (numberp a) (numberp b)) (< a b))
+   ((numberp a) t)
+   ((numberp b) nil)
+   (t (string< (format "%s" a) (format "%s" b)))))
+
+(defun beads-list--column-sort-issues (issues column &optional descending)
+  "Return ISSUES sorted by COLUMN.
+When DESCENDING is non-nil, reverse the natural column order.  Ties are
+resolved by issue id to keep org rendering deterministic."
+  (let ((canonical-column (beads-list--sort-column-name column)))
+    (sort (append issues nil)
+          (lambda (a b)
+            (let ((value-a (beads-list--sort-column-value a canonical-column))
+                  (value-b (beads-list--sort-column-value b canonical-column)))
+              (cond
+               ((equal value-a value-b)
+                (string< (or (alist-get 'id a) "")
+                         (or (alist-get 'id b) "")))
+               (descending
+                (beads-list--compare-sort-values value-b value-a))
+               (t
+                (beads-list--compare-sort-values value-a value-b))))))))
+
 (defvar-local beads-list--project-root nil
   "Project root for this beads list buffer.
 Used to ensure refresh uses the correct project context.")
@@ -676,7 +722,13 @@ Must be called with a `beads-org-list-mode' buffer current."
                  :marked-ids beads-list--marked
                  :show-only-marked beads-list--show-only-marked
                  :sort-mode effective-sort-mode))
-         (display-issues (beads-list-model-display-issues model))
+         (display-issues (if (and (eq effective-sort-mode 'column)
+                                  (car tabulated-list-sort-key))
+                             (beads-list--column-sort-issues
+                              (beads-list-model-display-issues model)
+                              (car tabulated-list-sort-key)
+                              (cdr tabulated-list-sort-key))
+                           (beads-list-model-display-issues model)))
          (org-text (beads-list-render-org
                     display-issues nil (eq effective-sort-mode 'sectioned)))
          (inhibit-read-only t))
@@ -1360,15 +1412,15 @@ First clears active filters, then closes preview, then kills the buffer."
   "Toggle between sectioned and unsectioned sort modes.
 
 In the table view, unsectioned mode uses normal tabulated-list column
-sorting.  In the org view, unsectioned mode preserves fetched issue
-order and keeps parent-child nesting; arbitrary column sorting is not
-applied because it would conflict with hierarchy."
+sorting.  In the org view, unsectioned mode applies the current column
+sort before rendering parent-child nesting."
   (interactive)
   (setq beads-list--sort-mode-override
         (if (eq (beads-list--effective-sort-mode) 'sectioned)
             'column
           'sectioned))
-  (if (and (derived-mode-p 'beads-list-mode)
+  (if (and (or (derived-mode-p 'beads-list-mode)
+               (derived-mode-p 'beads-org-list-mode))
            (eq beads-list--sort-mode-override 'column))
       (setq tabulated-list-sort-key (cons "Date" t)))
   (beads-list--refresh-current-view t)

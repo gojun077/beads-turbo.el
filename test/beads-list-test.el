@@ -20,6 +20,7 @@
 (require 'cl-lib)
 (require 'beads-list)
 (require 'beads-core)
+(require 'beads-transient)
 (require 'beads-test-helpers)
 (require 'beads-backend-dolt-sql)
 
@@ -670,6 +671,63 @@ Use a key that is not overridden by `beads-list-mode-map' (e.g. `n')."
         (should (string-match-p "^\\*\\* TODO \\[#B\\] First :task:" (buffer-string)))
         (should (string-match-p "^\\* Completed" (buffer-string)))
         (should (string-match-p "^\\*\\* DONE Second :bug:" (buffer-string)))))))
+
+(ert-deftest beads-list-test-org-list-legacy-sort-by-title ()
+  "Legacy `beads-sort-by-title' reorders the org list view."
+  (let ((issues '(((id . "bd-b")
+                   (title . "Beta")
+                   (status . "open"))
+                  ((id . "bd-a")
+                   (title . "Alpha")
+                   (status . "open")))))
+    (with-temp-buffer
+      (beads-org-list-mode)
+      (cl-letf (((symbol-function 'beads-cache-refresh)
+                 (lambda (&rest _args) (cons t issues))))
+        (beads-org-list-refresh t)
+        (beads-sort-by-title)
+        (should (eq beads-list--sort-mode-override 'column))
+        (should (equal tabulated-list-sort-key '("Title" . nil)))
+        (should (< (string-match-p "Alpha" (buffer-string))
+                   (string-match-p "Beta" (buffer-string))))))))
+
+(ert-deftest beads-list-test-org-list-legacy-sort-by-priority ()
+  "Legacy `beads-sort-by-priority' maps to the Pri column in org view."
+  (let ((issues '(((id . "bd-low")
+                   (title . "Low priority")
+                   (status . "open")
+                   (priority . 2))
+                  ((id . "bd-high")
+                   (title . "High priority")
+                   (status . "open")
+                   (priority . 0)))))
+    (with-temp-buffer
+      (beads-org-list-mode)
+      (cl-letf (((symbol-function 'beads-cache-refresh)
+                 (lambda (&rest _args) (cons t issues))))
+        (beads-org-list-refresh t)
+        (beads-sort-by-priority)
+        (should (equal tabulated-list-sort-key '("Pri" . nil)))
+        (should (< (string-match-p "High priority" (buffer-string))
+                   (string-match-p "Low priority" (buffer-string))))))))
+
+(ert-deftest beads-list-test-org-list-legacy-sort-sectioned ()
+  "Legacy `beads-sort-sectioned' restores sectioned org rendering."
+  (let ((issues '(((id . "bd-open")
+                   (title . "Open issue")
+                   (status . "open"))
+                  ((id . "bd-closed")
+                   (title . "Closed issue")
+                   (status . "closed")))))
+    (with-temp-buffer
+      (beads-org-list-mode)
+      (let ((beads-list--sort-mode-override 'column))
+        (cl-letf (((symbol-function 'beads-cache-refresh)
+                   (lambda (&rest _args) (cons t issues))))
+          (beads-sort-sectioned)
+          (should (eq beads-list--sort-mode-override 'sectioned))
+          (should (string-match-p "^\\* Ready" (buffer-string)))
+          (should (string-match-p "^\\* Completed" (buffer-string))))))))
 
 (ert-deftest beads-list-test-org-list-refresh-applies-filter-marked-and-sections ()
   "Org refresh applies list model filters and tree-safe section grouping."
