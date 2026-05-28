@@ -192,8 +192,7 @@
 
 (ert-deftest beads-transient-test-menu-contains-list-command ()
   "Test that beads-menu includes beads-list command."
-  (should (commandp 'beads-list))
-  (should (commandp 'beads-list-legacy)))
+  (should (commandp 'beads-list)))
 
 (ert-deftest beads-transient-test-menu-contains-refresh-command ()
   "Test that beads-menu includes beads-list-refresh command."

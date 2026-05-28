@@ -21,7 +21,6 @@
 ;;; Commentary:
 
 ;; Org task/tree issue list mode with sorting, filtering, and bulk operations.
-;; The legacy tabulated-list view remains available via `beads-list-legacy'.
 
 ;;; Code:
 
@@ -63,9 +62,9 @@ in the mode line of the list view."
 
 (defcustom beads-list-columns
   '(id date status priority type title)
-  "Columns to display in the legacy tabulated beads list view.
+  "Columns to display in the internal tabulated beads list view.
 Available: id, date, status, priority, type, title, assignee, labels, deps.
-This only affects `beads-list-legacy'; the default `beads-list' org view
+This only affects the tabulated-list renderer; the default `beads-list' org view
 renders issue metadata in org property drawers instead of columns."
   :type '(repeat (choice (const :tag "ID" id)
                          (const :tag "Date" date)
@@ -92,17 +91,17 @@ When `column', use standard tabulated-list column sorting."
   :group 'beads-list)
 
 (defcustom beads-list-section-separators t
-  "Whether to show visual separators between legacy table sections.
-Only applies to `beads-list-legacy' when `beads-list-sort-mode' is
+  "Whether to show visual separators between tabulated-list sections.
+Only applies to the tabulated-list renderer when `beads-list-sort-mode' is
 `sectioned'.  The default org list renders sections as org headings."
   :type 'boolean
   :group 'beads-list)
 
 (defcustom beads-list-id-column-max-width nil
-  "Maximum width for the ID column in the legacy tabulated beads list view.
+  "Maximum width for the ID column in the internal tabulated beads list view.
 When nil, the column width is unlimited and adjusts to the longest ID.
 When an integer, the column width will not exceed this value.
-This only affects `beads-list-legacy'."
+This only affects the tabulated-list renderer."
   :type '(choice (const :tag "Unlimited" nil)
                  (integer :tag "Maximum width"))
   :group 'beads-list)
@@ -615,8 +614,7 @@ org list and uses the same freshness short-circuit via
   "Major mode for displaying Beads issues as org headings.
 
 This mode renders a generated, project-scoped org buffer from Beads data;
-it does not visit or require an org file on disk.  The legacy table view
-remains available through `beads-list-legacy'.
+it does not visit or require an org file on disk.
 
 \\{beads-org-list-mode-map}"
   (setq-local org-todo-keywords '((sequence "TODO" "WIP" "WAIT" "|" "DONE")))
@@ -1920,7 +1918,7 @@ projects can stay open in the same Emacs session."
 
 The buffer is generated from Beads data for the current project and does
 not visit an org file on disk.  This is also the default view opened by
-`beads-list'.  Use `beads-list-legacy' for the old tabulated-list UI."
+`beads-list'."
   (interactive)
   (let* ((project-root (file-name-as-directory
                         (or (beads-client--project-root)
@@ -1948,37 +1946,9 @@ not visit an org file on disk.  This is also the default view opened by
 (defun beads-list ()
   "Open the default org-mode Beads issue list buffer.
 
-The list is a generated org task/tree view.  Use `beads-list-legacy' to
-open the old tabulated-list UI during the transition."
+The list is a generated org task/tree view."
   (interactive)
   (beads-org-list))
-
-;;;###autoload
-(defun beads-list-legacy ()
-  "Open the legacy tabulated Beads issue list buffer.
-
-If beads-project.el is loaded and per-project buffers are enabled,
-creates a project-specific buffer.
-
-Pins `default-directory' in the resulting buffer to the project root so
-that subsequent refreshes always resolve to the correct beads database,
-even when multiple projects are open simultaneously."
-  (interactive)
-  (let* ((buffer-name (if (featurep 'beads-project)
-                          (beads-project-buffer-name)
-                        "*Beads Issues*"))
-         (buffer (get-buffer-create buffer-name))
-         (project-root default-directory))
-    (with-current-buffer buffer
-      (unless (eq major-mode 'beads-list-mode)
-        (beads-list-mode))
-      (setq beads-list--project-root project-root)
-      ;; Pin default-directory to the project root so client lookups
-      ;; (which key off default-directory) always target this project,
-      ;; regardless of which buffer the user was in when refresh fires.
-      (setq default-directory project-root)
-      (beads-list-refresh))
-    (switch-to-buffer buffer)))
 
 (provide 'beads-list)
 ;;; beads-list.el ends here

@@ -95,7 +95,7 @@ Or with `use-package` managed by straight.el:
 
 ## Keybindings
 
-### List Mode (`beads-list-mode`)
+### List Mode (`beads-org-list-mode`)
 
 | Key | Command | Description |
 |-----|---------|-------------|
@@ -174,7 +174,7 @@ Shows issues referenced in git commits but not marked as closed.
 The list view refreshes automatically when:
 
 - A write happens through any beads command (transient menu, edit commands, detail-mode actions, forms).
-- You return to a `beads-list-mode` window from another buffer (e.g.  closing a detail view).
+- You return to a `beads-org-list-mode` window from another buffer (e.g.  closing a detail view).
   - This event-driven refresh uses an async, cursor-preserving fetch that short-circuits via the cache freshness token when nothing has changed, so it is essentially free in the common case.
 
 Press `g` in the list buffer for a manual refresh — useful when an external `bd` invocation or another Emacs session has mutated the DB and you want to pick up the change without leaving and re-entering the buffer.

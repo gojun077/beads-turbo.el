@@ -115,7 +115,7 @@ Hierarchy View
 
 Customization
 
-* Legacy Table Columns::
+* List Columns::
 * Type Display::
 * Sorting: Sorting (1). 
 * Header Statistics::
@@ -546,13 +546,11 @@ Congratulations!  You've learned the basic Beads workflow.
 
 @cindex list view
 @findex beads-org-list-mode
-@findex beads-list-legacy
 
 The list view is your main interface.  Open it with @samp{M-x beads-list}.
 By default this opens a generated org-mode task/tree view: issues are
 org headings, parent/child relationships are nested, and metadata lives
-in a @code{:PROPERTIES:} drawer.  If you need the old tabulated UI during
-the transition, run @samp{M-x beads-list-legacy}.
+in a @code{:PROPERTIES:} drawer.
 
 @menu
 * Essential Commands: Essential Commands (1). 
@@ -682,17 +680,15 @@ Search (@samp{/}) matches against title and description.
 @tab Toggle sectioned/column
 @item @samp{o}
 @tab @code{beads-list-cycle-sort}
-@tab Cycle columns in legacy table
+@tab Cycle sort columns
 @item @samp{O}
 @tab @code{beads-list-reverse-sort}
-@tab Reverse legacy table sort
+@tab Reverse sort direction
 @end multitable
 
 @strong{Sectioned sorting} (default) groups by status then sorts by priority.
 In the org view, sectioned sorting renders section headings and nested
-issue trees; column mode preserves the fetched issue order without table
-headers.  Column cycling with @samp{o} and @samp{O} is available in
-@samp{M-x beads-list-legacy}.
+issue trees; column mode preserves the fetched issue order.
 
 @node Marking and Bulk Operations
 @section Marking and Bulk Operations
@@ -968,7 +964,7 @@ is closed).
 These settings are optional.  The defaults work well for most users.
 
 @menu
-* Legacy Table Columns::
+* List Columns::
 * Type Display::
 * Sorting: Sorting (1). 
 * Header Statistics::
@@ -977,16 +973,14 @@ These settings are optional.  The defaults work well for most users.
 * Project Integration::
 @end menu
 
-@node Legacy Table Columns
-@section Legacy Table Columns
+@node List Columns
+@section List Columns
 
 @vindex beads-list-columns
 
-These settings apply to the fallback table opened with
-@samp{M-x beads-list-legacy}.  The default org view stores metadata in
-property drawers instead of columns.
-
-Control which legacy table columns appear:
+The default org view stores metadata in property drawers instead of
+columns.  Column customization is retained for internal tabulated-list
+rendering.
 
 @lisp
 (setq beads-list-columns '(id date status priority type title))
@@ -1040,8 +1034,7 @@ Available: @samp{id}, @samp{date}, @samp{status}, @samp{priority}, @samp{type}, 
 The list view refreshes automatically after any write performed
 through beads.el (transient menu, edit commands, detail-mode
 actions, forms) and whenever you return to a @code{beads-org-list-mode}
-or @code{beads-list-mode} window from another buffer (for example,
-closing a detail view).
+window from another buffer (for example, closing a detail view).
 The on-select refresh is asynchronous, cursor-preserving and
 short-circuits via the cache freshness token when nothing has
 changed, so it is essentially free in the common case.
@@ -1166,7 +1159,7 @@ Standard hooks are available for each mode:
 
 @itemize
 @item
-@code{beads-list-mode-hook}
+@code{beads-org-list-mode-hook}
 @item
 @code{beads-detail-mode-hook}
 @item
@@ -1423,8 +1416,6 @@ can work on right now.
 @tab Description
 @item @samp{M-x beads-list}
 @tab Open org issue list
-@item @samp{M-x beads-list-legacy}
-@tab Open legacy table list
 @item @samp{M-x beads}
 @tab Open org issue list
 @end multitable

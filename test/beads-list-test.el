@@ -1184,24 +1184,6 @@ Use a key that is not overridden by `beads-list-mode-map' (e.g. `n')."
       (when (get-buffer buffer-name)
         (kill-buffer buffer-name)))))
 
-(ert-deftest beads-list-test-legacy-command-opens-table-view ()
-  "The explicit legacy command opens beads-list-mode."
-  (let ((buffer-name (if (featurep 'beads-project)
-                         "*beads-list-legacy-test*"
-                       "*Beads Issues*")))
-    (when (get-buffer buffer-name)
-      (kill-buffer buffer-name))
-    (unwind-protect
-        (cl-letf (((symbol-function 'beads-project-buffer-name)
-                   (lambda () buffer-name))
-                  ((symbol-function 'beads-list-refresh)
-                   (lambda (&rest _args) nil)))
-          (beads-list-legacy)
-          (with-current-buffer buffer-name
-            (should (eq major-mode 'beads-list-mode))))
-      (when (get-buffer buffer-name)
-        (kill-buffer buffer-name)))))
-
 (ert-deftest beads-list-test-org-get-issue-at-heading-body ()
   "Org list issue lookup resolves the containing issue heading from body text."
   (let ((issues '(((id . "bd-parent") (title . "Parent") (status . "open"))
