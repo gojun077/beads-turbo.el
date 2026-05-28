@@ -44,11 +44,9 @@ Hints are shown when entering beads modes to help with discoverability."
   :group 'beads)
 
 (defvar beads-hints-alist
-  '((beads-list-mode
+  '((beads-org-list-mode
      . "? menu | RET open | e <key> edit | f <key> filter | E form | P preview | q quit")
-    (beads-org-list-mode
-     . "? menu | RET open | e <key> edit | f <key> filter | E form | P preview | q quit")
-    (beads-list-mode-preview
+    (beads-org-list-mode-preview
      . "↑↓ browse | RET open | e/E edit | P/q exit preview | ? menu")
     (beads-detail-mode
      . "? menu | e <key> edit | E form | g refresh | q quit")
@@ -59,9 +57,9 @@ Hints are shown when entering beads modes to help with discoverability."
 (defun beads-show-hint ()
   "Show hint for current major mode if `beads-verbose' is enabled."
   (when beads-verbose
-    (let* ((mode-key (if (and (memq major-mode '(beads-list-mode beads-org-list-mode))
+    (let* ((mode-key (if (and (eq major-mode 'beads-org-list-mode)
                               (bound-and-true-p beads-preview-mode))
-                         'beads-list-mode-preview
+                         'beads-org-list-mode-preview
                        major-mode))
            (hint (alist-get mode-key beads-hints-alist)))
       (when hint

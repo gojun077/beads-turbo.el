@@ -5,7 +5,7 @@
 ;;
 ;; Test categories:
 ;; 1. Transient definition tests - test beads-menu is a transient prefix (no daemon)
-;; 2. Keybinding tests - test ? and C-c m in beads-list-mode and beads-detail-mode (no daemon)
+;; 2. Keybinding tests - test ? and C-c m in beads-org-list-mode and beads-detail-mode (no daemon)
 ;; 3. Placeholder command tests - test placeholder commands exist (no daemon)
 ;;
 ;; Note on test isolation:
@@ -37,10 +37,10 @@
 ;;; Keybinding tests (no daemon)
 
 (ert-deftest beads-transient-test-list-mode-help-key ()
-  "Test that ? is bound to beads-menu in beads-list-mode."
+  "Test that ? is bound to beads-menu in beads-org-list-mode."
   (with-temp-buffer
-    (beads-list-mode)
-    (should (eq (lookup-key beads-list-mode-map (kbd "?"))
+    (beads-org-list-mode)
+    (should (eq (lookup-key beads-org-list-mode-map (kbd "?"))
                 #'beads-menu))))
 
 (ert-deftest beads-transient-test-org-list-mode-help-key ()
@@ -51,10 +51,10 @@
                 #'beads-menu))))
 
 (ert-deftest beads-transient-test-list-mode-menu-key ()
-  "Test that C-c m is bound to beads-menu in beads-list-mode."
+  "Test that C-c m is bound to beads-menu in beads-org-list-mode."
   (with-temp-buffer
-    (beads-list-mode)
-    (should (eq (lookup-key beads-list-mode-map (kbd "C-c m"))
+    (beads-org-list-mode)
+    (should (eq (lookup-key beads-org-list-mode-map (kbd "C-c m"))
                 #'beads-menu))))
 
 (ert-deftest beads-transient-test-org-list-mode-menu-key ()
@@ -79,10 +79,10 @@
                 #'beads-menu))))
 
 (ert-deftest beads-transient-test-list-mode-keybindings-interactive ()
-  "Test that beads-menu can be called interactively from beads-list-mode."
+  "Test that beads-menu can be called interactively from beads-org-list-mode."
   (with-temp-buffer
-    (beads-list-mode)
-    (let ((cmd (lookup-key beads-list-mode-map (kbd "?"))))
+    (beads-org-list-mode)
+    (let ((cmd (lookup-key beads-org-list-mode-map (kbd "?"))))
       (should (commandp cmd))
       (should (eq cmd #'beads-menu)))))
 
@@ -171,7 +171,7 @@
   (should (commandp 'beads-filter-status)))
 
 (ert-deftest beads-transient-test-filter-status-requires-list-mode ()
-  "Test that beads-filter-status requires beads-list-mode."
+  "Test that beads-filter-status requires beads-org-list-mode."
   (with-temp-buffer
     (should-error (beads-filter-status) :type 'user-error)))
 
@@ -184,7 +184,7 @@
   (should (commandp 'beads-filter-priority)))
 
 (ert-deftest beads-transient-test-filter-priority-requires-list-mode ()
-  "Test that beads-filter-priority requires beads-list-mode."
+  "Test that beads-filter-priority requires beads-org-list-mode."
   (with-temp-buffer
     (should-error (beads-filter-priority) :type 'user-error)))
 

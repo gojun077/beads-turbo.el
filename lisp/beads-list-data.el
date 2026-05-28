@@ -1,4 +1,4 @@
-;;; beads-list-model.el --- Pure list model helpers for Beads -*- lexical-binding: t -*-
+;;; beads-list-data.el --- Pure list model helpers for Beads -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2025 Christian Tietze
 
@@ -21,9 +21,9 @@
 ;;; Commentary:
 
 ;; Pure helpers for shaping beads issue lists before rendering.  This
-;; module intentionally does not require the client or tabulated-list so
-;; table and org renderers can share filtering, sorting, stats, lookup,
-;; and parent-child tree assembly without a live bd process.
+;; module intentionally does not require the client or UI renderer so
+;; filtering, sorting, stats, lookup, and parent-child tree assembly stay
+;; testable without a live bd process.
 
 ;;; Code:
 
@@ -31,8 +31,8 @@
 (require 'cl-lib)
 (require 'seq)
 
-(cl-defstruct (beads-list-model
-               (:constructor beads-list-model--make))
+(cl-defstruct (beads-list-data
+               (:constructor beads-list-data--make))
   "Data prepared from a flat list of Beads issues.
 
 `issues' is the filtered issue set before marked-only filtering.
@@ -41,7 +41,7 @@ optional sectioned sorting.  `stats' always describes the original
 unfiltered input so the list header keeps showing project-level counts."
   all-issues issues display-issues stats)
 
-(defun beads-list-model-compute-stats (issues)
+(defun beads-list-data-compute-stats (issues)
   "Compute stats alist from ISSUES list.
 
 Returns an alist with `total_issues', `open_issues',
@@ -72,14 +72,14 @@ than ready, matching the existing list-mode status summary."
       (closed_issues . ,closed)
       (ready_issues . ,ready))))
 
-(defun beads-list-model-apply-filter (issues filter)
+(defun beads-list-data-apply-filter (issues filter)
   "Return ISSUES after applying FILTER.
 When FILTER is nil, return ISSUES unchanged."
   (if filter
       (beads-filter-apply filter issues)
     issues))
 
-(defun beads-list-model-apply-marked-only (issues marked-ids show-only-marked)
+(defun beads-list-data-apply-marked-only (issues marked-ids show-only-marked)
   "Return ISSUES filtered to MARKED-IDS when SHOW-ONLY-MARKED is non-nil."
   (if show-only-marked
       (seq-filter (lambda (issue)
@@ -87,11 +87,11 @@ When FILTER is nil, return ISSUES unchanged."
                   issues)
     issues))
 
-(defun beads-list-model-issue-section (issue)
+(defun beads-list-data-issue-section (issue)
   "Return section number for ISSUE: 0=ready/open, 1=blocked, 2=closed.
 
 Open issues with positive `dependency_count' are treated as blocked,
-matching `beads-list-model-compute-stats'."
+matching `beads-list-data-compute-stats'."
   (let ((status (alist-get 'status issue))
         (dep-count (or (alist-get 'dependency_count issue) 0)))
     (cond
@@ -101,7 +101,7 @@ matching `beads-list-model-compute-stats'."
       1)
      (t 0))))
 
-(defun beads-list-model-sectioned-sort (issues)
+(defun beads-list-data-sectioned-sort (issues)
   "Sort ISSUES into unblocked, blocked, and closed sections.
 ISSUES can be a list or vector.  Within unblocked and blocked
 sections, sort by priority ascending, with in-progress issues first
@@ -111,7 +111,7 @@ in the unblocked section.  Within the closed section, sort by
         (blocked nil)
         (closed nil))
     (seq-doseq (issue issues)
-      (pcase (beads-list-model-issue-section issue)
+      (pcase (beads-list-data-issue-section issue)
         (0 (push issue unblocked))
         (1 (push issue blocked))
         (2 (push issue closed))))
@@ -140,32 +140,32 @@ in the unblocked section.  Within the closed section, sort by
                            (string> date-a date-b)))))
     (append unblocked blocked closed)))
 
-(cl-defun beads-list-model-build (all-issues &key filter marked-ids
+(cl-defun beads-list-data-build (all-issues &key filter marked-ids
                                              show-only-marked sort-mode)
   "Build a pure list model from ALL-ISSUES.
 FILTER is a `beads-filter' object or nil.  MARKED-IDS and
 SHOW-ONLY-MARKED control marked-only filtering.  SORT-MODE may be
 `sectioned' to apply sectioned list sorting; any other value leaves
 display order unchanged."
-  (let* ((issues (beads-list-model-apply-filter all-issues filter))
-         (display-issues (beads-list-model-apply-marked-only
+  (let* ((issues (beads-list-data-apply-filter all-issues filter))
+         (display-issues (beads-list-data-apply-marked-only
                           issues marked-ids show-only-marked))
          (display-issues (if (eq sort-mode 'sectioned)
-                             (beads-list-model-sectioned-sort display-issues)
+                             (beads-list-data-sectioned-sort display-issues)
                            display-issues)))
-    (beads-list-model--make
+    (beads-list-data--make
      :all-issues all-issues
      :issues (append issues nil)
      :display-issues display-issues
-     :stats (beads-list-model-compute-stats all-issues))))
+     :stats (beads-list-data-compute-stats all-issues))))
 
-(defun beads-list-model-find-by-id (issues id)
+(defun beads-list-data-find-by-id (issues id)
   "Return the issue in ISSUES whose `id' equals ID, or nil."
   (seq-find (lambda (issue)
               (equal (alist-get 'id issue) id))
             issues))
 
-(defun beads-list-model-parent-id (issue)
+(defun beads-list-data-parent-id (issue)
   "Return ISSUE's normalized parent id, or nil.
 The explicit `parent' field wins over `parent_id', matching the org
 property contract.  Empty strings are treated as no parent."
@@ -175,24 +175,24 @@ property contract.  Empty strings are treated as no parent."
                 (and (stringp parent) (string= parent "")))
       parent)))
 
-(defun beads-list-model--forest-node (issue)
+(defun beads-list-data--forest-node (issue)
   "Return a mutable forest node for ISSUE."
   (list (cons 'issue issue) (cons 'children nil)))
 
-(defun beads-list-model--node-issue (node)
+(defun beads-list-data--node-issue (node)
   "Return NODE's issue alist."
   (alist-get 'issue node))
 
-(defun beads-list-model--node-children-cell (node)
+(defun beads-list-data--node-children-cell (node)
   "Return NODE's children cons cell."
   (assq 'children node))
 
-(defun beads-list-model-flat-issues-to-forest (issues)
+(defun beads-list-data-flat-issues-to-forest (issues)
   "Return a parent-child forest built from flat ISSUES.
 
 Each returned node is an alist of the shape `((issue . ISSUE)
 (children . NODES))'.  Parent ids are read via
-`beads-list-model-parent-id', so both `parent' and `parent_id' input
+`beads-list-data-parent-id', so both `parent' and `parent_id' input
 metadata are supported.  Missing parents are deterministic roots and
 their original parent metadata is preserved on the issue.
 
@@ -205,7 +205,7 @@ the affected issue is kept as a root instead of being linked twice."
     (seq-doseq (issue issues)
       (let ((id (alist-get 'id issue)))
         (when (and id (not (gethash id by-id)))
-          (let ((node (beads-list-model--forest-node issue)))
+          (let ((node (beads-list-data--forest-node issue)))
             (puthash id node by-id)
             (push node nodes)))))
     (setq nodes (nreverse nodes))
@@ -226,29 +226,29 @@ the affected issue is kept as a root instead of being linked twice."
              (t
               (puthash id t visiting)
               (when-let* ((node (gethash id by-id))
-                          (issue (beads-list-model--node-issue node))
-                          (parent-id (beads-list-model-parent-id issue)))
+                          (issue (beads-list-data--node-issue node))
+                          (parent-id (beads-list-data-parent-id issue)))
                 (when (gethash parent-id by-id)
                   (visit parent-id (cons id stack))))
               (remhash id visiting)
               (puthash id t visited)))))
         (dolist (node nodes)
-          (visit (alist-get 'id (beads-list-model--node-issue node)) nil))))
+          (visit (alist-get 'id (beads-list-data--node-issue node)) nil))))
     (dolist (node nodes)
-      (let* ((issue (beads-list-model--node-issue node))
+      (let* ((issue (beads-list-data--node-issue node))
              (id (alist-get 'id issue))
-             (parent-id (beads-list-model-parent-id issue))
+             (parent-id (beads-list-data-parent-id issue))
              (parent (and parent-id (gethash parent-id by-id))))
         (if (and parent
                  (not (equal parent-id id))
                  (not (gethash id cycle-ids)))
-            (let ((children-cell (beads-list-model--node-children-cell parent)))
+            (let ((children-cell (beads-list-data--node-children-cell parent)))
               (push node (cdr children-cell)))
           (push node roots))))
     (dolist (node nodes)
-      (let ((children-cell (beads-list-model--node-children-cell node)))
+      (let ((children-cell (beads-list-data--node-children-cell node)))
         (setcdr children-cell (nreverse (cdr children-cell)))))
     (nreverse roots)))
 
-(provide 'beads-list-model)
-;;; beads-list-model.el ends here
+(provide 'beads-list-data)
+;;; beads-list-data.el ends here

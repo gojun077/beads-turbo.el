@@ -20,14 +20,14 @@
 (ert-deftest beads-preview-test-mode-defined ()
   "Test that beads-preview-mode is defined as a minor mode."
   (with-temp-buffer
-    (beads-list-mode)
+    (beads-org-list-mode)
     (should (fboundp 'beads-preview-mode))
     (should (commandp 'beads-preview-mode))))
 
 (ert-deftest beads-preview-test-mode-enable-adds-hook ()
   "Test that enabling beads-preview-mode adds post-command-hook."
   (with-temp-buffer
-    (beads-list-mode)
+    (beads-org-list-mode)
     (beads-preview-mode 1)
     (should beads-preview-mode)
     (should (member 'beads-preview-trigger
@@ -38,7 +38,7 @@
 (ert-deftest beads-preview-test-mode-disable-removes-hook ()
   "Test that disabling beads-preview-mode removes post-command-hook."
   (with-temp-buffer
-    (beads-list-mode)
+    (beads-org-list-mode)
     (beads-preview-mode 1)
     (beads-preview-mode -1)
     (should-not beads-preview-mode)
@@ -50,7 +50,7 @@
 (ert-deftest beads-preview-test-mode-toggle ()
   "Test that beads-preview-mode can be toggled on and off."
   (with-temp-buffer
-    (beads-list-mode)
+    (beads-org-list-mode)
     (beads-preview-mode 1)
     (should beads-preview-mode)
     (beads-preview-mode -1)
@@ -61,7 +61,7 @@
 (ert-deftest beads-preview-test-mode-lighter ()
   "Test that beads-preview-mode has ' Preview' lighter."
   (with-temp-buffer
-    (beads-list-mode)
+    (beads-org-list-mode)
     (beads-preview-mode 1)
     (should (equal (assq 'beads-preview-mode minor-mode-alist)
                    '(beads-preview-mode " Preview")))))
@@ -69,7 +69,7 @@
 (ert-deftest beads-preview-test-mode-disable-cancels-timer ()
   "Test that disabling mode cancels any pending timer."
   (with-temp-buffer
-    (beads-list-mode)
+    (beads-org-list-mode)
     (let ((timer-created nil))
       (cl-letf (((symbol-function 'beads-preview--start-timer)
                  (lambda (_issue)
@@ -88,7 +88,7 @@
 (ert-deftest beads-preview-test-start-timer-creates-timer ()
   "Test that beads-preview--start-timer creates an idle timer."
   (with-temp-buffer
-    (beads-list-mode)
+    (beads-org-list-mode)
     (beads-preview-mode 1)
     (let ((timer-created nil))
       (cl-letf (((symbol-function 'run-with-idle-timer)
@@ -102,7 +102,7 @@
 (ert-deftest beads-preview-test-cancel-timer-cancels-existing ()
   "Test that beads-preview--cancel-timer cancels existing timer."
   (with-temp-buffer
-    (beads-list-mode)
+    (beads-org-list-mode)
     (beads-preview-mode 1)
     (let ((timer (timer-create)))
       (setq beads-preview--timer timer)
@@ -113,7 +113,7 @@
 (ert-deftest beads-preview-test-cancel-timer-no-timer ()
   "Test that beads-preview--cancel-timer handles nil timer gracefully."
   (with-temp-buffer
-    (beads-list-mode)
+    (beads-org-list-mode)
     (beads-preview-mode 1)
     (setq beads-preview--timer nil)
     (beads-preview--cancel-timer)
@@ -122,7 +122,7 @@
 (ert-deftest beads-preview-test-timer-debouncing ()
   "Test that starting a new timer cancels the previous one."
   (with-temp-buffer
-    (beads-list-mode)
+    (beads-org-list-mode)
     (beads-preview-mode 1)
     (let ((cancel-count 0)
           (timer-count 0))
@@ -144,26 +144,26 @@
 ;;; Keybinding tests (no daemon)
 
 (ert-deftest beads-preview-test-keybinding-in-list-mode ()
-  "Test that P is bound to beads-preview-mode in beads-list-mode."
+  "Test that P is bound to beads-preview-mode in beads-org-list-mode."
   (with-temp-buffer
-    (beads-list-mode)
-    (should (eq (lookup-key beads-list-mode-map (kbd "P"))
+    (beads-org-list-mode)
+    (should (eq (lookup-key beads-org-list-mode-map (kbd "P"))
                 #'beads-preview-mode))))
 
 (ert-deftest beads-preview-test-keybinding-uppercase-p ()
   "Test that uppercase P specifically is used (not lowercase p)."
   (with-temp-buffer
-    (beads-list-mode)
-    (should (eq (lookup-key beads-list-mode-map (kbd "P"))
+    (beads-org-list-mode)
+    (should (eq (lookup-key beads-org-list-mode-map (kbd "P"))
                 #'beads-preview-mode))
-    (should-not (eq (lookup-key beads-list-mode-map (kbd "p"))
+    (should-not (eq (lookup-key beads-org-list-mode-map (kbd "p"))
                     #'beads-preview-mode))))
 
 (ert-deftest beads-preview-test-keybinding-callable ()
   "Test that keybinding P can actually activate the mode."
   (with-temp-buffer
-    (beads-list-mode)
-    (let ((command (lookup-key beads-list-mode-map (kbd "P"))))
+    (beads-org-list-mode)
+    (let ((command (lookup-key beads-org-list-mode-map (kbd "P"))))
       (should (commandp command))
       (call-interactively command)
       (should beads-preview-mode))))
@@ -220,7 +220,7 @@
 ;;; Trigger tests (mocked)
 
 (ert-deftest beads-preview-test-trigger-only-in-list-mode ()
-  "Test that trigger only activates in beads-list-mode."
+  "Test that trigger only activates in beads-org-list-mode."
   (with-temp-buffer
     (let ((timer-started nil))
       (cl-letf (((symbol-function 'beads-preview--start-timer)
@@ -232,7 +232,7 @@
 (ert-deftest beads-preview-test-trigger-requires-mode-enabled ()
   "Test that trigger requires beads-preview-mode to be enabled."
   (with-temp-buffer
-    (beads-list-mode)
+    (beads-org-list-mode)
     (let ((timer-started nil))
       (cl-letf (((symbol-function 'beads-preview--start-timer)
                  (lambda (_issue)
@@ -243,7 +243,7 @@
 (ert-deftest beads-preview-test-trigger-activates-when-enabled ()
   "Test that trigger activates when mode is enabled."
   (with-temp-buffer
-    (beads-list-mode)
+    (beads-org-list-mode)
     (beads-preview-mode 1)
     (let ((timer-started nil))
       (cl-letf (((symbol-function 'beads-preview--cancel-timer)

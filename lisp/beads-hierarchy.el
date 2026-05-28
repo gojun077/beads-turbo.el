@@ -267,9 +267,6 @@ For ancestors, we look for issues that have this as beads--child-id."
           ((and (boundp 'beads-detail--current-issue-id)
                 beads-detail--current-issue-id)
            beads-detail--current-issue-id)
-          ((and (derived-mode-p 'beads-list-mode)
-                (tabulated-list-get-id))
-           (tabulated-list-get-id))
           (t (read-string "Issue ID: ")))))
   (let ((result (beads-hierarchy--build issue-id)))
     (unless result

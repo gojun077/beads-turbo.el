@@ -964,7 +964,6 @@ is closed).
 These settings are optional.  The defaults work well for most users.
 
 @menu
-* List Columns::
 * Type Display::
 * Sorting: Sorting (1). 
 * Header Statistics::
@@ -972,22 +971,6 @@ These settings are optional.  The defaults work well for most users.
 * Preview::
 * Project Integration::
 @end menu
-
-@node List Columns
-@section List Columns
-
-@vindex beads-list-columns
-
-The default org view stores metadata in property drawers instead of
-columns.  Column customization is retained for internal tabulated-list
-rendering.
-
-@lisp
-(setq beads-list-columns '(id date status priority type title))
-@end lisp
-
-Available: @samp{id}, @samp{date}, @samp{status}, @samp{priority}, @samp{type}, @samp{title},
-@samp{assignee}, @samp{labels}, @samp{deps}.
 
 @node Type Display
 @section Type Display

@@ -12,7 +12,7 @@
 (require 'beads-client)
 (require 'beads-filter)
 (require 'beads-list)
-(require 'beads-list-model)
+(require 'beads-list-data)
 
 (defun beads-perf-test--scale ()
   "Return the positive integer fixture scale from BEADS_PERF_SCALE."
@@ -112,7 +112,7 @@ noise in batch runs."
 
 (defun beads-perf-test--assert-flat-model-correct (model all-issues)
   "Assert MODEL has expected counts for ALL-ISSUES."
-  (let* ((stats (beads-list-model-stats model))
+  (let* ((stats (beads-list-data-stats model))
          (expected-open (beads-perf-test--count-status all-issues "open"))
          (expected-in-progress (beads-perf-test--count-status all-issues "in_progress"))
          (expected-blocked (beads-perf-test--count-status all-issues "blocked"))
@@ -127,13 +127,13 @@ noise in batch runs."
     ;; issues.
     (should (>= (alist-get 'blocked_issues stats) expected-blocked))
     (should (= (- (length all-issues) expected-closed)
-               (length (beads-list-model-issues model))))
-    (should (= (length (beads-list-model-issues model))
-               (length (beads-list-model-display-issues model))))))
+               (length (beads-list-data-issues model))))
+    (should (= (length (beads-list-data-issues model))
+               (length (beads-list-data-display-issues model))))))
 
 (defun beads-perf-test--build-flat-model (issues)
   "Build a representative flat list model from ISSUES."
-  (beads-list-model-build
+  (beads-list-data-build
    issues
    :filter (beads-filter-not-closed)
    :marked-ids nil
@@ -212,11 +212,11 @@ noise in batch runs."
          (base-issues (beads-perf-test--flat-issues base-size))
          (larger-issues (beads-perf-test--flat-issues larger-size))
          (base (beads-perf-test--measure
-                "beads-list-model-build flat" base-size
+                "beads-list-data-build flat" base-size
                 (lambda ()
                   (beads-perf-test--build-flat-model base-issues))))
          (larger (beads-perf-test--measure
-                  "beads-list-model-build flat" larger-size
+                  "beads-list-data-build flat" larger-size
                   (lambda ()
                     (beads-perf-test--build-flat-model larger-issues)))))
     (beads-perf-test--assert-flat-model-correct
@@ -245,28 +245,28 @@ noise in batch runs."
          (deep-larger-issues
           (beads-perf-test--deep-hierarchy-issues deep-larger-size))
          (broad-base (beads-perf-test--measure
-                      "beads-list-model-flat-issues-to-forest broad"
+                      "beads-list-data-flat-issues-to-forest broad"
                       (length broad-base-issues)
                       (lambda ()
-                        (beads-list-model-flat-issues-to-forest
+                        (beads-list-data-flat-issues-to-forest
                          broad-base-issues))))
          (broad-larger (beads-perf-test--measure
-                        "beads-list-model-flat-issues-to-forest broad"
+                        "beads-list-data-flat-issues-to-forest broad"
                         (length broad-larger-issues)
                         (lambda ()
-                          (beads-list-model-flat-issues-to-forest
+                          (beads-list-data-flat-issues-to-forest
                            broad-larger-issues))))
          (deep-base (beads-perf-test--measure
-                     "beads-list-model-flat-issues-to-forest deep"
+                     "beads-list-data-flat-issues-to-forest deep"
                      (length deep-base-issues)
                      (lambda ()
-                       (beads-list-model-flat-issues-to-forest
+                       (beads-list-data-flat-issues-to-forest
                         deep-base-issues))))
          (deep-larger (beads-perf-test--measure
-                       "beads-list-model-flat-issues-to-forest deep"
+                       "beads-list-data-flat-issues-to-forest deep"
                        (length deep-larger-issues)
                        (lambda ()
-                         (beads-list-model-flat-issues-to-forest
+                         (beads-list-data-flat-issues-to-forest
                           deep-larger-issues)))))
     (beads-perf-test--assert-broad-forest-correct
      (plist-get broad-base :result) (length broad-base-issues))

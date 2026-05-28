@@ -55,8 +55,6 @@
 (declare-function beads-list--refresh-current-view "beads-list")
 (declare-function beads-list--get-issue-at-point "beads-list")
 (declare-function beads-list-edit-form "beads-list")
-(declare-function beads-list--build-format "beads-list")
-(declare-function beads-list--column-names "beads-list")
 (declare-function beads-list--sort-column-name "beads-list")
 (declare-function beads-list-available-types "beads-list")
 (declare-function beads-get-types "beads-client")
@@ -76,8 +74,7 @@
 
 (defun beads-transient--list-view-p ()
   "Return non-nil when the current buffer is a Beads list view."
-  (or (derived-mode-p 'beads-list-mode)
-      (derived-mode-p 'beads-org-list-mode)))
+  (derived-mode-p 'beads-org-list-mode))
 
 (defun beads-transient--truncate-middle (str max-len)
   "Truncate STR to MAX-LEN using middle ellipsis.
@@ -524,120 +521,6 @@ Prompts for a search query and filters the list to matching issues."
       (setq beads-list--filter (beads-filter-by-search query))
       (beads-list--refresh-current-view))))
 
-;;; Column configuration
-
-(defvar beads-list--column-order
-  '(id date status priority type deps assignee labels title)
-  "Canonical order of columns for insertion.")
-
-(defvar beads-list-columns)
-(defvar beads-list--column-defs)
-
-(defun beads-list--column-enabled-p (col)
-  "Return non-nil if column COL is currently enabled."
-  (memq col beads-list-columns))
-
-(defun beads-list--toggle-column (col)
-  "Toggle column COL in the current buffer's column list.
-Uses canonical order from `beads-list--column-order' for insertion."
-  (require 'beads-list)
-  (if (beads-list--column-enabled-p col)
-      (setq-local beads-list-columns (remq col beads-list-columns))
-    (let ((new-cols '()))
-      (dolist (c beads-list--column-order)
-        (when (or (eq c col) (memq c beads-list-columns))
-          (push c new-cols)))
-      (setq-local beads-list-columns (nreverse new-cols))))
-  (setq tabulated-list-format (beads-list--build-format))
-  (let* ((col-names (beads-list--column-names))
-         (sort-col (car tabulated-list-sort-key)))
-    (unless (member sort-col col-names)
-      (setq tabulated-list-sort-key (cons (car col-names) nil))))
-  (tabulated-list-init-header)
-  (beads-list-refresh t))
-
-(defun beads-list--column-description (col)
-  "Get display name for column COL."
-  (let ((def (alist-get col beads-list--column-defs)))
-    (if def (nth 0 def) (symbol-name col))))
-
-(defmacro beads-list--define-column-toggle (col key)
-  "Define a transient suffix for toggling column COL with KEY."
-  (let ((cmd-name (intern (format "beads-list-toggle-column-%s" col))))
-    `(transient-define-suffix ,cmd-name ()
-       ,(format "Toggle the %s column." col)
-       :key ,key
-       :description (lambda ()
-                      (format "%s %s"
-                              (if (beads-list--column-enabled-p ',col) "[x]" "[ ]")
-                              (beads-list--column-description ',col)))
-       (interactive)
-       (beads-list--toggle-column ',col))))
-
-(beads-list--define-column-toggle id "i")
-(beads-list--define-column-toggle date "d")
-(beads-list--define-column-toggle status "s")
-(beads-list--define-column-toggle priority "p")
-(beads-list--define-column-toggle type "t")
-(beads-list--define-column-toggle title "T")
-(beads-list--define-column-toggle assignee "a")
-(beads-list--define-column-toggle labels "l")
-(beads-list--define-column-toggle deps "D")
-
-(defun beads-list-columns-reset ()
-  "Reset columns to global default value."
-  (interactive)
-  (kill-local-variable 'beads-list-columns)
-  (setq tabulated-list-format (beads-list--build-format))
-  (tabulated-list-init-header)
-  (beads-list-refresh t)
-  (message "Columns reset to default"))
-
-(defun beads-list-columns-customize ()
-  "Open customize buffer for `beads-list-columns'."
-  (interactive)
-  (customize-variable 'beads-list-columns))
-
-(defun beads-list-columns-edit ()
-  "Edit column list directly in minibuffer."
-  (interactive)
-  (let* ((available (mapcar #'car beads-list--column-defs))
-         (current (mapconcat #'symbol-name beads-list-columns " "))
-         (input (read-string "Columns (space-separated): " current))
-         (cols (mapcar #'intern (split-string input))))
-    (dolist (c cols)
-      (unless (memq c available)
-        (user-error "Unknown column: %s (available: %s)"
-                    c (mapconcat #'symbol-name available ", "))))
-    (setq-local beads-list-columns cols)
-    (setq tabulated-list-format (beads-list--build-format))
-    (tabulated-list-init-header)
-    (beads-list-refresh t)))
-
-(transient-define-prefix beads-columns-menu ()
-  "Configure list view columns."
-  :transient-suffix 'transient--do-call
-  ["Columns"
-   [""
-    :class transient-row
-    (beads-list-toggle-column-id)
-    (beads-list-toggle-column-date)
-    (beads-list-toggle-column-status)
-    (beads-list-toggle-column-priority)
-    (beads-list-toggle-column-type)]
-   [""
-    :class transient-row
-    (beads-list-toggle-column-deps)
-    (beads-list-toggle-column-assignee)
-    (beads-list-toggle-column-labels)
-    (beads-list-toggle-column-title)]]
-  ["Actions"
-   ("e" "Edit list directly" beads-list-columns-edit :transient nil)
-   ("r" "Reset to default" beads-list-columns-reset :transient nil)
-   ("C" "Customize globally" beads-list-columns-customize :transient nil)]
-  ["Navigation"
-   ("q" "Back" transient-quit-one)])
-
 (defun beads-transient--dolt-sql-enabled-p ()
   "Return non-nil if Dolt SQL transport is currently enabled."
   (and (boundp 'beads-dolt-sql-enabled) beads-dolt-sql-enabled))
@@ -663,7 +546,6 @@ See `beads-backend-dolt-sql-activate' and
   "Configure beads list view."
   :transient-suffix 'transient--do-call
   ["Configuration"
-   ("c" "Columns..." beads-columns-menu)
    ("d" beads-transient-toggle-dolt-sql)]
   ["Navigation"
    ("q" "Back" transient-quit-one)])
@@ -706,17 +588,14 @@ See `beads-backend-dolt-sql-activate' and
    ("C-p" "Prev" previous-line :transient t)])
 
 (defvar-local beads-list--sort-mode-override nil)
-(defvar tabulated-list-sort-key)
+(defvar beads-list--sort-key)
 
 (defun beads-sort-by-column (column &optional descending)
   "Sort list by COLUMN.  When DESCENDING is non-nil, reverse order."
   (setq beads-list--sort-mode-override 'column)
-  (setq tabulated-list-sort-key
+  (setq beads-list--sort-key
         (cons (beads-list--sort-column-name column) descending))
-  (if (derived-mode-p 'beads-org-list-mode)
-      (beads-list--refresh-current-view t)
-    (tabulated-list-init-header)
-    (tabulated-list-print t))
+  (beads-list--refresh-current-view t)
   (message "Sorted by %s%s" column (if descending " (descending)" "")))
 
 (defun beads-sort-by-id ()
@@ -760,8 +639,8 @@ See `beads-backend-dolt-sql-activate' and
   "Return description for sort menu showing current sort."
   (if (eq beads-list--sort-mode-override 'sectioned)
       "Sort: sectioned"
-    (let ((key (car tabulated-list-sort-key))
-          (desc (cdr tabulated-list-sort-key)))
+    (let ((key (car beads-list--sort-key))
+          (desc (cdr beads-list--sort-key)))
       (format "Sort: %s%s" (or key "default") (if desc " ↓" " ↑")))))
 
 (transient-define-prefix beads-sort-menu ()

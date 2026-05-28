@@ -255,11 +255,9 @@ stomping on the user if they have already navigated away."
   (dolist (buf (buffer-list))
     (when (and (buffer-live-p buf)
                (memq (buffer-local-value 'major-mode buf)
-                     '(beads-list-mode beads-org-list-mode)))
+                     '(beads-org-list-mode)))
       (with-current-buffer buf
-        (if (eq major-mode 'beads-org-list-mode)
-            (beads-org-list-refresh)
-          (beads-list-refresh))))))
+        (beads-org-list-refresh)))))
 
 (defun beads-detail-refresh ()
   "Re-fetch and redisplay current issue."

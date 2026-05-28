@@ -504,21 +504,6 @@ is closed).
 
 These settings are optional.  The defaults work well for most users.
 
-** List Columns
-
-#+vindex: beads-list-columns
-
-The default org view stores metadata in property drawers instead of
-columns.  Column customization is retained for internal tabulated-list
-rendering.
-
-#+begin_src emacs-lisp
-(setq beads-list-columns '(id date status priority type title))
-#+end_src
-
-Available: =id=, =date=, =status=, =priority=, =type=, =title=,
-=assignee=, =labels=, =deps=.
-
 ** Type Display
 
 #+vindex: beads-list-type-style

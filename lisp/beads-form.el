@@ -372,9 +372,6 @@ Derives from `vui-mode' and adds form-specific keybindings.
     (when (buffer-live-p buf)
       (with-current-buffer buf
         (cond
-         ((eq major-mode 'beads-list-mode)
-          (when (fboundp 'beads-list-refresh)
-            (beads-list-refresh)))
          ((eq major-mode 'beads-org-list-mode)
           (when (fboundp 'beads-org-list-refresh)
             (beads-org-list-refresh)))
