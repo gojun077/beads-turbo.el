@@ -389,7 +389,7 @@ Then apply bulk operations:
 :DESCRIPTION: Viewing and editing a single issue
 :END:
 #+cindex: detail view
-#+findex: beads-detail-mode
+#+findex: beads-detail-vui-mode
 
 Press =RET= on an issue to open its detail view.
 
@@ -632,7 +632,7 @@ This section is for users who want to extend Beads with Emacs Lisp.
 Standard hooks are available for each mode:
 
 - ~beads-org-list-mode-hook~
-- ~beads-detail-mode-hook~
+- ~beads-detail-vui-mode-hook~
 - ~beads-form-mode-hook~
 - ~beads-hierarchy-mode-hook~
 - ~beads-preview-mode-hook~
@@ -644,7 +644,7 @@ Example:
 
 #+begin_src emacs-lisp
 ;; Auto-enable outline-minor-mode in detail view
-(add-hook 'beads-detail-mode-hook #'outline-minor-mode)
+(add-hook 'beads-detail-vui-mode-hook #'outline-minor-mode)
 #+end_src
 
 ** RPC Functions

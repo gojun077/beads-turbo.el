@@ -100,8 +100,7 @@ call it only for long text fields that need a normal editable buffer.
               (with-current-buffer source-buffer
                 (cond
                  ((and (fboundp 'beads-detail-refresh)
-                       (or (derived-mode-p 'beads-detail-mode)
-                           (derived-mode-p 'beads-detail-vui-mode))
+                       (derived-mode-p 'beads-detail-vui-mode)
                        (bound-and-true-p beads-detail--current-issue-id))
                   (beads-detail-refresh))
                  ((and (fboundp 'beads-org-list-refresh)

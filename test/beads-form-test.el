@@ -116,8 +116,8 @@
 (ert-deftest beads-form-test-detail-edit-form-keybinding ()
   "Test that E is bound to beads-detail-edit-form in detail mode."
   (with-temp-buffer
-    (beads-detail-mode)
-    (should (eq (lookup-key beads-detail-mode-map (kbd "E"))
+    (beads-detail-vui-mode)
+    (should (eq (lookup-key beads-detail-vui-base-map (kbd "E"))
                 #'beads-detail-edit-form))))
 
 (ert-deftest beads-form-test-detail-edit-form-defined ()

@@ -48,7 +48,7 @@ Hints are shown when entering beads modes to help with discoverability."
      . "? menu | RET open | e <key> edit | f <key> filter | E form | P preview | q quit")
     (beads-org-list-mode-preview
      . "↑↓ browse | RET open | e/E edit | P/q exit preview | ? menu")
-    (beads-detail-mode
+    (beads-detail-vui-mode
      . "? menu | e <key> edit | E form | g refresh | q quit")
     (beads-form-mode
      . "TAB next | C-c C-c save | C-c C-k cancel"))

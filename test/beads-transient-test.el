@@ -5,7 +5,7 @@
 ;;
 ;; Test categories:
 ;; 1. Transient definition tests - test beads-menu is a transient prefix (no daemon)
-;; 2. Keybinding tests - test ? and C-c m in beads-org-list-mode and beads-detail-mode (no daemon)
+;; 2. Keybinding tests - test ? and C-c m in beads-org-list-mode and beads-detail-vui-mode (no daemon)
 ;; 3. Placeholder command tests - test placeholder commands exist (no daemon)
 ;;
 ;; Note on test isolation:
@@ -65,17 +65,17 @@
                 #'beads-menu))))
 
 (ert-deftest beads-transient-test-detail-mode-help-key ()
-  "Test that ? is bound to beads-menu in beads-detail-mode."
+  "Test that ? is bound to beads-menu in beads-detail-vui-mode."
   (with-temp-buffer
-    (beads-detail-mode)
-    (should (eq (lookup-key beads-detail-mode-map (kbd "?"))
+    (beads-detail-vui-mode)
+    (should (eq (lookup-key beads-detail-vui-base-map (kbd "?"))
                 #'beads-menu))))
 
 (ert-deftest beads-transient-test-detail-mode-menu-key ()
-  "Test that C-c m is bound to beads-menu in beads-detail-mode."
+  "Test that C-c m is bound to beads-menu in beads-detail-vui-mode."
   (with-temp-buffer
-    (beads-detail-mode)
-    (should (eq (lookup-key beads-detail-mode-map (kbd "C-c m"))
+    (beads-detail-vui-mode)
+    (should (eq (lookup-key beads-detail-vui-base-map (kbd "C-c m"))
                 #'beads-menu))))
 
 (ert-deftest beads-transient-test-list-mode-keybindings-interactive ()
@@ -87,10 +87,10 @@
       (should (eq cmd #'beads-menu)))))
 
 (ert-deftest beads-transient-test-detail-mode-keybindings-interactive ()
-  "Test that beads-menu can be called interactively from beads-detail-mode."
+  "Test that beads-menu can be called interactively from beads-detail-vui-mode."
   (with-temp-buffer
-    (beads-detail-mode)
-    (let ((cmd (lookup-key beads-detail-mode-map (kbd "?"))))
+    (beads-detail-vui-mode)
+    (let ((cmd (lookup-key beads-detail-vui-base-map (kbd "?"))))
       (should (commandp cmd))
       (should (eq cmd #'beads-menu)))))
 
@@ -239,17 +239,17 @@
 (ert-deftest beads-transient-test-detail-keybindings-dont-conflict ()
   "Test that ? keybinding doesn't conflict with other bindings in detail mode."
   (with-temp-buffer
-    (beads-detail-mode)
-    (should (eq (lookup-key beads-detail-mode-map (kbd "?")) #'beads-menu))
-    (should (eq (lookup-key beads-detail-mode-map (kbd "g")) #'beads-detail-refresh))
-    (should (keymapp (lookup-key beads-detail-mode-map (kbd "e"))))
-    (should (eq (lookup-key beads-detail-mode-map (kbd "e d")) #'beads-detail-edit-description))
-    (should (eq (lookup-key beads-detail-mode-map (kbd "e D")) #'beads-detail-edit-design))
-    (should (eq (lookup-key beads-detail-mode-map (kbd "e a")) #'beads-detail-edit-acceptance))
-    (should (eq (lookup-key beads-detail-mode-map (kbd "e n")) #'beads-detail-edit-notes))
-    (should (eq (lookup-key beads-detail-mode-map (kbd "e l a")) #'beads-detail-edit-label-add))
-    (should (eq (lookup-key beads-detail-mode-map (kbd "e l r")) #'beads-detail-edit-label-remove))
-    (should (eq (lookup-key beads-detail-mode-map (kbd "q")) #'beads-core-quit-window-kill-buffer))))
+    (beads-detail-vui-mode)
+    (should (eq (lookup-key beads-detail-vui-base-map (kbd "?")) #'beads-menu))
+    (should (eq (lookup-key beads-detail-vui-base-map (kbd "g")) #'beads-detail-refresh))
+    (should (keymapp (lookup-key beads-detail-vui-base-map (kbd "e"))))
+    (should (eq (lookup-key beads-detail-vui-base-map (kbd "e d")) #'beads-detail-edit-description))
+    (should (eq (lookup-key beads-detail-vui-base-map (kbd "e D")) #'beads-detail-edit-design))
+    (should (eq (lookup-key beads-detail-vui-base-map (kbd "e a")) #'beads-detail-edit-acceptance))
+    (should (eq (lookup-key beads-detail-vui-base-map (kbd "e n")) #'beads-detail-edit-notes))
+    (should (eq (lookup-key beads-detail-vui-base-map (kbd "e l a")) #'beads-detail-edit-label-add))
+    (should (eq (lookup-key beads-detail-vui-base-map (kbd "e l r")) #'beads-detail-edit-label-remove))
+    (should (eq (lookup-key beads-detail-vui-base-map (kbd "q")) #'beads-core-quit-window-kill-buffer))))
 
 ;;; Dolt SQL toggle tests
 

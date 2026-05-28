@@ -120,7 +120,7 @@ Or with `use-package` managed by straight.el:
 | `?` | `beads-menu` | Show transient menu |
 | `q` | `beads-list-quit` | Quit |
 
-### Detail Mode (`beads-detail-mode`)
+### Detail Mode (`beads-detail-vui-mode`)
 
 | Key | Command | Description |
 |-----|---------|-------------|
@@ -212,21 +212,19 @@ Press `g` in the list buffer for a manual refresh — useful when an external `b
 
 ### Detail View Rendering (`beads-detail`)
 
-When `markdown-mode` is installed, the detail view renders descriptions, design notes, acceptance criteria, and comments with markdown syntax highlighting.
+The detail view is rendered with `vui.el`. When `markdown-mode` is installed,
+the VUI detail components render descriptions, design notes, acceptance
+criteria, and comments with markdown syntax highlighting.
 
 ```elisp
 ;; Disable markdown rendering in detail view
-(setq beads-detail-render-markdown nil)
-
-;; Disable vui.el and use traditional text rendering
-(setq beads-detail-use-vui nil)
+(setq beads-vui-render-markdown nil)
 ```
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `beads-detail-render-markdown` | `t` | Enable markdown syntax highlighting |
-| `beads-detail-use-vui` | `t` | Use vui.el declarative components |
-| `beads-detail-vui-editable` | `t` | Show inline edit buttons in vui mode |
+| `beads-vui-render-markdown` | `t` | Enable markdown syntax highlighting |
+| `beads-detail-vui-editable` | `t` | Show inline edit buttons |
 | `beads-detail-section-style` | `'heading` | `'heading` (compact) or `'separator` (with rules) |
 
 ## Requirements

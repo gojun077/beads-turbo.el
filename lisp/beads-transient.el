@@ -251,7 +251,7 @@ Shows what the issue will look like, then press C-c C-c to create."
 Prompts for an optional close reason."
   (interactive)
   (let ((id (cond
-             ((derived-mode-p 'beads-detail-mode)
+             ((derived-mode-p 'beads-detail-vui-mode)
               (bound-and-true-p beads-detail--current-issue-id))
              ((beads-transient--list-view-p)
               (alist-get 'id (beads-list--get-issue-at-point)))
@@ -266,7 +266,7 @@ Prompts for an optional close reason."
               (cond
                ((beads-transient--list-view-p)
                 (beads-list-refresh))
-               ((derived-mode-p 'beads-detail-mode)
+               ((derived-mode-p 'beads-detail-vui-mode)
                 (beads-detail-refresh))))
           (beads-client-error
            (let ((err-msg (error-message-string err)))
@@ -281,13 +281,13 @@ Prompts for confirmation with `yes-or-no-p'."
   (let* ((list-issue (and (beads-transient--list-view-p)
                           (beads-list--get-issue-at-point)))
          (id (cond
-              ((derived-mode-p 'beads-detail-mode)
+              ((derived-mode-p 'beads-detail-vui-mode)
                (bound-and-true-p beads-detail--current-issue-id))
               (list-issue
                (alist-get 'id list-issue))
               (t nil)))
          (title (cond
-                 ((derived-mode-p 'beads-detail-mode)
+                 ((derived-mode-p 'beads-detail-vui-mode)
                   (alist-get 'title (bound-and-true-p beads-detail--current-issue)))
                  (list-issue
                   (alist-get 'title list-issue))
@@ -308,7 +308,7 @@ Prompts for confirmation with `yes-or-no-p'."
               (cond
                ((beads-transient--list-view-p)
                 (beads-list-refresh))
-               ((derived-mode-p 'beads-detail-mode)
+               ((derived-mode-p 'beads-detail-vui-mode)
                 (quit-window t))))
           (beads-client-error
            (message "Failed to delete issue: %s" (error-message-string err))))))))
@@ -318,7 +318,7 @@ Prompts for confirmation with `yes-or-no-p'."
 Sets status to open and clears closed_at timestamp."
   (interactive)
   (let ((id (cond
-             ((derived-mode-p 'beads-detail-mode)
+             ((derived-mode-p 'beads-detail-vui-mode)
               (bound-and-true-p beads-detail--current-issue-id))
              ((beads-transient--list-view-p)
               (alist-get 'id (beads-list--get-issue-at-point)))
@@ -332,7 +332,7 @@ Sets status to open and clears closed_at timestamp."
             (cond
              ((beads-transient--list-view-p)
               (beads-list-refresh))
-             ((derived-mode-p 'beads-detail-mode)
+             ((derived-mode-p 'beads-detail-vui-mode)
               (beads-detail-refresh))))
         (beads-client-error
          (message "Failed to reopen issue: %s" (error-message-string err)))))))
@@ -765,7 +765,7 @@ See `beads-backend-dolt-sql-activate' and
   "Show context-appropriate Beads menu."
   (interactive)
   (cond
-   ((derived-mode-p 'beads-detail-mode)
+   ((derived-mode-p 'beads-detail-vui-mode)
     (beads-detail-menu))
    ((beads-transient--list-view-p)
     (beads-list-menu))

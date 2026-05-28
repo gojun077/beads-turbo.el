@@ -5,7 +5,7 @@
 ;;
 ;; Test categories:
 ;; 1. Face definition tests - test all faces are defined with expected properties
-;; 2. Render tests - test beads-detail--render inserts expected sections (mocked)
+;; 2. VUI render tests - test the retained vui detail path
 ;; 3. Mode tests - test mode setup, keybindings, and read-only behavior
 ;; 4. Integration tests - test with actual daemon (tagged :integration)
 ;;
@@ -61,529 +61,6 @@
   (let ((face-attrs (face-all-attributes 'beads-detail-value-face nil)))
     (should (listp face-attrs))))
 
-;;; Render tests (mocked, no daemon)
-
-(ert-deftest beads-detail-test-render-inserts-header ()
-  "Test that beads-detail--render inserts ID and title in header."
-  (with-temp-buffer
-    (let ((issue '((id . "bd-test123")
-                   (title . "Test Issue Title")
-                   (status . "open")
-                   (priority . 2)
-                   (issue_type . "task"))))
-      (beads-detail--render issue)
-      (goto-char (point-min))
-      (should (search-forward "bd-test123" nil t))
-      (should (search-forward "Test Issue Title" nil t)))))
-
-(ert-deftest beads-detail-test-render-inserts-metadata ()
-  "Test that beads-detail--render inserts status, priority, and type."
-  (with-temp-buffer
-    (let ((issue '((id . "bd-test")
-                   (title . "Test")
-                   (status . "in_progress")
-                   (priority . 1)
-                   (issue_type . "bug"))))
-      (beads-detail--render issue)
-      (let ((buffer-content (buffer-string)))
-        (should (string-match-p "in_progress" buffer-content))
-        (should (string-match-p "1" buffer-content))
-        (should (string-match-p "bug" buffer-content))))))
-
-(ert-deftest beads-detail-test-render-created-by-present ()
-  "Test that beads-detail--render shows created_by when present."
-  (with-temp-buffer
-    (let ((issue '((id . "bd-test")
-                   (title . "Test")
-                   (status . "open")
-                   (priority . 2)
-                   (issue_type . "task")
-                   (created_by . "alice"))))
-      (beads-detail--render issue)
-      (let ((buffer-content (buffer-string)))
-        (should (string-match-p "Created by:" buffer-content))
-        (should (string-match-p "alice" buffer-content))))))
-
-(ert-deftest beads-detail-test-render-created-by-absent ()
-  "Test that beads-detail--render handles missing created_by gracefully."
-  (with-temp-buffer
-    (let ((issue '((id . "bd-test")
-                   (title . "Test")
-                   (status . "open")
-                   (priority . 2)
-                   (issue_type . "task"))))
-      (beads-detail--render issue)
-      (let ((buffer-content (buffer-string)))
-        (should-not (string-match-p "Created by:" buffer-content))))))
-
-(ert-deftest beads-detail-test-render-comments-present ()
-  "Test that beads-detail--render shows comments when present."
-  (with-temp-buffer
-    (let ((issue '((id . "bd-test")
-                   (title . "Test")
-                   (status . "open")
-                   (priority . 2)
-                   (issue_type . "task")
-                   (comments . [((id . 1)
-                                 (author . "alice")
-                                 (text . "This is a test comment")
-                                 (created_at . "2026-01-06T10:00:00Z"))]))))
-      (beads-detail--render issue)
-      (let ((buffer-content (buffer-string)))
-        (should (string-match-p "Comments (1):" buffer-content))
-        (should (string-match-p "\\[alice\\]" buffer-content))
-        (should (string-match-p "This is a test comment" buffer-content))))))
-
-(ert-deftest beads-detail-test-render-comments-absent ()
-  "Test that beads-detail--render handles missing comments gracefully."
-  (with-temp-buffer
-    (let ((issue '((id . "bd-test")
-                   (title . "Test")
-                   (status . "open")
-                   (priority . 2)
-                   (issue_type . "task"))))
-      (beads-detail--render issue)
-      (let ((buffer-content (buffer-string)))
-        (should-not (string-match-p "Comments" buffer-content))))))
-
-(ert-deftest beads-detail-test-render-comments-empty ()
-  "Test that beads-detail--render handles empty comments array gracefully."
-  (with-temp-buffer
-    (let ((issue '((id . "bd-test")
-                   (title . "Test")
-                   (status . "open")
-                   (priority . 2)
-                   (issue_type . "task")
-                   (comments . []))))
-      (beads-detail--render issue)
-      (let ((buffer-content (buffer-string)))
-        (should-not (string-match-p "Comments" buffer-content))))))
-
-(ert-deftest beads-detail-test-render-description-present ()
-  "Test that beads-detail--render shows description when present."
-  (with-temp-buffer
-    (let ((issue '((id . "bd-test")
-                   (title . "Test")
-                   (status . "open")
-                   (priority . 2)
-                   (issue_type . "task")
-                   (description . "This is a test description"))))
-      (beads-detail--render issue)
-      (goto-char (point-min))
-      (should (search-forward "This is a test description" nil t)))))
-
-(ert-deftest beads-detail-test-render-description-absent ()
-  "Test that beads-detail--render handles missing description gracefully."
-  (with-temp-buffer
-    (let ((issue '((id . "bd-test")
-                   (title . "Test")
-                   (status . "open")
-                   (priority . 2)
-                   (issue_type . "task"))))
-      (beads-detail--render issue)
-      (let ((buffer-content (buffer-string)))
-        (should-not (string-match-p "Description:" buffer-content))))))
-
-(ert-deftest beads-detail-test-render-description-empty ()
-  "Test that beads-detail--render handles empty description gracefully."
-  (with-temp-buffer
-    (let ((issue '((id . "bd-test")
-                   (title . "Test")
-                   (status . "open")
-                   (priority . 2)
-                   (issue_type . "task")
-                   (description . ""))))
-      (beads-detail--render issue)
-      (let ((buffer-content (buffer-string)))
-        (should-not (string-match-p "Description:" buffer-content))))))
-
-(ert-deftest beads-detail-test-render-design-present ()
-  "Test that beads-detail--render shows design section when present."
-  (with-temp-buffer
-    (let ((issue '((id . "bd-test")
-                   (title . "Test")
-                   (status . "open")
-                   (priority . 2)
-                   (issue_type . "task")
-                   (design . "Design notes here"))))
-      (beads-detail--render issue)
-      (goto-char (point-min))
-      (should (search-forward "Design notes here" nil t)))))
-
-(ert-deftest beads-detail-test-render-design-absent ()
-  "Test that beads-detail--render handles missing design gracefully."
-  (with-temp-buffer
-    (let ((issue '((id . "bd-test")
-                   (title . "Test")
-                   (status . "open")
-                   (priority . 2)
-                   (issue_type . "task"))))
-      (beads-detail--render issue)
-      (let ((buffer-content (buffer-string)))
-        (should-not (string-match-p "Design:" buffer-content))))))
-
-(ert-deftest beads-detail-test-render-acceptance-present ()
-  "Test that beads-detail--render shows acceptance criteria when present."
-  (with-temp-buffer
-    (let ((issue '((id . "bd-test")
-                   (title . "Test")
-                   (status . "open")
-                   (priority . 2)
-                   (issue_type . "task")
-                   (acceptance_criteria . "Acceptance criteria here"))))
-      (beads-detail--render issue)
-      (goto-char (point-min))
-      (should (search-forward "Acceptance criteria here" nil t)))))
-
-(ert-deftest beads-detail-test-render-acceptance-absent ()
-  "Test that beads-detail--render handles missing acceptance criteria gracefully."
-  (with-temp-buffer
-    (let ((issue '((id . "bd-test")
-                   (title . "Test")
-                   (status . "open")
-                   (priority . 2)
-                   (issue_type . "task"))))
-      (beads-detail--render issue)
-      (let ((buffer-content (buffer-string)))
-        (should-not (string-match-p "Acceptance:" buffer-content))))))
-
-(ert-deftest beads-detail-test-render-dependencies-present ()
-  "Test that beads-detail--render shows dependencies when present."
-  (with-temp-buffer
-    (let ((issue '((id . "bd-test")
-                   (title . "Test")
-                   (status . "open")
-                   (priority . 2)
-                   (issue_type . "task")
-                   (dependencies . [((id . "bd-dep1")
-                                      (dependency_type . "blocks"))
-                                     ((id . "bd-dep2")
-                                      (dependency_type . "related"))]))))
-      (beads-detail--render issue)
-      (let ((buffer-content (buffer-string)))
-        (should (string-match-p "bd-dep1" buffer-content))
-        (should (string-match-p "bd-dep2" buffer-content))))))
-
-(ert-deftest beads-detail-test-render-dependencies-absent ()
-  "Test that beads-detail--render handles missing dependencies gracefully."
-  (with-temp-buffer
-    (let ((issue '((id . "bd-test")
-                   (title . "Test")
-                   (status . "open")
-                   (priority . 2)
-                   (issue_type . "task"))))
-      (beads-detail--render issue)
-      (let ((buffer-content (buffer-string)))
-        (should-not (string-match-p "Dependencies:" buffer-content))))))
-
-(ert-deftest beads-detail-test-render-labels-present ()
-  "Test that beads-detail--render shows labels when present."
-  (with-temp-buffer
-    (let ((issue '((id . "bd-test")
-                   (title . "Test")
-                   (status . "open")
-                   (priority . 2)
-                   (issue_type . "task")
-                   (labels . ["backend" "urgent"]))))
-      (beads-detail--render issue)
-      (goto-char (point-min))
-      (should (search-forward "backend" nil t))
-      (should (search-forward "urgent" nil t)))))
-
-(ert-deftest beads-detail-test-render-labels-absent ()
-  "Test that beads-detail--render shows empty labels when missing."
-  (with-temp-buffer
-    (let ((issue '((id . "bd-test")
-                   (title . "Test")
-                   (status . "open")
-                   (priority . 2)
-                   (issue_type . "task"))))
-      (beads-detail--render issue)
-      (let ((buffer-content (buffer-string)))
-        (should (string-match-p "Labels:" buffer-content))
-        (should (string-match-p "(none)" buffer-content))))))
-
-(ert-deftest beads-detail-test-render-timestamps ()
-  "Test that beads-detail--render shows created and updated timestamps."
-  (with-temp-buffer
-    (let ((issue '((id . "bd-test")
-                   (title . "Test")
-                   (status . "open")
-                   (priority . 2)
-                   (issue_type . "task")
-                   (created_at . "2025-01-01T10:00:00Z")
-                   (updated_at . "2025-01-02T11:00:00Z"))))
-      (beads-detail--render issue)
-      (let ((buffer-content (buffer-string)))
-        (should (string-match-p "2025-01-01" buffer-content))
-        (should (string-match-p "2025-01-02" buffer-content))))))
-
-(ert-deftest beads-detail-test-render-assignee-present ()
-  "Test that beads-detail--render shows assignee when present."
-  (with-temp-buffer
-    (let ((issue '((id . "bd-test")
-                   (title . "Test")
-                   (status . "open")
-                   (priority . 2)
-                   (issue_type . "task")
-                   (assignee . "alice"))))
-      (beads-detail--render issue)
-      (goto-char (point-min))
-      (should (search-forward "alice" nil t)))))
-
-(ert-deftest beads-detail-test-render-minimal-issue ()
-  "Test that beads-detail--render handles minimal issue with only required fields."
-  (with-temp-buffer
-    (let ((issue '((id . "bd-minimal")
-                   (title . "Minimal Issue")
-                   (status . "open")
-                   (priority . 2)
-                   (issue_type . "task"))))
-      (beads-detail--render issue)
-      (goto-char (point-min))
-      (should (search-forward "bd-minimal" nil t))
-      (should (search-forward "Minimal Issue" nil t)))))
-
-(ert-deftest beads-detail-test-render-all-fields ()
-  "Test that beads-detail--render handles issue with all fields populated."
-  (with-temp-buffer
-    (let ((issue '((id . "bd-full")
-                   (title . "Full Issue")
-                   (status . "in_progress")
-                   (priority . 1)
-                   (issue_type . "feature")
-                   (description . "Full description")
-                   (design . "Design notes")
-                   (acceptance_criteria . "Acceptance criteria")
-                   (assignee . "bob")
-                   (labels . ["frontend" "ui"])
-                   (dependencies . [((id . "bd-dep1")
-                                      (dependency_type . "blocks"))])
-                   (created_at . "2025-01-01T10:00:00Z")
-                   (updated_at . "2025-01-02T11:00:00Z"))))
-      (beads-detail--render issue)
-      (let ((buffer-content (buffer-string)))
-        (should (string-match-p "bd-full" buffer-content))
-        (should (string-match-p "Full Issue" buffer-content))
-        (should (string-match-p "Full description" buffer-content))
-        (should (string-match-p "Design notes" buffer-content))
-        (should (string-match-p "Acceptance criteria" buffer-content))
-        (should (string-match-p "bob" buffer-content))
-        (should (string-match-p "frontend" buffer-content))
-        (should (string-match-p "bd-dep1" buffer-content))))))
-
-(ert-deftest beads-detail-test-render-parent-present ()
-  "Test that beads-detail--render shows parent link when present."
-  (with-temp-buffer
-    (let ((issue '((id . "bd-child")
-                   (title . "Child Issue")
-                   (status . "open")
-                   (priority . 2)
-                   (issue_type . "task")
-                   (parent_id . "bd-parent"))))
-      (beads-detail--render issue)
-      (let ((buffer-content (buffer-string)))
-        (should (string-match-p "Parent:" buffer-content))
-        (should (string-match-p "bd-parent" buffer-content))))))
-
-(ert-deftest beads-detail-test-render-parent-absent ()
-  "Test that beads-detail--render handles missing parent gracefully."
-  (with-temp-buffer
-    (let ((issue '((id . "bd-test")
-                   (title . "Test")
-                   (status . "open")
-                   (priority . 2)
-                   (issue_type . "task"))))
-      (beads-detail--render issue)
-      (let ((buffer-content (buffer-string)))
-        (should-not (string-match-p "Parent:" buffer-content))))))
-
-;;; bdel-91f.9: render parity with `bd show'
-
-(ert-deftest beads-detail-test-render-parent-from-parent-field ()
-  "Parent should be shown when issue uses top-level `parent' string field
-\(as returned by `bd show --json'), not just `parent_id'."
-  (with-temp-buffer
-    (let ((issue '((id . "bd-child")
-                   (title . "Child")
-                   (status . "open")
-                   (priority . 2)
-                   (issue_type . "task")
-                   (parent . "bd-parent"))))
-      (beads-detail--render issue)
-      (let ((buffer-content (buffer-string)))
-        (should (string-match-p "Parent:" buffer-content))
-        (should (string-match-p "bd-parent" buffer-content))))))
-
-(ert-deftest beads-detail-test-render-owner ()
-  "Owner field should be displayed when present."
-  (with-temp-buffer
-    (let ((issue '((id . "bd-test")
-                   (title . "Test")
-                   (status . "open")
-                   (priority . 2)
-                   (issue_type . "task")
-                   (owner . "carol@example.com"))))
-      (beads-detail--render issue)
-      (let ((buffer-content (buffer-string)))
-        (should (string-match-p "Owner:" buffer-content))
-        (should (string-match-p "carol@example.com" buffer-content))))))
-
-(ert-deftest beads-detail-test-render-started-at ()
-  "Started timestamp should be displayed when present."
-  (with-temp-buffer
-    (let ((issue '((id . "bd-test")
-                   (title . "Test")
-                   (status . "in_progress")
-                   (priority . 2)
-                   (issue_type . "task")
-                   (started_at . "2025-03-04T08:00:00Z"))))
-      (beads-detail--render issue)
-      (let ((buffer-content (buffer-string)))
-        (should (string-match-p "Started:" buffer-content))
-        (should (string-match-p "2025-03-04" buffer-content))))))
-
-(ert-deftest beads-detail-test-render-closed-at-and-reason ()
-  "Closed timestamp and close reason should be displayed when present."
-  (with-temp-buffer
-    (let ((issue '((id . "bd-test")
-                   (title . "Test")
-                   (status . "closed")
-                   (priority . 2)
-                   (issue_type . "task")
-                   (closed_at . "2025-04-05T12:00:00Z")
-                   (close_reason . "Done"))))
-      (beads-detail--render issue)
-      (let ((buffer-content (buffer-string)))
-        (should (string-match-p "Closed:" buffer-content))
-        (should (string-match-p "2025-04-05" buffer-content))
-        (should (string-match-p "Close reason:" buffer-content))
-        (should (string-match-p "Done" buffer-content))))))
-
-(ert-deftest beads-detail-test-render-external-ref ()
-  "External ref should be displayed when present."
-  (with-temp-buffer
-    (let ((issue '((id . "bd-test")
-                   (title . "Test")
-                   (status . "open")
-                   (priority . 2)
-                   (issue_type . "task")
-                   (external_ref . "JIRA-1234"))))
-      (beads-detail--render issue)
-      (let ((buffer-content (buffer-string)))
-        (should (string-match-p "External ref:" buffer-content))
-        (should (string-match-p "JIRA-1234" buffer-content))))))
-
-(ert-deftest beads-detail-test-render-notes-section ()
-  "Notes section should render when notes field is present and non-empty
-\(regression test for bdel-91f.8: notes field missing in detail view)."
-  (with-temp-buffer
-    (let ((issue '((id . "bd-test")
-                   (title . "Test")
-                   (status . "open")
-                   (priority . 2)
-                   (issue_type . "task")
-                   (notes . "Implementation notes here"))))
-      (beads-detail--render issue)
-      (let ((buffer-content (buffer-string)))
-        (should (string-match-p "Notes:" buffer-content))
-        (should (string-match-p "Implementation notes here" buffer-content))))))
-
-(ert-deftest beads-detail-test-render-notes-absent ()
-  "Notes section should not appear when notes is missing or empty."
-  (with-temp-buffer
-    (let ((issue '((id . "bd-test")
-                   (title . "Test")
-                   (status . "open")
-                   (priority . 2)
-                   (issue_type . "task"))))
-      (beads-detail--render issue)
-      (let ((buffer-content (buffer-string)))
-        (should-not (string-match-p "^Notes:" buffer-content)))))
-  (with-temp-buffer
-    (let ((issue '((id . "bd-test")
-                   (title . "Test")
-                   (status . "open")
-                   (priority . 2)
-                   (issue_type . "task")
-                   (notes . ""))))
-      (beads-detail--render issue)
-      (let ((buffer-content (buffer-string)))
-        (should-not (string-match-p "^Notes:" buffer-content))))))
-
-(ert-deftest beads-detail-test-render-categorized-relationships ()
-  "Dependencies/dependents should be grouped by `dependency_type' into
-named sections matching `bd show' (Parent, Children, Discovered From,
-Discovered, Related, Depends on, Dependents)."
-  (with-temp-buffer
-    (let ((issue '((id . "bd-epic")
-                   (title . "Epic")
-                   (status . "open")
-                   (priority . 2)
-                   (issue_type . "epic")
-                   (dependencies . [((id . "bd-parent")
-                                     (title . "Parent")
-                                     (dependency_type . "parent-child"))
-                                    ((id . "bd-origin")
-                                     (title . "Origin")
-                                     (dependency_type . "discovered-from"))
-                                    ((id . "bd-blocker")
-                                     (title . "Blocker")
-                                     (dependency_type . "blocks"))])
-                   (dependents . [((id . "bd-child")
-                                    (title . "Child")
-                                    (dependency_type . "parent-child"))
-                                   ((id . "bd-derived")
-                                    (title . "Derived")
-                                    (dependency_type . "discovered-from"))
-                                   ((id . "bd-relative")
-                                    (title . "Relative")
-                                    (dependency_type . "related"))]))))
-      (beads-detail--render issue)
-      (let ((buffer-content (buffer-string)))
-        (should (string-match-p "Parent:" buffer-content))
-        (should (string-match-p "bd-parent" buffer-content))
-        (should (string-match-p "Children:" buffer-content))
-        (should (string-match-p "bd-child" buffer-content))
-        (should (string-match-p "Discovered From:" buffer-content))
-        (should (string-match-p "bd-origin" buffer-content))
-        (should (string-match-p "Discovered:" buffer-content))
-        (should (string-match-p "bd-derived" buffer-content))
-        (should (string-match-p "Related:" buffer-content))
-        (should (string-match-p "bd-relative" buffer-content))
-        (should (string-match-p "Depends on:" buffer-content))
-        (should (string-match-p "bd-blocker" buffer-content))))))
-
-(ert-deftest beads-detail-test-render-epic-progress ()
-  "Epic progress (X/Y complete (Z%)) should be displayed for epics."
-  (with-temp-buffer
-    (let ((issue '((id . "bd-epic")
-                   (title . "Epic")
-                   (status . "open")
-                   (priority . 2)
-                   (issue_type . "epic")
-                   (epic_total_children . 12)
-                   (epic_closed_children . 8))))
-      (beads-detail--render issue)
-      (let ((buffer-content (buffer-string)))
-        (should (string-match-p "8/12 complete" buffer-content))
-        (should (string-match-p "67%" buffer-content))))))
-
-(ert-deftest beads-detail-test-bucket-deps-by-type ()
-  "`beads-detail--bucket-deps' should group deps by `dependency_type'."
-  (let* ((deps [((id . "a") (dependency_type . "parent-child"))
-                ((id . "b") (dependency_type . "blocks"))
-                ((id . "c") (dependency_type . "parent-child"))])
-         (buckets (beads-detail--bucket-deps deps)))
-    (should (= 2 (length buckets)))
-    (let ((pc (alist-get "parent-child" buckets nil nil #'string=))
-          (bl (alist-get "blocks" buckets nil nil #'string=)))
-      (should (= 2 (length pc)))
-      (should (equal "a" (alist-get 'id (car pc))))
-      (should (equal "c" (alist-get 'id (cadr pc))))
-      (should (= 1 (length bl)))
-      (should (equal "b" (alist-get 'id (car bl)))))))
-
 ;;; Parent navigation tests (no daemon)
 
 (ert-deftest beads-detail-test-goto-parent-defined ()
@@ -599,21 +76,21 @@ Discovered, Related, Depends on, Dependents)."
 (ert-deftest beads-detail-test-keybinding-goto-parent ()
   "Test that P is bound to beads-detail-goto-parent."
   (with-temp-buffer
-    (beads-detail-mode)
-    (should (eq (lookup-key beads-detail-mode-map (kbd "P"))
+    (beads-detail-vui-mode)
+    (should (eq (lookup-key beads-detail-vui-base-map (kbd "P"))
                 #'beads-detail-goto-parent))))
 
 (ert-deftest beads-detail-test-keybinding-view-children ()
   "Test that C is bound to beads-detail-view-children."
   (with-temp-buffer
-    (beads-detail-mode)
-    (should (eq (lookup-key beads-detail-mode-map (kbd "C"))
+    (beads-detail-vui-mode)
+    (should (eq (lookup-key beads-detail-vui-base-map (kbd "C"))
                 #'beads-detail-view-children))))
 
 (ert-deftest beads-detail-test-goto-parent-no-parent ()
   "Test that beads-detail-goto-parent errors when no parent."
   (with-temp-buffer
-    (beads-detail-mode)
+    (beads-detail-vui-mode)
     (setq beads-detail--current-issue '((id . "bd-test")
                                         (title . "Test")
                                         (status . "open")
@@ -631,14 +108,14 @@ Discovered, Related, Depends on, Dependents)."
 (ert-deftest beads-detail-test-keybinding-add-comment ()
   "Test that c is bound to beads-detail-add-comment."
   (with-temp-buffer
-    (beads-detail-mode)
-    (should (eq (lookup-key beads-detail-mode-map (kbd "c"))
+    (beads-detail-vui-mode)
+    (should (eq (lookup-key beads-detail-vui-base-map (kbd "c"))
                 #'beads-detail-add-comment))))
 
 (ert-deftest beads-detail-test-add-comment-empty-text ()
   "Test that beads-detail-add-comment errors on empty text."
   (with-temp-buffer
-    (beads-detail-mode)
+    (beads-detail-vui-mode)
     (setq beads-detail--current-issue '((id . "bd-test")
                                         (title . "Test")
                                         (status . "open")
@@ -650,30 +127,29 @@ Discovered, Related, Depends on, Dependents)."
 ;;; Mode tests (no daemon)
 
 (ert-deftest beads-detail-test-mode-derived-from-special ()
-  "Test that beads-detail-mode is derived from special-mode."
+  "Test that beads-detail-vui-mode is derived from vui-mode."
   (with-temp-buffer
-    (beads-detail-mode)
-    (should (derived-mode-p 'special-mode))
-    (should (derived-mode-p 'beads-detail-mode))))
+    (beads-detail-vui-mode)
+    (should (derived-mode-p 'beads-detail-vui-mode))))
 
-(ert-deftest beads-detail-test-mode-buffer-read-only ()
-  "Test that beads-detail-mode sets buffer to read-only."
+(ert-deftest beads-detail-test-mode-truncation-disabled ()
+  "Test that beads-detail-vui-mode wraps long detail content."
   (with-temp-buffer
-    (beads-detail-mode)
-    (should buffer-read-only)))
+    (beads-detail-vui-mode)
+    (should-not truncate-lines)))
 
 (ert-deftest beads-detail-test-mode-keybinding-refresh ()
-  "Test that beads-detail-mode binds 'g' to beads-detail-refresh."
+  "Test that beads-detail-vui-mode binds 'g' to beads-detail-refresh."
   (with-temp-buffer
-    (beads-detail-mode)
-    (should (eq (lookup-key beads-detail-mode-map (kbd "g"))
+    (beads-detail-vui-mode)
+    (should (eq (lookup-key beads-detail-vui-base-map (kbd "g"))
                 #'beads-detail-refresh))))
 
 (ert-deftest beads-detail-test-mode-keybinding-quit ()
-  "Test that beads-detail-mode binds 'q' to kill-buffer quit."
+  "Test that beads-detail-vui-mode binds 'q' to kill-buffer quit."
   (with-temp-buffer
-    (beads-detail-mode)
-    (should (eq (lookup-key beads-detail-mode-map (kbd "q"))
+    (beads-detail-vui-mode)
+    (should (eq (lookup-key beads-detail-vui-base-map (kbd "q"))
                 #'beads-core-quit-window-kill-buffer))))
 
 (ert-deftest beads-detail-test-mode-quit-kills-buffer ()
@@ -682,18 +158,18 @@ Discovered, Related, Depends on, Dependents)."
     (unwind-protect
         (progn
           (switch-to-buffer buffer)
-          (beads-detail-mode)
-          (call-interactively (lookup-key beads-detail-mode-map (kbd "q")))
+          (beads-detail-vui-mode)
+          (call-interactively (lookup-key beads-detail-vui-base-map (kbd "q")))
           (should-not (buffer-live-p buffer)))
       (when (buffer-live-p buffer)
         (kill-buffer buffer)))))
 
 (ert-deftest beads-detail-test-mode-keybinding-edit ()
-  "Test that beads-detail-mode binds 'e' to edit prefix map."
+  "Test that beads-detail-vui-mode binds 'e' to edit prefix map."
   (with-temp-buffer
-    (beads-detail-mode)
-    (should (keymapp (lookup-key beads-detail-mode-map (kbd "e"))))
-    (should (eq (lookup-key beads-detail-mode-map (kbd "e d"))
+    (beads-detail-vui-mode)
+    (should (keymapp (lookup-key beads-detail-vui-base-map (kbd "e"))))
+    (should (eq (lookup-key beads-detail-vui-base-map (kbd "e d"))
                 #'beads-detail-edit-description))))
 
 (ert-deftest beads-detail-test-edit-description-starts-with-newline ()
@@ -701,7 +177,7 @@ Discovered, Related, Depends on, Dependents)."
   (let ((buffer nil))
     (unwind-protect
         (with-temp-buffer
-          (beads-detail-mode)
+          (beads-detail-vui-mode)
           (setq beads-detail--current-issue '((id . "test-123")
                                               (title . "Test")
                                               (status . "open")
@@ -720,11 +196,11 @@ Discovered, Related, Depends on, Dependents)."
 (ert-deftest beads-detail-test-mode-keybinding-label-prefix ()
   "Test that 'e l' is a prefix map for label commands."
   (with-temp-buffer
-    (beads-detail-mode)
-    (should (keymapp (lookup-key beads-detail-mode-map (kbd "e l"))))
-    (should (eq (lookup-key beads-detail-mode-map (kbd "e l a"))
+    (beads-detail-vui-mode)
+    (should (keymapp (lookup-key beads-detail-vui-base-map (kbd "e l"))))
+    (should (eq (lookup-key beads-detail-vui-base-map (kbd "e l a"))
                 #'beads-detail-edit-label-add))
-    (should (eq (lookup-key beads-detail-mode-map (kbd "e l r"))
+    (should (eq (lookup-key beads-detail-vui-base-map (kbd "e l r"))
                 #'beads-detail-edit-label-remove))))
 
 (ert-deftest beads-detail-test-label-add-defined ()
@@ -742,7 +218,7 @@ Discovered, Related, Depends on, Dependents)."
   (let ((rpc-called nil)
         (rpc-args nil))
     (with-temp-buffer
-      (beads-detail-mode)
+      (beads-detail-vui-mode)
       (setq beads-detail--current-issue '((id . "test-123")
                                           (title . "Test")
                                           (status . "open")
@@ -766,7 +242,7 @@ Discovered, Related, Depends on, Dependents)."
   "Test that beads-detail-edit-label-add ignores empty input."
   (let ((rpc-called nil))
     (with-temp-buffer
-      (beads-detail-mode)
+      (beads-detail-vui-mode)
       (setq beads-detail--current-issue '((id . "test-123")
                                           (title . "Test")
                                           (status . "open")
@@ -784,7 +260,7 @@ Discovered, Related, Depends on, Dependents)."
   "Test that beads-detail-edit-label-remove handles issues with no labels."
   (let ((completing-read-called nil))
     (with-temp-buffer
-      (beads-detail-mode)
+      (beads-detail-vui-mode)
       (setq beads-detail--current-issue '((id . "test-123")
                                           (title . "Test")
                                           (status . "open")
@@ -803,7 +279,7 @@ Discovered, Related, Depends on, Dependents)."
   (let ((rpc-called nil)
         (rpc-args nil))
     (with-temp-buffer
-      (beads-detail-mode)
+      (beads-detail-vui-mode)
       (setq beads-detail--current-issue '((id . "test-456")
                                           (title . "Test")
                                           (status . "open")
@@ -824,16 +300,17 @@ Discovered, Related, Depends on, Dependents)."
         (should (equal rpc-args '("test-456" "label1")))))))
 
 (ert-deftest beads-detail-test-mode-inherits-parent-keybindings ()
-  "Test that beads-detail-mode inherits special-mode keybindings."
+  "Test that beads-detail-vui-mode has Beads quit keybinding."
   (with-temp-buffer
-    (beads-detail-mode)
-    (should (commandp (lookup-key beads-detail-mode-map (kbd "SPC"))))))
+    (beads-detail-vui-mode)
+    (should (eq (lookup-key beads-detail-vui-base-map (kbd "q"))
+                #'beads-core-quit-window-kill-buffer))))
 
 (ert-deftest beads-detail-test-mode-sets-buffer-name ()
-  "Test that beads-detail-mode sets appropriate buffer name pattern."
+  "Test that beads-detail-vui-mode sets appropriate mode."
   (with-temp-buffer
-    (beads-detail-mode)
-    (should (eq major-mode 'beads-detail-mode))))
+    (beads-detail-vui-mode)
+    (should (eq major-mode 'beads-detail-vui-mode))))
 
 ;;; Integration tests (require bd CLI)
 
@@ -853,7 +330,7 @@ Discovered, Related, Depends on, Dependents)."
             (beads-detail-show issue-id)
             (should (get-buffer buffer-name))
             (with-current-buffer buffer-name
-              (should (eq major-mode 'beads-detail-mode))))
+              (should (eq major-mode 'beads-detail-vui-mode))))
         (when (get-buffer buffer-name)
           (kill-buffer buffer-name))))))
 
@@ -936,15 +413,15 @@ Discovered, Related, Depends on, Dependents)."
 (ert-deftest beads-detail-test-refresh-without-issue-id ()
   "Test that beads-detail-refresh handles missing issue ID gracefully."
   (with-temp-buffer
-    (beads-detail-mode)
+    (beads-detail-vui-mode)
     (should-error (beads-detail-refresh))))
 
 ;;; Regression tests for bdel-ylt / bdel-kry / bdel-91f.2
 
 (defun beads-detail-test--capture-on-refresh (buffer issue)
-  "Run `beads-detail--render-vui' on BUFFER with ISSUE and return the
+  "Run `beads-detail--mount-vui' on BUFFER with ISSUE and return the
 on-refresh callback that would be passed to vui. Useful for testing
-the closure created inside `beads-detail--render-vui'."
+the closure created inside `beads-detail--mount-vui'."
   (require 'beads-vui)
   (let (captured-on-refresh)
     (cl-letf (((symbol-function 'vui-mount) (lambda (&rest _) nil))
@@ -952,11 +429,11 @@ the closure created inside `beads-detail--render-vui'."
                (lambda (_component &rest args)
                  (setq captured-on-refresh (plist-get args :on-refresh))
                  nil)))
-      (beads-detail--render-vui buffer issue))
+      (beads-detail--mount-vui buffer issue))
     captured-on-refresh))
 
 (ert-deftest beads-detail-test-vui-render-sets-issue-id-after-mode ()
-  "Regression test for bdel-ylt: `beads-detail--render-vui' must set
+  "Regression test for bdel-ylt: `beads-detail--mount-vui' must set
 `beads-detail--current-issue-id' AFTER activating
 `beads-detail-vui-mode', because `define-derived-mode' calls
 `kill-all-local-variables' and would otherwise wipe the var. The
@@ -971,7 +448,7 @@ vui on-click refresh handler depends on this var being bound."
     (unwind-protect
         (cl-letf (((symbol-function 'vui-mount) (lambda (&rest _) nil))
                   ((symbol-function 'vui-component) (lambda (&rest _) nil)))
-          (beads-detail--render-vui buffer issue)
+          (beads-detail--mount-vui buffer issue)
           (with-current-buffer buffer
             (should (derived-mode-p 'beads-detail-vui-mode))
             (should (equal beads-detail--current-issue-id
@@ -982,7 +459,7 @@ vui on-click refresh handler depends on this var being bound."
         (kill-buffer buffer)))))
 
 (ert-deftest beads-detail-test-render-vui-passes-on-refresh-closure ()
-  "`beads-detail--render-vui' must pass an on-refresh callback to vui."
+  "`beads-detail--mount-vui' must pass an on-refresh callback to vui."
   (let ((buffer (generate-new-buffer "*beads-detail-test-vui-closure*"))
         (issue '((id . "bd-vui-closure-1")
                  (title . "Closure capture")
@@ -1134,7 +611,7 @@ unknown-vnode error."
         (should refreshed)))))
 
 (ert-deftest beads-detail-test-refresh-fn-switches-to-detail-buffer ()
-  "Regression test: refresh-fn closure captured by `beads-detail--render-vui'
+  "Regression test: refresh-fn closure captured by `beads-detail--mount-vui'
 must switch to the detail buffer it was created for, even when invoked
 from a different current-buffer (e.g. after the minibuffer edit handler
 finishes). This prevents the \"No issue to refresh\" vui warning from
@@ -1205,7 +682,7 @@ beads-detail-refresh without user-error."
                          (issue_type . "task"))))
                     ;; Stub re-render: avoid pulling in vui internals
                     ;; for this flow test.
-                    ((symbol-function 'beads-detail--render-vui)
+                    ((symbol-function 'beads-detail--mount-vui)
                      (lambda (&rest _) nil)))
             ;; Invoke from a different buffer to mimic post-edit context.
             (with-temp-buffer
@@ -1233,68 +710,6 @@ beads-detail-refresh without user-error."
         (when (get-buffer buffer-name)
           (kill-buffer buffer-name))))))
 
-;;; Markdown fontification tests
-
-(ert-deftest beads-detail-test-fontify-markdown-defined ()
-  "Test that beads-detail--fontify-markdown is defined."
-  (should (fboundp 'beads-detail--fontify-markdown)))
-
-(ert-deftest beads-detail-test-fontify-markdown-returns-string ()
-  "Test that beads-detail--fontify-markdown returns a string."
-  (let ((result (beads-detail--fontify-markdown "test text")))
-    (should (stringp result))
-    (should (string= result "test text"))))
-
-(ert-deftest beads-detail-test-fontify-markdown-preserves-content ()
-  "Test that beads-detail--fontify-markdown preserves text content."
-  (let ((text "# Heading\n\n**bold** and *italic*\n\n`code`"))
-    (let ((result (beads-detail--fontify-markdown text)))
-      (should (string-match-p "Heading" result))
-      (should (string-match-p "bold" result))
-      (should (string-match-p "italic" result))
-      (should (string-match-p "code" result)))))
-
-(ert-deftest beads-detail-test-fontify-markdown-disabled ()
-  "Test that beads-detail--fontify-markdown respects the disable flag."
-  (let ((beads-detail-render-markdown nil)
-        (text "**bold** text"))
-    (let ((result (beads-detail--fontify-markdown text)))
-      (should (string= result text)))))
-
-(ert-deftest beads-detail-test-render-markdown-customizable ()
-  "Test that beads-detail-render-markdown is a customizable option."
-  (should (custom-variable-p 'beads-detail-render-markdown)))
-
-(ert-deftest beads-detail-test-render-description-with-markdown ()
-  "Test that description is rendered through markdown fontification."
-  (let ((beads-detail-render-markdown nil))
-    (with-temp-buffer
-      (let ((issue '((id . "bd-test")
-                     (title . "Test")
-                     (status . "open")
-                     (priority . 2)
-                     (issue_type . "task")
-                     (description . "**bold** description"))))
-        (beads-detail--render issue)
-        (let ((buffer-content (buffer-string)))
-          (should (string-match-p "\\*\\*bold\\*\\* description" buffer-content)))))))
-
-(ert-deftest beads-detail-test-render-comments-with-markdown ()
-  "Test that comments are rendered through markdown fontification."
-  (let ((beads-detail-render-markdown nil))
-    (with-temp-buffer
-      (let ((issue '((id . "bd-test")
-                     (title . "Test")
-                     (status . "open")
-                     (priority . 2)
-                     (issue_type . "task")
-                     (comments . [((id . 1)
-                                   (author . "alice")
-                                   (text . "**bold** comment")
-                                   (created_at . "2026-01-06T10:00:00Z"))]))))
-        (beads-detail--render issue)
-        (let ((buffer-content (buffer-string)))
-          (should (string-match-p "\\*\\*bold\\*\\* comment" buffer-content)))))))
 
 (provide 'beads-detail-test)
 ;;; beads-detail-test.el ends here
