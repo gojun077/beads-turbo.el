@@ -20,8 +20,8 @@
 
 ;;; Commentary:
 
-;; Backend abstraction layer that decouples beads.el from any specific
-;; CLI binary.  Each backend (bd, br, etc.) registers itself via
+;; Backend abstraction layer that decouples beads.el from the concrete
+;; CLI transport.  Each backend registers itself via
 ;; `beads-backend-register' and provides operation translation and
 ;; capability metadata.
 
@@ -96,11 +96,8 @@ Uses `beads-cli-program' if set, otherwise auto-detects."
    ((executable-find "bd")
     (or (beads-backend--lookup "bd")
         (signal 'beads-backend-error '("bd found but backend not registered"))))
-   ((executable-find "br")
-    (or (beads-backend--lookup "br")
-        (signal 'beads-backend-error '("br found but backend not registered"))))
    (t
-    (signal 'beads-backend-error '("No beads CLI found (tried bd, br)")))))
+    (signal 'beads-backend-error '("bd executable not found")))))
 
 (defun beads-backend-supports-p (backend operation)
   "Return non-nil if BACKEND supports OPERATION."
@@ -251,6 +248,5 @@ PROJECT-ROOT overrides the working directory."
 (provide 'beads-backend)
 
 (require 'beads-backend-bd nil t)
-(require 'beads-backend-br nil t)
 
 ;;; beads-backend.el ends here

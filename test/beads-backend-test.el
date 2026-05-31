@@ -9,7 +9,6 @@
 (require 'cl-lib)
 (require 'beads-backend)
 (require 'beads-backend-bd)
-(require 'beads-backend-br)
 
 (defvar beads-dolt-sql-enabled)
 
@@ -18,10 +17,6 @@
 (ert-deftest beads-backend-test-bd-registered ()
   "Test that bd backend is registered."
   (should (beads-backend--lookup "bd")))
-
-(ert-deftest beads-backend-test-br-registered ()
-  "Test that br backend is registered."
-  (should (beads-backend--lookup "br")))
 
 (ert-deftest beads-backend-test-lookup-unknown ()
   "Test that looking up unknown backend returns nil."
@@ -51,24 +46,10 @@
                    "comments-add"))
       (should (beads-backend-supports-p bd op)))))
 
-(ert-deftest beads-backend-test-br-supports-core-ops ()
-  "Test that br backend supports core operations."
-  (let ((br (beads-backend--lookup "br")))
-    (dolist (op '("list" "show" "ready" "create" "update" "close"
-                  "delete" "stats"))
-      (should (beads-backend-supports-p br op)))))
-
-(ert-deftest beads-backend-test-br-missing-ops ()
-  "Test that br backend does not support bd-specific operations."
-  (let ((br (beads-backend--lookup "br")))
-    (dolist (op '("types" "duplicates"
-                    "comments-add" "config_get"))
-      (should-not (beads-backend-supports-p br op)))))
-
 (ert-deftest beads-backend-test-require-operation-signals ()
   "Test that require-operation signals for unsupported ops."
-  (let ((br (beads-backend--lookup "br")))
-    (should-error (beads-backend-require-operation br "health")
+  (let ((bd (beads-backend--lookup "bd")))
+    (should-error (beads-backend-require-operation bd "health")
                   :type 'beads-backend-error)))
 
 (ert-deftest beads-backend-test-require-operation-passes ()
@@ -89,17 +70,6 @@
           (beads-backend--project-cache (make-hash-table :test 'equal)))
       (should (equal (beads-backend-name (beads-backend-for-project)) "bd")))))
 
-(ert-deftest beads-backend-test-detect-br-fallback ()
-  "Test auto-detection falls back to br when bd not available."
-  (cl-letf (((symbol-function 'executable-find)
-             (lambda (cmd) (when (equal cmd "br") "/usr/bin/br")))
-            ((symbol-function 'beads-client--project-root)
-             (lambda () nil)))
-    (let ((beads-cli-program nil)
-          (beads-dolt-sql-enabled nil)
-          (beads-backend--project-cache (make-hash-table :test 'equal)))
-      (should (equal (beads-backend-name (beads-backend-for-project)) "br")))))
-
 (ert-deftest beads-backend-test-detect-none-signals ()
   "Test auto-detection signals when no CLI found."
   (cl-letf (((symbol-function 'executable-find) (lambda (_) nil))
@@ -113,13 +83,17 @@
 
 (ert-deftest beads-backend-test-override-via-defcustom ()
   "Test that beads-cli-program overrides auto-detection."
-  (cl-letf (((symbol-function 'executable-find)
-             (lambda (cmd) (when (equal cmd "bd") "/usr/bin/bd")))
-            ((symbol-function 'beads-client--project-root)
-             (lambda () nil)))
-    (let ((beads-cli-program "br")
+  (let ((beads-backend--registry beads-backend--registry))
+    (beads-backend-register
+     (make-beads-backend
+      :name "test-override"
+      :cli-program "test-override-cli"
+      :supported-ops '("list")
+      :op-to-cli-args (lambda (_op _args) '("list"))))
+    (let ((beads-cli-program "test-override-cli")
           (beads-backend--project-cache (make-hash-table :test 'equal)))
-      (should (equal (beads-backend-name (beads-backend-for-project)) "br")))))
+      (should (equal (beads-backend-name (beads-backend-for-project))
+                     "test-override")))))
 
 (ert-deftest beads-backend-test-project-cache ()
   "Test that backends are cached per project root."
@@ -291,11 +265,6 @@
 (ert-deftest beads-backend-test-bd-unknown-op-signals ()
   "Test bd backend signals on unknown operation."
   (should-error (beads-backend-bd--operation-to-cli-args "bogus" nil)
-                :type 'beads-backend-error))
-
-(ert-deftest beads-backend-test-br-unknown-op-signals ()
-  "Test br backend signals on unknown operation."
-  (should-error (beads-backend-br--operation-to-cli-args "health" nil)
                 :type 'beads-backend-error))
 
 ;;; Shared utility tests
