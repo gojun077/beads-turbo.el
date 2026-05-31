@@ -59,9 +59,6 @@ in the mode line of the list view."
   :type 'boolean
   :group 'beads-list)
 
-(define-obsolete-variable-alias 'beads-list-type-style 'beads-type-style "0.47")
-(define-obsolete-variable-alias 'beads-list-type-glyph 'beads-type-glyph "0.47")
-
 (defcustom beads-list-sort-mode 'sectioned
   "How to sort issues in the list view.
 When `sectioned', group issues into status sections.  The org view
@@ -70,14 +67,6 @@ When `column', sort issues by the current list sort key before rendering."
   :type '(choice (const :tag "Sectioned (unblocked/blocked/closed)" sectioned)
                  (const :tag "Column-based" column))
   :group 'beads-list)
-
-(define-obsolete-face-alias 'beads-list-status-open 'beads-status-open "0.47")
-(define-obsolete-face-alias 'beads-list-status-in-progress 'beads-status-in-progress "0.47")
-(define-obsolete-face-alias 'beads-list-status-closed 'beads-status-closed "0.47")
-(define-obsolete-face-alias 'beads-list-status-blocked 'beads-status-blocked "0.47")
-(define-obsolete-face-alias 'beads-list-status-hooked 'beads-status-hooked "0.47")
-(define-obsolete-face-alias 'beads-list-priority-p0 'beads-priority-p0 "0.47")
-(define-obsolete-face-alias 'beads-list-priority-p1 'beads-priority-p1 "0.47")
 
 (defface beads-list-header-line
   '((t :inherit header-line))
@@ -98,12 +87,6 @@ When `column', sort issues by the current list sort key before rendering."
 (defface beads-list-deps-child
   '((t :foreground "green"))
   "Face for has-children dependency indicator.")
-
-(define-obsolete-face-alias 'beads-list-type-gate 'beads-type-gate "0.47")
-(define-obsolete-face-alias 'beads-list-type-convoy 'beads-type-convoy "0.47")
-(define-obsolete-face-alias 'beads-list-type-agent 'beads-type-agent "0.47")
-(define-obsolete-face-alias 'beads-list-type-role 'beads-type-role "0.47")
-(define-obsolete-face-alias 'beads-list-type-rig 'beads-type-rig "0.47")
 
 (defconst beads-list--org-status-todo-map
   '(("open" . "TODO")

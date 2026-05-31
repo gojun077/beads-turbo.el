@@ -975,14 +975,14 @@ These settings are optional.  The defaults work well for most users.
 @node Type Display
 @section Type Display
 
-@vindex beads-list-type-style
+@vindex beads-type-style
 
 @lisp
 ;; Full names (default): bug, feature, task, epic, chore
-(setq beads-list-type-style 'full)
+(setq beads-type-style 'full)
 
 ;; Abbreviations: bug, feat, task, epic, chor
-(setq beads-list-type-style 'short)
+(setq beads-type-style 'short)
 @end lisp
 
 @node Sorting (1)
@@ -1070,15 +1070,15 @@ Customize colors with @samp{M-x customize-face} or in your init file.
 
 @itemize
 @item
-@code{beads-list-status-open} - Open issues
+@code{beads-status-open} - Open issues
 @item
-@code{beads-list-status-in-progress} - In-progress issues
+@code{beads-status-in-progress} - In-progress issues
 @item
-@code{beads-list-status-closed} - Closed issues
+@code{beads-status-closed} - Closed issues
 @item
-@code{beads-list-priority-p0} - P0 (critical) - inverted error colors
+@code{beads-priority-p0} - P0 (critical) - inverted error colors
 @item
-@code{beads-list-priority-p1} - P1 (high) - error colors
+@code{beads-priority-p1} - P1 (high) - error colors
 @item
 @code{beads-list-header-line} - Header line background
 @item
@@ -1112,7 +1112,7 @@ Customize colors with @samp{M-x customize-face} or in your init file.
 
 @lisp
 ;; Make P0 more prominent
-(set-face-attribute 'beads-list-priority-p0 nil
+(set-face-attribute 'beads-priority-p0 nil
                     :background "dark red"
                     :foreground "white"
                     :weight 'bold)

@@ -506,14 +506,14 @@ These settings are optional.  The defaults work well for most users.
 
 ** Type Display
 
-#+vindex: beads-list-type-style
+#+vindex: beads-type-style
 
 #+begin_src emacs-lisp
 ;; Full names (default): bug, feature, task, epic, chore
-(setq beads-list-type-style 'full)
+(setq beads-type-style 'full)
 
 ;; Abbreviations: bug, feat, task, epic, chor
-(setq beads-list-type-style 'short)
+(setq beads-type-style 'short)
 #+end_src
 
 ** Sorting
@@ -588,11 +588,11 @@ Customize colors with =M-x customize-face= or in your init file.
 
 ** List View Faces
 
-- ~beads-list-status-open~ - Open issues
-- ~beads-list-status-in-progress~ - In-progress issues
-- ~beads-list-status-closed~ - Closed issues
-- ~beads-list-priority-p0~ - P0 (critical) - inverted error colors
-- ~beads-list-priority-p1~ - P1 (high) - error colors
+- ~beads-status-open~ - Open issues
+- ~beads-status-in-progress~ - In-progress issues
+- ~beads-status-closed~ - Closed issues
+- ~beads-priority-p0~ - P0 (critical) - inverted error colors
+- ~beads-priority-p1~ - P1 (high) - error colors
 - ~beads-list-header-line~ - Header line background
 - ~beads-list-header-count~ - Count numbers in header
 - ~beads-list-deps-blocked~ - Blocked indicator (red)
@@ -611,7 +611,7 @@ Customize colors with =M-x customize-face= or in your init file.
 
 #+begin_src emacs-lisp
 ;; Make P0 more prominent
-(set-face-attribute 'beads-list-priority-p0 nil
+(set-face-attribute 'beads-priority-p0 nil
                     :background "dark red"
                     :foreground "white"
                     :weight 'bold)
