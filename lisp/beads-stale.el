@@ -46,9 +46,6 @@ When nil, show all statuses.  Otherwise, filter to this status."
                  (const :tag "Blocked" "blocked"))
   :group 'beads-stale)
 
-(defvar-local beads-stale--data nil
-  "List of stale issue data in current buffer.")
-
 (defvar-local beads-stale--days nil
   "Current days threshold for this buffer.")
 
@@ -136,7 +133,6 @@ STATUS optionally filters by issue status."
         (let ((issues (beads-stale--fetch days status)))
           (with-current-buffer (get-buffer-create "*Beads Stale*")
             (beads-stale-mode)
-            (setq beads-stale--data issues)
             (setq beads-stale--days days)
             (setq beads-stale--status status)
             (beads-stale--render issues)
@@ -181,7 +177,6 @@ STATUS optionally filters by issue status."
       (let ((issues (beads-stale--fetch
                      (or beads-stale--days beads-stale-days)
                      beads-stale--status)))
-        (setq beads-stale--data issues)
         (let ((saved-point (point)))
           (beads-stale--render issues)
           (goto-char (min saved-point (point-max))))

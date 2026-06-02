@@ -65,7 +65,6 @@ Can be set per-project via .dir-locals.el."
   "Look up a backend by NAME in the registry."
   (alist-get name beads-backend--registry nil nil #'equal))
 
-(declare-function beads-client--find-database "beads-client")
 (declare-function beads-client--project-root "beads-client")
 
 (defun beads-backend-for-project ()

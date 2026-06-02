@@ -42,11 +42,6 @@ projects coexist in the same Emacs session without one project's
 cache poisoning another's lookup.")
 (defconst beads-client--cache-ttl 10)
 
-;; Backwards-compatible aliases for code or tests that may inspect
-;; the previous globals.  They are no longer used internally.
-(defvar beads-client--cached-db-path nil)
-(defvar beads-client--cache-time nil)
-
 (cl-defun beads-client--find-database ()
   "Find the Beads database path using auto-discovery.
 Checks BEADS_DIR env, a BEADS_DB env override that points at
@@ -462,9 +457,7 @@ Converts :kebab-case to snake_case symbols."
   "Clear the cached database path.
 Useful when switching between projects."
   (interactive)
-  (clrhash beads-client--db-cache)
-  (setq beads-client--cached-db-path nil)
-  (setq beads-client--cache-time nil))
+  (clrhash beads-client--db-cache))
 
 (provide 'beads-client)
 ;;; beads-client.el ends here

@@ -30,7 +30,6 @@
 (require 'beads-core)
 (require 'beads-faces)
 
-(declare-function beads-detail-open "beads-detail")
 (declare-function evil-set-initial-state "evil-core")
 (declare-function evil-make-overriding-map "evil-core")
 
@@ -40,9 +39,6 @@
 
 (defvar-local beads-hierarchy--root-id nil
   "Root issue ID for current hierarchy buffer.")
-
-(defvar-local beads-hierarchy--hierarchy nil
-  "The hierarchy object for current buffer.")
 
 (defvar-local beads-hierarchy--by-id nil
   "Hash table mapping issue IDs to issue data.")
@@ -281,7 +277,6 @@ For ancestors, we look for issues that have this as beads--child-id."
       (with-current-buffer buffer
         (beads-hierarchy-mode)
         (setq beads-hierarchy--root-id issue-id)
-        (setq beads-hierarchy--hierarchy h)
         (setq beads-hierarchy--by-id by-id)
         (beads-hierarchy--expand-all)
         (beads-hierarchy--goto-issue issue-id))

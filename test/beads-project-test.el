@@ -66,10 +66,5 @@
                (lambda () "/code/awesome/")))
       (should (string= (beads-project-buffer-name) "*Issues: awesome*")))))
 
-(ert-deftest beads-list-test-project-root-var-exists ()
-  "Test that beads-list--project-root buffer-local variable exists."
-  (with-temp-buffer
-    (should (local-variable-if-set-p 'beads-list--project-root))))
-
 (provide 'beads-project-test)
 ;;; beads-project-test.el ends here

@@ -27,12 +27,8 @@
 
 ;;; Code:
 
-(require 'json)
 (require 'beads-backend)
 (require 'beads-core)
-
-(defvar-local beads-conflicts--data nil
-  "Conflict status data in current buffer.")
 
 (defvar beads-conflicts-mode-map
   (let ((map (make-sparse-keymap)))
@@ -106,7 +102,6 @@ This feature is not available with the current beads version."
   (let ((result (beads-conflicts--fetch)))
     (with-current-buffer (get-buffer-create "*Beads Conflicts*")
       (beads-conflicts-mode)
-      (setq beads-conflicts--data result)
       (beads-conflicts--render result)
       (goto-char (point-min))
       (pop-to-buffer (current-buffer)
@@ -137,7 +132,6 @@ This feature is not available with the current beads version."
   (unless (derived-mode-p 'beads-conflicts-mode)
     (user-error "Not in beads-conflicts-mode"))
   (let ((result (beads-conflicts--fetch)))
-    (setq beads-conflicts--data result)
     (let ((saved-point (point)))
       (beads-conflicts--render result)
       (goto-char (min saved-point (point-max))))

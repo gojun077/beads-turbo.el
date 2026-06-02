@@ -25,7 +25,6 @@
 
 ;;; Code:
 
-(require 'json)
 (require 'beads-backend)
 (require 'beads-core)
 
@@ -44,9 +43,6 @@
 (defface beads-duplicates-group-header
   '((t :inherit bold :underline t))
   "Face for duplicate group headers.")
-
-(defvar-local beads-duplicates--data nil
-  "Parsed duplicates data in current buffer.")
 
 (defvar beads-duplicates-mode-map
   (let ((map (make-sparse-keymap)))
@@ -134,7 +130,6 @@ Duplicates are issues with identical content that can be merged."
       (let ((data (beads-duplicates--fetch)))
         (with-current-buffer (get-buffer-create "*Beads Duplicates*")
           (beads-duplicates-mode)
-          (setq beads-duplicates--data data)
           (beads-duplicates--render data)
           (goto-char (point-min))
           (pop-to-buffer (current-buffer)
@@ -221,7 +216,6 @@ Duplicates are issues with identical content that can be merged."
     (user-error "Not in beads-duplicates-mode"))
   (condition-case err
       (let ((data (beads-duplicates--fetch)))
-        (setq beads-duplicates--data data)
         (let ((saved-point (point)))
           (beads-duplicates--render data)
           (goto-char (min saved-point (point-max))))

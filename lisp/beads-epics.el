@@ -33,11 +33,6 @@
 
 (require 'beads-core)
 (require 'beads-client)
-(require 'beads-cache)
-(require 'beads-detail)
-
-(defvar-local beads-epics--data nil
-  "List of epic-status entries in current buffer.")
 
 (defvar-local beads-epics--eligible-only nil
   "Non-nil when the buffer is filtered to eligible-for-close epics only.")
@@ -147,7 +142,6 @@ whose children are all closed (eligible for closure)."
         (with-current-buffer (get-buffer-create "*Beads Epics*")
           (beads-epics-mode)
           (setq beads-epics--eligible-only (and eligible-only t))
-          (setq beads-epics--data entries)
           (beads-epics--render entries)
           (goto-char (point-min))
           (pop-to-buffer (current-buffer)
@@ -187,7 +181,6 @@ detail buffer with the full issue record."
     (user-error "Not in beads-epics-mode"))
   (condition-case err
       (let ((entries (beads-epics--fetch beads-epics--eligible-only)))
-        (setq beads-epics--data entries)
         (let ((saved-point (point)))
           (beads-epics--render entries)
           (goto-char (min saved-point (point-max))))

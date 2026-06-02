@@ -29,7 +29,6 @@
 (require 'beads-detail)
 (require 'beads-list-data)
 
-(declare-function beads-client-types "beads-client")
 (require 'beads-filter)
 (require 'beads-preview)
 (require 'beads-faces)
@@ -43,7 +42,6 @@
 (declare-function beads-edit-field-minibuffer "beads-edit")
 (declare-function beads-edit-field-completing "beads-edit")
 (declare-function beads-edit-field-markdown "beads-edit")
-(declare-function beads-project-buffer-name "beads-project")
 (declare-function beads-project-root "beads-project")
 (declare-function evil-set-initial-state "evil-core")
 (declare-function evil-make-overriding-map "evil-core")
@@ -216,17 +214,11 @@ resolved by issue id to keep org rendering deterministic."
                (t
                 (beads-list--compare-sort-values value-a value-b))))))))
 
-(defvar-local beads-list--project-root nil
-  "Project root for this beads list buffer.
-Used to ensure refresh uses the correct project context.")
-
 (defvar-local beads-org-list--project-root nil
   "Project root for this org list buffer.
 Used to ensure refresh uses the correct project context.")
 
 (declare-function beads-filter-menu "beads-transient")
-(declare-function beads-delete-issue "beads-transient")
-(declare-function beads-reopen-issue "beads-transient")
 (declare-function beads-search "beads-transient")
 (declare-function beads-stats "beads-transient")
 (declare-function beads-create-issue "beads-transient")
@@ -1397,7 +1389,6 @@ not visit an org file on disk.  This is also the default view opened by
       (unless (eq major-mode 'beads-org-list-mode)
         (beads-org-list-mode))
       (setq beads-org-list--project-root project-root)
-      (setq beads-list--project-root project-root)
       ;; Pin default-directory to the project root so generated org
       ;; refreshes do not depend on the caller's current buffer or any
       ;; org file path.

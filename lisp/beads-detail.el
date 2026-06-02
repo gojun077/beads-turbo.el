@@ -37,7 +37,6 @@
 (declare-function beads-delete-issue "beads-transient")
 (declare-function beads-reopen-issue "beads-transient")
 (declare-function beads-list "beads-list")
-(declare-function beads-list-refresh "beads-list")
 (declare-function beads-org-list-refresh "beads-list")
 (declare-function beads-list--refresh-current-view "beads-list")
 (declare-function beads-filter-by-parent "beads-filter")

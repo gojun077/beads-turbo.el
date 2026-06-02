@@ -959,7 +959,6 @@
               (should (eq major-mode 'beads-org-list-mode))
               (should (equal default-directory project-root))
               (should (equal beads-org-list--project-root project-root))
-              (should (equal beads-list--project-root project-root))
               (should (equal refreshed project-root))
               (should (null buffer-file-name))
               (should (string-match-p "^\\* Ready\n\\*\\* TODO First" (buffer-string))))))

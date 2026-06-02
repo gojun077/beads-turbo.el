@@ -49,9 +49,6 @@
   '((t :inherit error :weight bold))
   "Face for warning counts.")
 
-(defvar-local beads-lint--data nil
-  "Parsed lint data in current buffer.")
-
 (defvar-local beads-lint--type-filter nil
   "Current type filter (nil = all types).")
 
@@ -153,7 +150,6 @@ Shows issues missing required template sections based on their type."
       (let ((data (beads-lint--fetch)))
         (with-current-buffer (get-buffer-create "*Beads Lint*")
           (beads-lint-mode)
-          (setq beads-lint--data data)
           (setq beads-lint--type-filter nil)
           (beads-lint--render data)
           (goto-char (point-min))
@@ -177,7 +173,6 @@ Shows issues missing required template sections based on their type."
     (user-error "Not in beads-lint-mode"))
   (condition-case err
       (let ((data (beads-lint--fetch beads-lint--type-filter)))
-        (setq beads-lint--data data)
         (let ((saved-point (point)))
           (beads-lint--render data)
           (goto-char (min saved-point (point-max))))

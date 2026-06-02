@@ -28,9 +28,6 @@
 (require 'beads-core)
 (require 'beads-client)
 
-(defvar-local beads-orphans--data nil
-  "List of orphan data in current buffer.")
-
 (defvar beads-orphans-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "RET") #'beads-orphans-goto-issue)
@@ -87,7 +84,6 @@ Orphans are issues referenced in commits but not marked as closed."
       (let ((orphans (beads-orphans--fetch)))
         (with-current-buffer (get-buffer-create "*Beads Orphans*")
           (beads-orphans-mode)
-          (setq beads-orphans--data orphans)
           (beads-orphans--render orphans)
           (goto-char (point-min))
           (pop-to-buffer (current-buffer)
@@ -128,7 +124,6 @@ Orphans are issues referenced in commits but not marked as closed."
     (user-error "Not in beads-orphans-mode"))
   (condition-case err
       (let ((orphans (beads-orphans--fetch)))
-        (setq beads-orphans--data orphans)
         (let ((saved-point (point)))
           (beads-orphans--render orphans)
           (goto-char (min saved-point (point-max))))
