@@ -50,7 +50,7 @@ Hints are shown when entering beads modes to help with discoverability."
      . "↑↓ browse | RET open | e/E edit | P/q exit preview | ? menu")
     (beads-detail-vui-mode
      . "? menu | e <key> edit | E form | g refresh | q quit")
-    (beads-form-mode
+    (beads-form-vui-mode
      . "TAB next | C-c C-c save | C-c C-k cancel"))
   "Alist of mode symbols to hint strings.")
 

@@ -870,7 +870,7 @@ Workflow: @samp{needs-review}, @samp{ready-to-test}
 @chapter Form Editor
 
 @cindex form editor
-@findex beads-form-mode
+@findex beads-form-vui-mode
 
 Press @samp{E} to open the form editor.  This shows all fields in one
 place, like filling out a form.
@@ -1146,7 +1146,7 @@ Standard hooks are available for each mode:
 @item
 @code{beads-detail-vui-mode-hook}
 @item
-@code{beads-form-mode-hook}
+@code{beads-form-vui-mode-hook}
 @item
 @code{beads-hierarchy-mode-hook}
 @item

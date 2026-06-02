@@ -5,7 +5,7 @@
 ;; Author: Christian Tietze
 ;; Version: 0.1.0
 ;; Package-Requires: ((emacs "28.1") (transient "0.4.0") (vui "0.1.0"))
-;; Keywords: tools, project, ui, widget
+;; Keywords: tools, project, ui
 ;; URL: https://codeberg.org/ctietze/beads.el
 
 ;; This file is NOT part of GNU Emacs.
