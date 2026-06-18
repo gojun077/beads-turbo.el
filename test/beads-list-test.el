@@ -823,6 +823,52 @@
         (beads-org-list-refresh t)
         (should (equal (beads-list--org-id-at-point) "bd-b"))))))
 
+(ert-deftest beads-list-test-org-list-refresh-preserves-nonselected-window-point ()
+  "Detail-triggered org refresh keeps the visible list cursor on the same bead.
+
+When a detail edit refreshes list buffers, the list window is usually
+visible but not selected.  In that state `goto-char' restores the
+buffer point, but Emacs keeps a separate `window-point' for the visible
+cursor.  The refresh must restore that window point too."
+  (let* ((list-buffer (generate-new-buffer " *beads-org-list-nonselected-window-test*"))
+         (other-buffer (generate-new-buffer " *beads-org-list-other-window-test*"))
+         (issues '(((id . "bd-a") (title . "First") (status . "open"))
+                   ((id . "bd-b") (title . "Second") (status . "open"))
+                   ((id . "bd-c") (title . "Third") (status . "open"))))
+         (previous-buffer (current-buffer))
+         (list-window (selected-window))
+         other-window)
+    (unwind-protect
+        (progn
+          (delete-other-windows)
+          (set-window-buffer list-window list-buffer)
+          (set-buffer list-buffer)
+          (beads-org-list-mode)
+          (cl-letf (((symbol-function 'beads-cache-refresh)
+                     (lambda (&rest _args) (cons t issues))))
+            (beads-org-list-refresh t)
+            (should (beads-list--org-goto-id "bd-b"))
+            (set-window-point list-window (point))
+            (setq other-window (split-window list-window))
+            (set-window-buffer other-window other-buffer)
+            (select-window other-window)
+            (with-current-buffer list-buffer
+              (beads-org-list-refresh t))
+            (with-current-buffer list-buffer
+              (goto-char (window-point list-window))
+              (should (equal (beads-list--org-id-at-point) "bd-b")))))
+      (when (window-live-p list-window)
+        (select-window list-window)
+        (when (buffer-live-p previous-buffer)
+          (set-window-buffer list-window previous-buffer)))
+      (delete-other-windows)
+      (when (buffer-live-p previous-buffer)
+        (set-buffer previous-buffer))
+      (when (buffer-live-p list-buffer)
+        (kill-buffer list-buffer))
+      (when (buffer-live-p other-buffer)
+        (kill-buffer other-buffer)))))
+
 (ert-deftest beads-list-test-org-list-refresh-keeps-moved-issue-visible ()
   "Org refresh keeps the selected issue visible after it moves sections."
   (let* ((buffer (generate-new-buffer " *beads-org-list-window-test*"))

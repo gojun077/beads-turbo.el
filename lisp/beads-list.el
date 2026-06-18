@@ -402,15 +402,19 @@ heading when the current issue no longer exists, and reapplies folded
 subtrees by issue ID after regenerating the org text.
 
 Must be called with a `beads-org-list-mode' buffer current."
-  (let* ((saved-id (beads-list--org-id-at-point))
+  (let* ((window (get-buffer-window (current-buffer)))
+         (saved-point (if window (window-point window) (point)))
+         (saved-id (save-excursion
+                     (goto-char saved-point)
+                     (beads-list--org-id-at-point)))
          (saved-index (and saved-id
                            (cl-position saved-id beads-list--issues
                                         :key (lambda (issue)
                                                (alist-get 'id issue))
                                         :test #'equal)))
-         (saved-line (line-number-at-pos))
-         (saved-start-line (when-let ((win (get-buffer-window (current-buffer))))
-                             (line-number-at-pos (window-start win))))
+         (saved-line (line-number-at-pos saved-point))
+         (saved-start-line (when window
+                             (line-number-at-pos (window-start window))))
          (folded-ids (beads-list--org-folded-ids))
          (effective-sort-mode (beads-list--effective-sort-mode))
          (model (beads-list-data-build
@@ -446,9 +450,10 @@ Must be called with a `beads-org-list-mode' buffer current."
                            display-issues))))
      (t
       (beads-list--org-goto-near-line saved-line)))
-    (when-let ((win (get-buffer-window (current-buffer)))
+    (when-let ((win window)
                (line saved-start-line))
       (let ((restored-point (point)))
+        (set-window-point win restored-point)
         (save-excursion
           (goto-char (point-min))
           (forward-line (1- (min line (line-number-at-pos (point-max)))))
@@ -457,7 +462,8 @@ Must be called with a `beads-org-list-mode' buffer current."
           (save-excursion
             (goto-char restored-point)
             (beginning-of-line)
-            (set-window-start win (point))))))
+            (set-window-start win (point))))
+        (set-window-point win restored-point)))
     (beads-list--update-mode-line (beads-list-data-stats model))
     (unless silent
       (let ((filter-msg (if beads-list--filter
