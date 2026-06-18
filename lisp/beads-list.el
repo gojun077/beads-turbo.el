@@ -144,7 +144,7 @@ unknown fields, so headings and drawers do not grow noisy.  If both
 (defvar-local beads-list--show-only-marked nil
   "When non-nil, only show marked issues in the list.")
 
-(defvar beads-list--issues nil
+(defvar-local beads-list--issues nil
   "Cached list of issues for current buffer.")
 
 (defvar-local beads-list--filter nil

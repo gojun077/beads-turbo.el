@@ -974,6 +974,49 @@ command does not report No issue at point."
             (should (equal edited '("bd-a" :title "First" "Title: ")))
             (should refreshed)))))))
 
+(ert-deftest beads-list-test-org-list-issue-cache-is-buffer-local ()
+  "Multiple org list buffers keep independent issue caches.
+
+Regression for bdel-91f.26/bdel-91f.27: detail-view edits refresh all
+open org list buffers.  With two project buffers open, refreshing one
+buffer must not replace the other buffer's backing issue list, or the
+other buffer can still display a BEADS_ID while edit commands report
+No issue at point."
+  (let ((buffer-a (generate-new-buffer " *beads-org-list-project-a*"))
+        (buffer-b (generate-new-buffer " *beads-org-list-project-b*"))
+        (issues-a '(((id . "bd-project-a")
+                     (title . "Project A issue")
+                     (status . "open")
+                     (priority . 0))))
+        (issues-b '(((id . "bd-project-b")
+                     (title . "Project B issue")
+                     (status . "open")
+                     (priority . 0)))))
+    (unwind-protect
+        (progn
+          (with-current-buffer buffer-a
+            (beads-org-list-mode)
+            (cl-letf (((symbol-function 'beads-cache-refresh)
+                       (lambda (&rest _args) (cons t issues-a))))
+              (beads-org-list-refresh t))
+            (should (beads-list--org-goto-id "bd-project-a")))
+          (with-current-buffer buffer-b
+            (beads-org-list-mode)
+            (cl-letf (((symbol-function 'beads-cache-refresh)
+                       (lambda (&rest _args) (cons t issues-b))))
+              (beads-org-list-refresh t))
+            (should (beads-list--org-goto-id "bd-project-b")))
+          (with-current-buffer buffer-a
+            (should (equal (alist-get 'id (beads-list--get-issue-at-point))
+                           "bd-project-a")))
+          (with-current-buffer buffer-b
+            (should (equal (alist-get 'id (beads-list--get-issue-at-point))
+                           "bd-project-b"))))
+      (when (buffer-live-p buffer-a)
+        (kill-buffer buffer-a))
+      (when (buffer-live-p buffer-b)
+        (kill-buffer buffer-b)))))
+
 (ert-deftest beads-list-test-org-list-refresh-preserves-folded-subtrees ()
   "Org refresh reapplies folded issue subtrees by bead ID."
   (let ((issues '(((id . "bd-parent")
