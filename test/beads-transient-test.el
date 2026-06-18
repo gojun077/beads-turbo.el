@@ -249,7 +249,7 @@
     (should (eq (lookup-key beads-detail-vui-base-map (kbd "e n")) #'beads-detail-edit-notes))
     (should (eq (lookup-key beads-detail-vui-base-map (kbd "e l a")) #'beads-detail-edit-label-add))
     (should (eq (lookup-key beads-detail-vui-base-map (kbd "e l r")) #'beads-detail-edit-label-remove))
-    (should (eq (lookup-key beads-detail-vui-base-map (kbd "q")) #'beads-core-quit-window-kill-buffer))))
+    (should (eq (lookup-key beads-detail-vui-base-map (kbd "q")) #'beads-detail-quit))))
 
 ;;; Dolt SQL toggle tests
 
