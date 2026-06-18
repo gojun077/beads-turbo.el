@@ -895,6 +895,39 @@
           (should-not (equal (beads-list--org-id-at-point) "bd-b"))
           (should-not (= (point) (point-min))))))))
 
+(ert-deftest beads-list-test-org-list-refresh-skips-section-heading-for-edit ()
+  "Background org refresh lands on an issue heading, not a section heading.
+
+Regression for bdel-91f.26: detail-view edits refresh visible list
+buffers.  If point was on a generated section heading such as Ready,
+the refresh fallback must move to a real issue so the next list edit
+command does not report No issue at point."
+  (let ((issues '(((id . "bd-a") (title . "First") (status . "open")
+                   (priority . 0))
+                  ((id . "bd-b") (title . "Second") (status . "open")
+                   (priority . 1)))))
+    (with-temp-buffer
+      (beads-org-list-mode)
+      (cl-letf (((symbol-function 'beads-cache-refresh)
+                 (lambda (&rest _args) (cons t issues))))
+        (beads-org-list-refresh t)
+        (goto-char (point-min))
+        (re-search-forward "^\\* Ready")
+        (beginning-of-line)
+        (beads-org-list-refresh t)
+        (should (equal (beads-list--org-id-at-point) "bd-a"))
+        (let ((edited nil)
+              (refreshed nil))
+          (cl-letf (((symbol-function 'beads-edit-field-minibuffer)
+                     (lambda (id field current prompt)
+                       (setq edited (list id field current prompt))
+                       t))
+                    ((symbol-function 'beads-org-list-refresh)
+                     (lambda (&optional _silent) (setq refreshed t))))
+            (beads-list-edit-title)
+            (should (equal edited '("bd-a" :title "First" "Title: ")))
+            (should refreshed)))))))
+
 (ert-deftest beads-list-test-org-list-refresh-preserves-folded-subtrees ()
   "Org refresh reapplies folded issue subtrees by bead ID."
   (let ((issues '(((id . "bd-parent")
