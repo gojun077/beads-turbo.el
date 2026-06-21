@@ -9,6 +9,33 @@ This document describes the development workflow for beads.el.
 
 No Python or mise required — all tooling is plain shell scripts invoked via `make`.
 
+## Clone vendored dependencies
+
+This project vendors Emacs Lisp dependencies as git submodules under `vendor/`:
+
+- `vendor/vui.el` from `https://github.com/d12frosted/vui.el`
+- `vendor/mysql.el` from `https://github.com/LuciusChen/mysql.el`
+
+When cloning a fresh checkout, include submodules:
+
+```bash
+git clone --recurse-submodules https://github.com/gojun077/beads-turbo.el.git
+```
+
+If you already cloned the repository without submodules, initialize them from the repo root:
+
+```bash
+git submodule update --init --recursive
+```
+
+Verify the vendored dependencies with:
+
+```bash
+git submodule status
+```
+
+A leading `-` means the submodule directory exists in git metadata but has not been cloned into `vendor/` yet.
+
 ## Development Tasks
 
 ### Linting
