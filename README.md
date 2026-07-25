@@ -54,7 +54,32 @@ TODO
 (require 'beads)
 ```
 
-> **Note:** When cloning the repository, make sure to also pull the vendored `vui.el` submodule under `vendor/vui.el`. Either clone with `git clone --recurse-submodules <url>`, or, if you've already cloned, run `git submodule update --init --recursive` from the repo root.  A leading `-` in `git submodule status` indicates the submodule has not been initialized yet.
+### Vendored dependencies
+
+This repository vendors Emacs Lisp dependencies as git submodules under `vendor/`:
+
+- `vendor/vui.el`
+- `vendor/mysql.el`
+
+Clone them with the repository:
+
+```bash
+git clone --recurse-submodules https://github.com/gojun077/beads-turbo.el.git
+```
+
+If you've already cloned the repository, initialize the vendored dependencies from the repo root:
+
+```bash
+git submodule update --init --recursive
+```
+
+You can check whether the dependencies are present with:
+
+```bash
+git submodule status
+```
+
+A leading `-` in `git submodule status` means a submodule has not been initialized yet.
 
 ### With straight.el
 
