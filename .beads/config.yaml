@@ -1,8 +1,9 @@
 db: ""
 no-db: false
 
+# use public Dolthub remote (not git+ssh remote)
 sync:
-    mode: dolt-native
+  mode: dolt-native
 sync-branch: beads-sync
 sync.remote: "gojun077/beads_bdel"
 
@@ -12,5 +13,6 @@ backup:
 
 # Disable auto-export of issues.jsonl
 export.auto: false
+import.auto: false
 
-dolt.port: 3310
+dolt.shared-server: true
