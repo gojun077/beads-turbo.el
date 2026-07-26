@@ -823,6 +823,52 @@
         (beads-org-list-refresh t)
         (should (equal (beads-list--org-id-at-point) "bd-b"))))))
 
+(ert-deftest beads-list-test-org-list-refresh-preserves-nonselected-window-point ()
+  "Detail-triggered org refresh keeps the visible list cursor on the same bead.
+
+When a detail edit refreshes list buffers, the list window is usually
+visible but not selected.  In that state `goto-char' restores the
+buffer point, but Emacs keeps a separate `window-point' for the visible
+cursor.  The refresh must restore that window point too."
+  (let* ((list-buffer (generate-new-buffer " *beads-org-list-nonselected-window-test*"))
+         (other-buffer (generate-new-buffer " *beads-org-list-other-window-test*"))
+         (issues '(((id . "bd-a") (title . "First") (status . "open"))
+                   ((id . "bd-b") (title . "Second") (status . "open"))
+                   ((id . "bd-c") (title . "Third") (status . "open"))))
+         (previous-buffer (current-buffer))
+         (list-window (selected-window))
+         other-window)
+    (unwind-protect
+        (progn
+          (delete-other-windows)
+          (set-window-buffer list-window list-buffer)
+          (set-buffer list-buffer)
+          (beads-org-list-mode)
+          (cl-letf (((symbol-function 'beads-cache-refresh)
+                     (lambda (&rest _args) (cons t issues))))
+            (beads-org-list-refresh t)
+            (should (beads-list--org-goto-id "bd-b"))
+            (set-window-point list-window (point))
+            (setq other-window (split-window list-window))
+            (set-window-buffer other-window other-buffer)
+            (select-window other-window)
+            (with-current-buffer list-buffer
+              (beads-org-list-refresh t))
+            (with-current-buffer list-buffer
+              (goto-char (window-point list-window))
+              (should (equal (beads-list--org-id-at-point) "bd-b")))))
+      (when (window-live-p list-window)
+        (select-window list-window)
+        (when (buffer-live-p previous-buffer)
+          (set-window-buffer list-window previous-buffer)))
+      (delete-other-windows)
+      (when (buffer-live-p previous-buffer)
+        (set-buffer previous-buffer))
+      (when (buffer-live-p list-buffer)
+        (kill-buffer list-buffer))
+      (when (buffer-live-p other-buffer)
+        (kill-buffer other-buffer)))))
+
 (ert-deftest beads-list-test-org-list-refresh-keeps-moved-issue-visible ()
   "Org refresh keeps the selected issue visible after it moves sections."
   (let* ((buffer (generate-new-buffer " *beads-org-list-window-test*"))
@@ -894,6 +940,82 @@
           (should (member (beads-list--org-id-at-point) '("bd-a" "bd-c")))
           (should-not (equal (beads-list--org-id-at-point) "bd-b"))
           (should-not (= (point) (point-min))))))))
+
+(ert-deftest beads-list-test-org-list-refresh-skips-section-heading-for-edit ()
+  "Background org refresh lands on an issue heading, not a section heading.
+
+Regression for bdel-91f.26: detail-view edits refresh visible list
+buffers.  If point was on a generated section heading such as Ready,
+the refresh fallback must move to a real issue so the next list edit
+command does not report No issue at point."
+  (let ((issues '(((id . "bd-a") (title . "First") (status . "open")
+                   (priority . 0))
+                  ((id . "bd-b") (title . "Second") (status . "open")
+                   (priority . 1)))))
+    (with-temp-buffer
+      (beads-org-list-mode)
+      (cl-letf (((symbol-function 'beads-cache-refresh)
+                 (lambda (&rest _args) (cons t issues))))
+        (beads-org-list-refresh t)
+        (goto-char (point-min))
+        (re-search-forward "^\\* Ready")
+        (beginning-of-line)
+        (beads-org-list-refresh t)
+        (should (equal (beads-list--org-id-at-point) "bd-a"))
+        (let ((edited nil)
+              (refreshed nil))
+          (cl-letf (((symbol-function 'beads-edit-field-minibuffer)
+                     (lambda (id field current prompt)
+                       (setq edited (list id field current prompt))
+                       t))
+                    ((symbol-function 'beads-org-list-refresh)
+                     (lambda (&optional _silent) (setq refreshed t))))
+            (beads-list-edit-title)
+            (should (equal edited '("bd-a" :title "First" "Title: ")))
+            (should refreshed)))))))
+
+(ert-deftest beads-list-test-org-list-issue-cache-is-buffer-local ()
+  "Multiple org list buffers keep independent issue caches.
+
+Regression for bdel-91f.26/bdel-91f.27: detail-view edits refresh all
+open org list buffers.  With two project buffers open, refreshing one
+buffer must not replace the other buffer's backing issue list, or the
+other buffer can still display a BEADS_ID while edit commands report
+No issue at point."
+  (let ((buffer-a (generate-new-buffer " *beads-org-list-project-a*"))
+        (buffer-b (generate-new-buffer " *beads-org-list-project-b*"))
+        (issues-a '(((id . "bd-project-a")
+                     (title . "Project A issue")
+                     (status . "open")
+                     (priority . 0))))
+        (issues-b '(((id . "bd-project-b")
+                     (title . "Project B issue")
+                     (status . "open")
+                     (priority . 0)))))
+    (unwind-protect
+        (progn
+          (with-current-buffer buffer-a
+            (beads-org-list-mode)
+            (cl-letf (((symbol-function 'beads-cache-refresh)
+                       (lambda (&rest _args) (cons t issues-a))))
+              (beads-org-list-refresh t))
+            (should (beads-list--org-goto-id "bd-project-a")))
+          (with-current-buffer buffer-b
+            (beads-org-list-mode)
+            (cl-letf (((symbol-function 'beads-cache-refresh)
+                       (lambda (&rest _args) (cons t issues-b))))
+              (beads-org-list-refresh t))
+            (should (beads-list--org-goto-id "bd-project-b")))
+          (with-current-buffer buffer-a
+            (should (equal (alist-get 'id (beads-list--get-issue-at-point))
+                           "bd-project-a")))
+          (with-current-buffer buffer-b
+            (should (equal (alist-get 'id (beads-list--get-issue-at-point))
+                           "bd-project-b"))))
+      (when (buffer-live-p buffer-a)
+        (kill-buffer buffer-a))
+      (when (buffer-live-p buffer-b)
+        (kill-buffer buffer-b)))))
 
 (ert-deftest beads-list-test-org-list-refresh-preserves-folded-subtrees ()
   "Org refresh reapplies folded issue subtrees by bead ID."

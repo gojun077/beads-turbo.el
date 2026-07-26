@@ -23,6 +23,10 @@
 (declare-function beads-vui-make-edit-handler "beads-vui")
 (declare-function beads-vui-make-label-add-handler "beads-vui")
 (declare-function beads-vui-make-label-remove-handler "beads-vui")
+(declare-function beads-list--org-goto-id "beads-list")
+(declare-function beads-list--org-id-at-point "beads-list")
+(declare-function beads-org-list-mode "beads-list")
+(declare-function beads-org-list-refresh "beads-list")
 (declare-function vui-component "vui")
 (declare-function vui-render "vui")
 
@@ -146,11 +150,11 @@
                 #'beads-detail-refresh))))
 
 (ert-deftest beads-detail-test-mode-keybinding-quit ()
-  "Test that beads-detail-vui-mode binds 'q' to kill-buffer quit."
+  "Test that beads-detail-vui-mode binds 'q' to detail quit."
   (with-temp-buffer
     (beads-detail-vui-mode)
     (should (eq (lookup-key beads-detail-vui-base-map (kbd "q"))
-                #'beads-core-quit-window-kill-buffer))))
+                #'beads-detail-quit))))
 
 (ert-deftest beads-detail-test-mode-quit-kills-buffer ()
   "Test that the detail quit command kills the detail buffer."
@@ -163,6 +167,68 @@
           (should-not (buffer-live-p buffer)))
       (when (buffer-live-p buffer)
         (kill-buffer buffer)))))
+
+(ert-deftest beads-detail-test-quit-restores-origin-org-list-point ()
+  "Quitting detail view keeps the originating org list on the issue.
+
+Regression for bdel-91f.27: after a detail edit refreshes the list,
+closing the detail window must not leave the org list cursor on the
+generated #+TITLE header."
+  (require 'beads-list)
+  (let* ((list-buffer (generate-new-buffer " *beads-detail-origin-list-test*"))
+         (previous-buffer (current-buffer))
+         (list-window (selected-window))
+         (issues '(((id . "bd-a") (title . "First") (status . "open")
+                    (priority . 0))
+                   ((id . "bd-b") (title . "Second") (status . "open")
+                    (priority . 0))))
+         detail-buffer)
+    (unwind-protect
+        (cl-letf (((symbol-function 'beads-org-list-refresh-async)
+                   (lambda (&rest _args) nil))
+                  ((symbol-function 'beads-cache-refresh)
+                   (lambda (&rest _args) (cons t issues)))
+                  ((symbol-function 'vui-mount)
+                   (lambda (&rest _args) nil))
+                  ((symbol-function 'vui-component)
+                   (lambda (&rest _args) nil)))
+          (delete-other-windows)
+          (set-window-buffer list-window list-buffer)
+          (set-buffer list-buffer)
+          (beads-org-list-mode)
+          (beads-org-list-refresh t)
+          (should (beads-list--org-goto-id "bd-b"))
+          (set-window-point list-window (point))
+
+          (beads-detail-open '((id . "bd-b")
+                               (title . "Second")
+                               (status . "open")
+                               (priority . 0)
+                               (issue_type . "task")))
+          (setq detail-buffer (current-buffer))
+          (should (derived-mode-p 'beads-detail-vui-mode))
+
+          ;; Simulate the stale top-of-buffer point observed when
+          ;; returning from detail after a refresh.
+          (with-current-buffer list-buffer
+            (goto-char (point-min))
+            (set-window-point list-window (point-min)))
+
+          (beads-detail-quit)
+          (with-current-buffer list-buffer
+            (goto-char (window-point (get-buffer-window list-buffer)))
+            (should (equal (beads-list--org-id-at-point) "bd-b"))))
+      (when (window-live-p list-window)
+        (select-window list-window)
+        (when (buffer-live-p previous-buffer)
+          (set-window-buffer list-window previous-buffer)))
+      (delete-other-windows)
+      (when (buffer-live-p previous-buffer)
+        (set-buffer previous-buffer))
+      (when (buffer-live-p list-buffer)
+        (kill-buffer list-buffer))
+      (when (and detail-buffer (buffer-live-p detail-buffer))
+        (kill-buffer detail-buffer)))))
 
 (ert-deftest beads-detail-test-mode-keybinding-edit ()
   "Test that beads-detail-vui-mode binds 'e' to edit prefix map."
@@ -304,7 +370,7 @@
   (with-temp-buffer
     (beads-detail-vui-mode)
     (should (eq (lookup-key beads-detail-vui-base-map (kbd "q"))
-                #'beads-core-quit-window-kill-buffer))))
+                #'beads-detail-quit))))
 
 (ert-deftest beads-detail-test-mode-sets-buffer-name ()
   "Test that beads-detail-vui-mode sets appropriate mode."

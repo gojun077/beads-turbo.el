@@ -528,7 +528,7 @@ Prompts for a search query and filters the list to matching issues."
 (transient-define-suffix beads-transient-toggle-dolt-sql ()
   "Toggle the Dolt SQL read-path transport.
 When enabled, read operations (list/show/ready/stats/count/stale)
-prefer a persistent mysql client session against the local Dolt
+prefer a persistent mysql.el connection against the local Dolt
 SQL server for speed; writes always fall back to the bd CLI.
 See `beads-backend-dolt-sql-activate' and
 `beads-backend-dolt-sql-deactivate'."

@@ -1,15 +1,15 @@
 # Makefile
 #
 # Created on: Mon 21 Apr 2026
-# Last Updated: Mon 11 May 2026
+# Last Updated: Sun 26 Jul 2026
 #
-# Makefile for 'beads.el' Emacs client for beads issue tracker
+# Makefile for 'beads-turbo.el' Emacs client for beads issue tracker
 
 # --- Project-specific variables ---
 DOLT_REMOTE := gojun077/beads_bdel
 DOLT_DB     := beads_bdel
-DOLT_DIR    := .beads/dolt
-DOLT_PORT   := 3310
+DOLT_DIR    := $(HOME)/.beads/shared-server/dolt
+DOLT_PORT   := 3308
 
 # Derive the main repo root from git's common dir (works in worktrees too)
 MAIN_REPO   := $(shell git rev-parse --git-common-dir | sed 's|/\.git$$||')

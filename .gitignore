@@ -15,6 +15,7 @@ docs/beads.info
 # Beads daemon runtime files
 .beads/daemon-*.log*
 .beads/*.startlock
+.beads/proxieddb/
 
 # Beads / Dolt files (added by bd init)
 .dolt/

@@ -144,7 +144,7 @@ unknown fields, so headings and drawers do not grow noisy.  If both
 (defvar-local beads-list--show-only-marked nil
   "When non-nil, only show marked issues in the list.")
 
-(defvar beads-list--issues nil
+(defvar-local beads-list--issues nil
   "Cached list of issues for current buffer.")
 
 (defvar-local beads-list--filter nil
@@ -402,15 +402,19 @@ heading when the current issue no longer exists, and reapplies folded
 subtrees by issue ID after regenerating the org text.
 
 Must be called with a `beads-org-list-mode' buffer current."
-  (let* ((saved-id (beads-list--org-id-at-point))
+  (let* ((window (get-buffer-window (current-buffer)))
+         (saved-point (if window (window-point window) (point)))
+         (saved-id (save-excursion
+                     (goto-char saved-point)
+                     (beads-list--org-id-at-point)))
          (saved-index (and saved-id
                            (cl-position saved-id beads-list--issues
                                         :key (lambda (issue)
                                                (alist-get 'id issue))
                                         :test #'equal)))
-         (saved-line (line-number-at-pos))
-         (saved-start-line (when-let ((win (get-buffer-window (current-buffer))))
-                             (line-number-at-pos (window-start win))))
+         (saved-line (line-number-at-pos saved-point))
+         (saved-start-line (when window
+                             (line-number-at-pos (window-start window))))
          (folded-ids (beads-list--org-folded-ids))
          (effective-sort-mode (beads-list--effective-sort-mode))
          (model (beads-list-data-build
@@ -446,9 +450,10 @@ Must be called with a `beads-org-list-mode' buffer current."
                            display-issues))))
      (t
       (beads-list--org-goto-near-line saved-line)))
-    (when-let ((win (get-buffer-window (current-buffer)))
+    (when-let ((win window)
                (line saved-start-line))
       (let ((restored-point (point)))
+        (set-window-point win restored-point)
         (save-excursion
           (goto-char (point-min))
           (forward-line (1- (min line (line-number-at-pos (point-max)))))
@@ -457,7 +462,8 @@ Must be called with a `beads-org-list-mode' buffer current."
           (save-excursion
             (goto-char restored-point)
             (beginning-of-line)
-            (set-window-start win (point))))))
+            (set-window-start win (point))))
+        (set-window-point win restored-point)))
     (beads-list--update-mode-line (beads-list-data-stats model))
     (unless silent
       (let ((filter-msg (if beads-list--filter
@@ -785,23 +791,38 @@ Returns t when the heading is found."
   "Move point to a deterministic nearby issue heading around LINE.
 Prefer the heading containing LINE, then the next heading, then the
 previous heading, and finally `point-min' for an empty generated list."
-  (goto-char (point-min))
-  (forward-line (1- (min (max line 1)
-                         (line-number-at-pos (point-max)))))
-  (cond
-   ((and (org-at-heading-p)
-         (beads-list--org-id-at-point)))
-   ((and (not (org-before-first-heading-p))
-         (save-excursion
-           (org-back-to-heading t)
+  (cl-labels ((goto-next-issue-heading
+               ()
+               (catch 'found
+                 (while (re-search-forward org-heading-regexp nil t)
+                   (beginning-of-line)
+                   (when (beads-list--org-id-at-point)
+                     (throw 'found t))
+                   (forward-line 1))
+                 nil))
+              (goto-previous-issue-heading
+               ()
+               (catch 'found
+                 (while (re-search-backward org-heading-regexp nil t)
+                   (beginning-of-line)
+                   (when (beads-list--org-id-at-point)
+                     (throw 'found t)))
+                 nil)))
+    (goto-char (point-min))
+    (forward-line (1- (min (max line 1)
+                           (line-number-at-pos (point-max)))))
+    (cond
+     ((and (org-at-heading-p)
            (beads-list--org-id-at-point)))
-    (org-back-to-heading t))
-   ((re-search-forward org-heading-regexp nil t)
-    (beginning-of-line))
-   ((re-search-backward org-heading-regexp nil t)
-    (beginning-of-line))
-   (t
-    (goto-char (point-min)))))
+     ((and (not (org-before-first-heading-p))
+           (save-excursion
+             (org-back-to-heading t)
+             (beads-list--org-id-at-point)))
+      (org-back-to-heading t))
+     ((goto-next-issue-heading))
+     ((goto-previous-issue-heading))
+     (t
+      (goto-char (point-min))))))
 
 (defun beads-list--org-heading-folded-p ()
   "Return non-nil when the current org heading's subtree is folded."

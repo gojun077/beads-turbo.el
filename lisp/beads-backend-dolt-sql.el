@@ -25,8 +25,7 @@
 ;; serializes, and exits), this module sends SELECT queries directly
 ;; to the Dolt SQL server.  When Lucius Chen's mysql.el package is
 ;; installed, it uses mysql.el's native wire-protocol client.  Otherwise
-;; it falls back to a long-lived `mariadb' CLI subprocess, then to
-;; one-shot `mariadb -e'.
+;; it falls back to one-shot `mariadb -e'.
 ;;
 ;; The Oracle MySQL client (`mysql') is intentionally not supported.
 ;; mysql 9.x dropped both `--skip-ssl' and the `mysql_native_password'
@@ -43,8 +42,10 @@
 ;;   stats     | 210ms            | 8ms        | 26.3x
 ;;
 ;; Tier 1: `mariadb -e' subprocess → ~10ms overhead.
-;; Tier 1.5: persistent `mariadb' subprocess → ~1-2ms.
 ;; Tier 2: mysql.el native MySQL wire protocol → sub-ms expected.
+;; Only mysql.el keeps a long-lived SQL connection open; the `mariadb'
+;; fallback is intentionally one-shot so Emacs does not retain a second
+;; mysql-related process.
 ;;
 ;; Writes always go through `bd` CLI — SQL transport is a read-only
 ;; accelerator only.
@@ -117,22 +118,6 @@ Set back to t periodically so we retry after transient failures.")
 
 (defvar beads-dolt-sql--native-mysql-conn nil)
 (defvar beads-dolt-sql--native-mysql-params nil)
-
-(defvar beads-dolt-sql--mysql-proc nil)
-(defvar beads-dolt-sql--mysql-output nil)
-(defvar beads-dolt-sql--mysql-params nil)
-(defvar beads-dolt-sql--mysql-shutting-down nil
-  "Non-nil while intentionally stopping the persistent mariadb client.")
-
-(defconst beads-dolt-sql--mysql-end-marker "__BEADS_QUERY_END__"
-  "Sentinel string emitted after each persistent-client query.
-A `SELECT '<marker>'` statement is appended to every batch sent to
-the persistent `mysql'/`mariadb' subprocess so the polling loop in
-`beads-dolt-sql--mysql-query' can detect end-of-response
-deterministically (instead of guessing from a trailing newline).
-This both eliminates the original polling overhead for large
-payloads — see issue bdel-dgy — and the latent correctness bug
-where an intermediate chunk happened to end with \\n.")
 
 (defconst beads-dolt-sql--list-sql
   "SELECT JSON_ARRAYAGG(\
@@ -605,83 +590,9 @@ ORDER BY i.priority ASC, i.created_at DESC"
      (t (signal 'beads-backend-error
                 (list (format "SQL query returned unsupported value: %S" cell)))))))
 
-(defun beads-dolt-sql--mysql-filter (_proc string)
-  (setq beads-dolt-sql--mysql-output (concat (or beads-dolt-sql--mysql-output "") string)))
-
-(defun beads-dolt-sql--mysql-sentinel (_proc event)
-  (when (string-match-p "finished\\|exited\\|killed" event)
-    (setq beads-dolt-sql--mysql-proc nil)
-    (setq beads-dolt-sql--mysql-output nil)
-    (setq beads-dolt-sql--mysql-params nil)
-    (unless beads-dolt-sql--mysql-shutting-down
-      (beads-backend-dolt-sql--mark-unavailable))))
-
-(defun beads-dolt-sql--stop-mysql-proc ()
-  "Gracefully stop the persistent mariadb subprocess, if one is live."
-  (let ((proc beads-dolt-sql--mysql-proc)
-        (beads-dolt-sql--mysql-shutting-down t))
-    (when proc
-      (when (process-live-p proc)
-        (ignore-errors (process-send-string proc "\\q\n"))
-        (accept-process-output proc 0.1)
-        (when (process-live-p proc)
-          (delete-process proc)))
-      (setq beads-dolt-sql--mysql-proc nil)
-      (setq beads-dolt-sql--mysql-output nil)
-      (setq beads-dolt-sql--mysql-params nil))))
-
 (defun beads-backend-dolt-sql-stop-idle-session ()
-  "Stop persistent SQL sessions after all beads buffers are closed."
-  (beads-dolt-sql--native-mysql-disconnect)
-  (beads-dolt-sql--stop-mysql-proc))
-
-(defun beads-dolt-sql--start-mysql-proc (dolt)
-  (let* ((host (alist-get 'host dolt "127.0.0.1"))
-         (port (number-to-string (alist-get 'port dolt 3310)))
-         (user (alist-get 'user dolt "root"))
-         (database (alist-get 'database dolt "beads_bdel"))
-         (client (or (executable-find "mariadb")
-                     (signal 'beads-backend-error
-                             '("mariadb client not found on PATH; install it (e.g. `brew install mariadb' or your distro's mariadb-client package)"))))
-         (buf (generate-new-buffer " *beads-mysql*"))
-         ;; --force keeps the batch session alive after a SQL error so
-         ;; the trailing sentinel SELECT still runs and unblocks the
-         ;; polling loop in `beads-dolt-sql--mysql-query'.
-         ;;
-         ;; `process-connection-type' = nil forces a real pipe instead
-         ;; of a pty for subprocess stdin/stdout.  With a pty the
-         ;; mariadb client treats stdin as a terminal: it emits BEL
-         ;; characters on every input byte (echo mode) and never
-         ;; delivers the sentinel marker promptly — making the polling
-         ;; loop wait the full 5s timeout for every query.
-         ;;
-         ;; `--unbuffered' (-n) flushes after every query.  Without it
-         ;; small results (count, stats, the sentinel SELECT itself)
-         ;; sit in mariadb's stdout block buffer until ~4KB accumulate
-         ;; or the connection closes, so the marker never reaches us
-         ;; and the polling loop times out.  This is essential for
-         ;; correctness on a pipe; pty-mode masked it because ptys are
-         ;; line-buffered.
-         (process-connection-type nil)
-         (proc (start-process "beads-mysql" buf client "--batch" "--skip-column-names" "--raw" "--skip-ssl" "--force" "--unbuffered" "--host" host "--port" port "--user" user database)))
-    (set-process-filter proc #'beads-dolt-sql--mysql-filter)
-    (set-process-sentinel proc #'beads-dolt-sql--mysql-sentinel)
-    (setq beads-dolt-sql--mysql-proc proc)
-    (setq beads-dolt-sql--mysql-params dolt)
-    (setq beads-dolt-sql--mysql-output "")
-    proc))
-
-(defun beads-dolt-sql--ensure-mysql-connected (&optional dolt)
-  "Return a live persistent mariadb process for DOLT params."
-  (let ((dolt (or dolt (beads-backend-dolt-sql--fetch-dolt-params))))
-    (unless dolt (signal 'beads-backend-error '("Dolt SQL server not available")))
-    (if (and beads-dolt-sql--mysql-proc
-             (process-live-p beads-dolt-sql--mysql-proc)
-             (equal beads-dolt-sql--mysql-params dolt))
-        beads-dolt-sql--mysql-proc
-      (when beads-dolt-sql--mysql-proc
-        (delete-process beads-dolt-sql--mysql-proc))
-      (beads-dolt-sql--start-mysql-proc dolt))))
+  "Stop the persistent mysql.el SQL session after all beads buffers are closed."
+  (beads-dolt-sql--native-mysql-disconnect))
 
 (defun beads-dolt-sql--strip-banner (output)
   "Strip mariadb/mysql deprecation banners and non-error warnings from OUTPUT.
@@ -695,33 +606,6 @@ or ssl-verify-server-cert warnings, which are not SQL errors."
             nil t)
       (replace-match ""))
     (string-trim (buffer-string))))
-
-(defun beads-dolt-sql--mysql-query (sql &optional dolt)
-  "Send SQL to the persistent mysql/mariadb subprocess and parse the JSON.
-Appends a sentinel `SELECT '<marker>'' query so the polling loop can
-detect end-of-response by matching `beads-dolt-sql--mysql-end-marker'
-in the buffered output, instead of guessing from a trailing newline.
-This is both faster (no 50ms pad after the last chunk) and more
-correct (intermediate chunks ending with \\n no longer terminate the
-loop early)."
-  (let* ((proc (beads-dolt-sql--ensure-mysql-connected dolt))
-         (marker beads-dolt-sql--mysql-end-marker))
-    (setq beads-dolt-sql--mysql-output "")
-    (process-send-string proc
-                         (concat sql ";\nSELECT '" marker "';\n"))
-    (let ((timeout 5.0) (start (float-time)))
-      (while (and (< (- (float-time) start) timeout)
-                  (not (string-match-p
-                        (regexp-quote marker)
-                        (or beads-dolt-sql--mysql-output ""))))
-        (accept-process-output proc 0.01)))
-    (let* ((output (or beads-dolt-sql--mysql-output ""))
-           (marker-pos (string-match (regexp-quote marker) output))
-           (body (if marker-pos (substring output 0 marker-pos) output))
-           (raw (beads-dolt-sql--strip-banner (string-trim body))))
-      (when (string-match-p "\\`ERROR" raw)
-        (signal 'beads-backend-error (list raw)))
-      (beads-dolt-sql--parse-json-output raw))))
 
 (defun beads-backend-dolt-sql--canonical-project-root (&optional project-root)
   "Return the canonical project root used to scope SQL connection state."
@@ -804,18 +688,12 @@ Caches result for 60 seconds."
             (beads-dolt-sql--native-mysql-query sql-str dolt)
           (error
            (beads-dolt-sql--native-mysql-disconnect)
-           (cond
-            ((executable-find "mariadb")
-             (condition-case _fallback-err
-                 (beads-dolt-sql--mysql-query sql-str dolt)
-               (error (beads-backend-dolt-sql--one-shot-mariadb sql-str dolt))))
-            (t
+           (if (executable-find "mariadb")
+               (beads-backend-dolt-sql--one-shot-mariadb sql-str dolt)
              (signal 'beads-backend-error
-                     '("mysql.el query failed and the mariadb client is not on PATH; install it (e.g. `brew install mariadb')")))))))
+                     '("mysql.el query failed and the mariadb client is not on PATH; install it (e.g. `brew install mariadb')"))))))
        ((executable-find "mariadb")
-        (condition-case _err
-            (beads-dolt-sql--mysql-query sql-str dolt)
-          (error (beads-backend-dolt-sql--one-shot-mariadb sql-str dolt))))
+        (beads-backend-dolt-sql--one-shot-mariadb sql-str dolt))
        (t
         (signal 'beads-backend-error
                 '("Neither mysql.el nor the mariadb client is available; install mariadb (e.g. `brew install mariadb')")))))))
@@ -1015,10 +893,6 @@ availability per operation and falls back to `bd' when needed."
   (setq beads-dolt-sql--params-time nil)
   (setq beads-dolt-sql--params-root nil)
   (beads-dolt-sql--native-mysql-disconnect)
-  (when beads-dolt-sql--mysql-proc (delete-process beads-dolt-sql--mysql-proc))
-  (setq beads-dolt-sql--mysql-proc nil)
-  (setq beads-dolt-sql--mysql-output nil)
-  (setq beads-dolt-sql--mysql-params nil)
   (beads-backend-dolt-sql--install-default)
   (beads-backend-clear-cache)
   (message "Dolt SQL transport activated (beads-dolt-sql)"))
@@ -1031,7 +905,6 @@ availability per operation and falls back to `bd' when needed."
   (setq beads-dolt-sql--available nil)
   (setq beads-dolt-sql--params-root nil)
   (beads-dolt-sql--native-mysql-disconnect)
-  (when beads-dolt-sql--mysql-proc (delete-process beads-dolt-sql--mysql-proc) (setq beads-dolt-sql--mysql-proc nil) (setq beads-dolt-sql--mysql-output nil) (setq beads-dolt-sql--mysql-params nil))
   (advice-remove 'beads-backend--auto-detect
                  #'beads-backend-dolt-sql--auto-detect-advice)
   (beads-backend-clear-cache)

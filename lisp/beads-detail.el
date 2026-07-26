@@ -38,6 +38,7 @@
 (declare-function beads-reopen-issue "beads-transient")
 (declare-function beads-list "beads-list")
 (declare-function beads-org-list-refresh "beads-list")
+(declare-function beads-list--org-goto-id "beads-list")
 (declare-function beads-list--refresh-current-view "beads-list")
 (declare-function beads-filter-by-parent "beads-filter")
 (declare-function beads-form-open "beads-form")
@@ -89,6 +90,12 @@
 (defvar-local beads-detail--current-issue nil
   "Full issue data currently displayed in this buffer.")
 
+(defvar-local beads-detail--origin-list-buffer nil
+  "Org list buffer from which this detail buffer was opened, if any.")
+
+(defvar-local beads-detail--origin-list-issue-id nil
+  "Issue ID to restore in `beads-detail--origin-list-buffer' on quit.")
+
 (defvar beads-detail-label-map
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "a") #'beads-detail-edit-label-add)
@@ -115,7 +122,7 @@
 (defvar beads-detail-vui-base-map
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "g") #'beads-detail-refresh)
-    (define-key map (kbd "q") #'beads-core-quit-window-kill-buffer)
+    (define-key map (kbd "q") #'beads-detail-quit)
     (define-key map (kbd "e") beads-detail-edit-map)
     (define-key map (kbd "E") #'beads-detail-edit-form)
     (define-key map (kbd "H") #'beads-hierarchy-show)
@@ -155,10 +162,15 @@ Derives from `vui-mode' and installs Beads detail keybindings.
   "Open ISSUE in a dedicated detail buffer in bottom window.
 Creates a unique buffer per issue and focuses it."
   (let* ((id (alist-get 'id issue))
+         (origin-list-buffer (when (eq major-mode 'beads-org-list-mode)
+                               (current-buffer)))
          (buffer-name (format "*Beads Detail: %s*" id))
          (buffer (get-buffer-create buffer-name)))
     (with-current-buffer buffer
-      (beads-detail--mount-vui buffer issue))
+      (beads-detail--mount-vui buffer issue)
+      (setq beads-detail--origin-list-buffer origin-list-buffer)
+      (setq beads-detail--origin-list-issue-id
+            (and origin-list-buffer id)))
     (let ((window (display-buffer buffer
                                   '((display-buffer-reuse-mode-window
                                      display-buffer-below-selected)
@@ -167,11 +179,45 @@ Creates a unique buffer per issue and focuses it."
       (when window
         (select-window window)))))
 
+(defun beads-detail--restore-origin-list-point (buffer issue-id)
+  "Restore BUFFER's visible cursor to ISSUE-ID when possible."
+  (when (and issue-id
+             buffer
+             (buffer-live-p buffer)
+             (fboundp 'beads-list--org-goto-id))
+    (with-current-buffer buffer
+      (when (and (derived-mode-p 'beads-org-list-mode)
+                 (beads-list--org-goto-id issue-id))
+        (let ((restored-point (point)))
+          (dolist (win (get-buffer-window-list buffer nil t))
+            (set-window-point win restored-point)
+            (unless (pos-visible-in-window-p restored-point win)
+              (save-excursion
+                (goto-char restored-point)
+                (beginning-of-line)
+                (set-window-start win (point))))
+            (set-window-point win restored-point)))
+        t))))
+
+(defun beads-detail-quit ()
+  "Quit detail view and keep the originating org list on the issue.
+
+Detail edits refresh list buffers while the detail window is selected;
+when the detail window is then closed, Emacs can otherwise restore a
+stale top-of-buffer point for the org list window.  If this detail view
+was opened from an org list, restore that list to the issue before and
+after quitting the detail window."
+  (interactive)
+  (let ((origin-buffer beads-detail--origin-list-buffer)
+        (origin-issue-id beads-detail--origin-list-issue-id))
+    (beads-detail--restore-origin-list-point origin-buffer origin-issue-id)
+    (beads-core-quit-window-kill-buffer)
+    (beads-detail--restore-origin-list-point origin-buffer origin-issue-id)))
+
 (defun beads-detail-show (issue)
   "Display ISSUE in preview buffer (for preview mode).
 Uses a single reusable buffer in a side window without focusing."
-  (let* ((id (alist-get 'id issue))
-         (buffer (get-buffer-create "*Beads Preview*")))
+  (let ((buffer (get-buffer-create "*Beads Preview*")))
     (with-current-buffer buffer
       (beads-detail--mount-vui buffer issue))
     (display-buffer buffer '((display-buffer-in-side-window)
