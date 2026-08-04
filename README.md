@@ -255,7 +255,7 @@ criteria, and comments with markdown syntax highlighting.
 ## Requirements
 
 - Emacs 30+
-- [Beads](https://github.com/gastownhall/beads) CLI: `bd` 1.0.3+ (recommended)
+- [Beads](https://github.com/gastownhall/beads) CLI: latest upstream `main`
 - `transient` package (for menus)
 - `vui` package (for declarative UI components)
 - `markdown-mode` (optional, for editing long text fields)

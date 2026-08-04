@@ -2,7 +2,9 @@
 
 ## Beads Version Compatibility
 
-This package is tested with **bd 1.0.3**. Run `/beads-compat` to check.
+This package tracks the latest `main` branch of
+[gastownhall/beads](https://github.com/gastownhall/beads). Run
+`/beads-compat` to check that the installed CLI matches upstream `main`.
 
 ## Issue Tracking with bd (beads)
 

@@ -1,6 +1,6 @@
 # Beads Version Compatibility
 
-Tested CLI version: 1.0.3
+Tested CLI target: upstream main
 Minimum DB version: 0.35.0
 
 ## Changelog
@@ -11,6 +11,7 @@ https://github.com/gastownhall/beads/blob/main/CHANGELOG.md
 
 | beads.el | beads CLI | Notes |
 |----------|-----------|-------|
+| current  | upstream `main` | Moving compatibility target; verify the installed commit with `/beads-compat` |
 | 1.0.3    | 1.0.3     | Dolt SQL backend, bd batch, multi-ID update/close/delete, removed daemon/mutations/resolve-conflicts |
 | 0.49.1   | 0.49.1    | --append-notes, export filters, activity --details |
 | 0.49.0   | 0.49.0    | bd children, bd rename, bd types, Dolt backend |
