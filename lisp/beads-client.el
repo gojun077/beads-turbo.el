@@ -225,7 +225,8 @@ Returns created (or previewed) issue object."
   "Update issue ID with ARGS.
 ARGS is a plist with keys like :title, :description, :status,
 :priority, :assignee, :issue-type, :design, :notes, :add-labels,
-:remove-labels, :set-labels.  Returns updated issue object."
+:remove-labels, :set-labels, :parent.  An empty :parent value removes
+the current parent.  Returns updated issue object."
   (unless id
     (signal 'beads-client-error (list "Issue ID required")))
   (let ((request-args (beads-client--plist-to-alist

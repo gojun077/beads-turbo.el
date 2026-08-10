@@ -236,7 +236,31 @@ generated #+TITLE header."
     (beads-detail-vui-mode)
     (should (keymapp (lookup-key beads-detail-vui-base-map (kbd "e"))))
     (should (eq (lookup-key beads-detail-vui-base-map (kbd "e d"))
-                #'beads-detail-edit-description))))
+                #'beads-detail-edit-description))
+    (should (eq (lookup-key beads-detail-vui-base-map (kbd "e P"))
+                #'beads-detail-edit-parent))))
+
+(ert-deftest beads-detail-test-edit-parent-updates-and-refreshes ()
+  "Editing the parent updates the issue and refreshes the detail view."
+  (let (update-args refreshed)
+    (with-temp-buffer
+      (beads-detail-vui-mode)
+      (setq beads-detail--current-issue '((id . "bd-child")
+                                          (parent_id . "bd-old-parent")))
+      (cl-letf (((symbol-function 'read-string)
+                 (lambda (prompt default)
+                   (should (equal prompt "Parent: "))
+                   (should (equal default "bd-old-parent"))
+                   "bd-new-parent"))
+                ((symbol-function 'beads-client-update)
+                 (lambda (id field value)
+                   (setq update-args (list id field value))))
+                ((symbol-function 'beads-detail-refresh)
+                 (lambda () (setq refreshed t))))
+        (beads-detail-edit-parent)
+        (should (equal update-args
+                       '("bd-child" :parent "bd-new-parent")))
+        (should refreshed)))))
 
 (ert-deftest beads-detail-test-edit-description-starts-with-newline ()
   "Editing description from detail view starts the markdown buffer with a newline."
@@ -570,6 +594,24 @@ unknown-vnode error."
         (should (string-match-p "Depends on:" content))
         (should (string-match-p "Children:" content))))))
 
+(ert-deftest beads-detail-test-vui-relationships-renders-parent-edit-action ()
+  "The full parent relationship should remain editable without duplication."
+  (require 'beads-vui)
+  (let ((issue '((id . "bd-child")
+                 (parent . "bd-parent")
+                 (dependencies . [((id . "bd-parent")
+                                   (title . "Parent")
+                                   (status . "open")
+                                   (dependency_type . "parent-child"))]))))
+    (with-temp-buffer
+      (vui-render (vui-component 'beads-vui-relationships
+                                 :issue issue
+                                 :editable t)
+                  (current-buffer))
+      (let ((content (buffer-string)))
+        (should (string-match-p "Parent:" content))
+        (should (string-match-p "edit" content))))))
+
 (ert-deftest beads-detail-test-vui-metadata-renders-labels ()
   "The vui detail metadata row should display issue labels."
   (require 'beads-vui)
@@ -600,6 +642,21 @@ unknown-vnode error."
       (let ((content (buffer-string)))
         (should (string-match-p "Labels:" content))
         (should (string-match-p "(none)" content))))))
+
+(ert-deftest beads-detail-test-vui-metadata-renders-empty-parent-edit-action ()
+  "An issue without a parent should offer an edit action to assign one."
+  (require 'beads-vui)
+  (let ((issue '((id . "bd-parentless")
+                 (status . "open")
+                 (priority . 2)
+                 (issue_type . "task"))))
+    (with-temp-buffer
+      (vui-render (vui-component 'beads-vui-metadata-row
+                                 :issue issue
+                                 :editable t)
+                  (current-buffer))
+      (let ((content (buffer-string)))
+        (should (string-match-p "Parent:.*(none).*edit" content))))))
 
 (ert-deftest beads-detail-test-vui-metadata-renders-label-edit-actions ()
   "The vui detail metadata row should show label add/remove actions."
@@ -656,6 +713,26 @@ unknown-vnode error."
                              "\nExisting description"))))
       (when (and buffer (buffer-live-p buffer))
         (kill-buffer buffer)))))
+
+(ert-deftest beads-detail-test-vui-parent-edit-handler-can-remove-parent ()
+  "The VUI parent handler sends an empty value to remove the parent."
+  (require 'beads-vui)
+  (let (update-args refreshed)
+    (let ((handler (beads-vui-make-edit-handler
+                    '((id . "bd-child")
+                      (parent . "bd-parent"))
+                    'parent
+                    (lambda () (setq refreshed t)))))
+      (cl-letf (((symbol-function 'read-string)
+                 (lambda (_prompt default)
+                   (should (equal default "bd-parent"))
+                   ""))
+                ((symbol-function 'beads-client-update)
+                 (lambda (id field value)
+                   (setq update-args (list id field value)))))
+        (funcall handler)
+        (should (equal update-args '("bd-child" :parent "")))
+        (should refreshed)))))
 
 (ert-deftest beads-detail-test-vui-label-remove-handler-calls-rpc ()
   "Test that the vui label remove handler calls beads-client-label-remove."

@@ -112,6 +112,7 @@
     (define-key map (kbd "t") #'beads-detail-edit-title)
     (define-key map (kbd "s") #'beads-detail-edit-status)
     (define-key map (kbd "p") #'beads-detail-edit-priority)
+    (define-key map (kbd "P") #'beads-detail-edit-parent)
     (define-key map (kbd "T") #'beads-detail-edit-type)
     (define-key map (kbd "A") #'beads-detail-edit-assignee)
     (define-key map (kbd "x") #'beads-detail-edit-external-ref)
@@ -391,6 +392,17 @@ Uses CLI fallback since RPC does not support comment_add."
                 (beads-detail-refresh))
             (beads-client-error
              (message "Failed to update: %s" (error-message-string err)))))))))
+
+(defun beads-detail-edit-parent ()
+  "Edit the parent of the current issue.
+Enter an empty value to remove the current parent."
+  (interactive)
+  (let* ((issue (beads-detail--require-issue))
+         (id (alist-get 'id issue))
+         (parent-id (or (alist-get 'parent issue)
+                        (alist-get 'parent_id issue))))
+    (when (beads-edit-field-minibuffer id :parent parent-id "Parent: ")
+      (beads-detail-refresh))))
 
 (defun beads-detail-edit-type ()
   "Edit the type of the current issue."

@@ -820,6 +820,9 @@ Press @samp{RET} on an issue to open its detail view.
 @item @samp{e p}
 @tab @code{beads-detail-edit-priority}
 @tab Change priority
+@item @samp{e P}
+@tab @code{beads-detail-edit-parent}
+@tab Set or remove parent
 @item @samp{e T}
 @tab @code{beads-detail-edit-type}
 @tab Change type

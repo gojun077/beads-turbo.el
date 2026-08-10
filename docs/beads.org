@@ -408,6 +408,7 @@ Press =RET= on an issue to open its detail view.
 | =e t= | ~beads-detail-edit-title~        | Edit title           |
 | =e s= | ~beads-detail-edit-status~       | Change status        |
 | =e p= | ~beads-detail-edit-priority~     | Change priority      |
+| =e P= | ~beads-detail-edit-parent~       | Set or remove parent |
 | =e T= | ~beads-detail-edit-type~         | Change type          |
 | =e A= | ~beads-detail-edit-assignee~     | Set assignee         |
 | =e d= | ~beads-detail-edit-description~  | Edit description     |

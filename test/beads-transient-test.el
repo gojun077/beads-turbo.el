@@ -247,6 +247,7 @@
     (should (eq (lookup-key beads-detail-vui-base-map (kbd "e D")) #'beads-detail-edit-design))
     (should (eq (lookup-key beads-detail-vui-base-map (kbd "e a")) #'beads-detail-edit-acceptance))
     (should (eq (lookup-key beads-detail-vui-base-map (kbd "e n")) #'beads-detail-edit-notes))
+    (should (eq (lookup-key beads-detail-vui-base-map (kbd "e P")) #'beads-detail-edit-parent))
     (should (eq (lookup-key beads-detail-vui-base-map (kbd "e l a")) #'beads-detail-edit-label-add))
     (should (eq (lookup-key beads-detail-vui-base-map (kbd "e l r")) #'beads-detail-edit-label-remove))
     (should (eq (lookup-key beads-detail-vui-base-map (kbd "q")) #'beads-detail-quit))))

@@ -89,11 +89,14 @@ Access via (use-beads-callbacks) which returns a plist with:
 Calls ON-REFRESH after successful edit."
   (lambda ()
     (let* ((id (alist-get 'id issue))
-           (value (alist-get field-key issue)))
+           (value (if (eq field-key 'parent)
+                      (or (alist-get 'parent issue)
+                          (alist-get 'parent_id issue))
+                    (alist-get field-key issue))))
       (pcase field-key
         ((or 'description 'design 'acceptance_criteria 'notes)
          (beads-edit-field-markdown id (beads-vui--field-to-keyword field-key) value t))
-        ((or 'title 'assignee 'external_ref)
+        ((or 'title 'assignee 'external_ref 'parent)
          (when (beads-edit-field-minibuffer
                 id (beads-vui--field-to-keyword field-key) value
                 (format "%s: " (capitalize (symbol-name field-key))))
@@ -362,13 +365,23 @@ When EDITABLE is non-nil, show edit buttons. ON-REFRESH called after edits."
                       :value external-ref
                       :on-edit (when editable
                                  (beads-vui-make-edit-handler issue 'external_ref on-refresh))))
-     ;; Only show simple Parent: <id> link when the parent will NOT be
-     ;; rendered in the relationships section below.
-     (when (and parent-id
+     ;; Only show this field when the parent will NOT be rendered in the
+     ;; relationships section below.  Keep an empty editable field visible
+     ;; so issues without a parent can be assigned one.
+     (when (and (or parent-id editable)
                 (not (beads-vui--has-parent-child-dep-p issue)))
        (vui-hstack
         (vui-text "Parent: " :face 'bold)
-        (vui-component 'beads-vui-clickable-id :issue-id parent-id)))
+        (if parent-id
+            (vui-component 'beads-vui-clickable-id :issue-id parent-id)
+          (vui-text "(none)"))
+        (when editable
+          (vui-fragment
+           (vui-text " ")
+           (vui-button "edit"
+                       :on-click (beads-vui-make-edit-handler
+                                  issue 'parent on-refresh)
+                       :face 'link)))))
      (vui-component 'beads-vui-labels-field
                     :issue issue
                     :labels labels
@@ -465,24 +478,33 @@ Returns alist of (TYPE . LIST-OF-DEPS) in insertion order."
           (push (cons type (list dep)) buckets))))
     (nreverse buckets)))
 
-(vui-defcomponent beads-vui-rel-group (label deps)
-  "Render a relationship group with LABEL header and DEPS list."
+(vui-defcomponent beads-vui-rel-group (label deps &key on-edit)
+  "Render a relationship group with LABEL header and DEPS list.
+When ON-EDIT is non-nil, show an edit button beside the header."
   :render
   (when (and deps (> (length deps) 0))
     (vui-vstack
-     (vui-text (concat label ":") :face 'bold)
+     (vui-hstack
+      (vui-text (concat label ":") :face 'bold)
+      (when on-edit
+        (vui-fragment
+         (vui-text " ")
+         (vui-button "edit" :on-click on-edit :face 'link))))
      (vui-list deps
                (lambda (d) (vui-component 'beads-vui-dep-link :dep d))
                (lambda (d) (alist-get 'id d))))))
 
-(vui-defcomponent beads-vui-relationships (issue)
+(vui-defcomponent beads-vui-relationships (issue &key editable on-refresh)
   "Display categorized relationships for ISSUE.
 Groups dependencies and dependents by `dependency_type' into Parent,
 Children, Discovered From, Discovered, Related, Depends on, and
-Dependents sections, matching `bd show' output."
+Dependents sections, matching `bd show' output.  When EDITABLE is
+non-nil, the parent relationship can be edited; ON-REFRESH is called
+after a successful edit."
   :render
   (let* ((dep-buckets (beads-vui--bucket-deps (alist-get 'dependencies issue)))
          (dependent-buckets (beads-vui--bucket-deps (alist-get 'dependents issue)))
+         (parent-deps (alist-get "parent-child" dep-buckets nil nil #'string=))
          (epic-total (alist-get 'epic_total_children issue))
          (epic-closed (alist-get 'epic_closed_children issue))
          (related-in (alist-get "related" dep-buckets nil nil #'string=))
@@ -497,7 +519,10 @@ Dependents sections, matching `bd show' output."
     (vui-fragment
      (vui-component 'beads-vui-rel-group
                     :label "Parent"
-                    :deps (alist-get "parent-child" dep-buckets nil nil #'string=))
+                    :deps parent-deps
+                    :on-edit (when editable
+                               (beads-vui-make-edit-handler
+                                issue 'parent on-refresh)))
      (vui-component 'beads-vui-rel-group
                     :label "Children"
                     :deps (alist-get "parent-child" dependent-buckets nil nil #'string=))
@@ -607,7 +632,10 @@ When EDITABLE is non-nil, show inline edit buttons."
                       :issue issue
                       :editable editable
                       :on-refresh on-refresh)
-       (vui-component 'beads-vui-relationships :issue issue)
+       (vui-component 'beads-vui-relationships
+                      :issue issue
+                      :editable editable
+                      :on-refresh on-refresh)
        (vui-component 'beads-vui-comments :issue issue))))))
 
 ;;; Form components
