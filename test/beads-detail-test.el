@@ -21,6 +21,8 @@
 (require 'beads-test-helpers)
 
 (declare-function beads-vui-make-edit-handler "beads-vui")
+(declare-function beads-vui-make-dep-add-handler "beads-vui")
+(declare-function beads-vui-make-dep-remove-handler "beads-vui")
 (declare-function beads-vui-make-label-add-handler "beads-vui")
 (declare-function beads-vui-make-label-remove-handler "beads-vui")
 (declare-function beads-list--org-goto-id "beads-list")
@@ -612,6 +614,39 @@ unknown-vnode error."
         (should (string-match-p "Parent:" content))
         (should (string-match-p "edit" content))))))
 
+(ert-deftest beads-detail-test-vui-relationships-renders-blocking-edit-actions ()
+  "Blocking relationships should offer add and remove actions."
+  (require 'beads-vui)
+  (let ((issue '((id . "bd-current")
+                 (dependencies . [((id . "bd-blocker")
+                                   (title . "Blocks current")
+                                   (dependency_type . "blocks"))])
+                 (dependents . [((id . "bd-dependent")
+                                 (title . "Blocked by current")
+                                 (dependency_type . "blocks"))]))))
+    (with-temp-buffer
+      (vui-render (vui-component 'beads-vui-relationships
+                                 :issue issue
+                                 :editable t)
+                  (current-buffer))
+      (let ((content (buffer-string)))
+        (should (string-match-p "Depends on:.*add.*remove" content))
+        (should (string-match-p "Dependents:.*add.*remove" content))))))
+
+(ert-deftest beads-detail-test-vui-relationships-renders-empty-blocking-actions ()
+  "An editable issue without blockers should still offer add actions."
+  (require 'beads-vui)
+  (with-temp-buffer
+    (vui-render (vui-component 'beads-vui-relationships
+                               :issue '((id . "bd-current"))
+                               :editable t)
+                (current-buffer))
+    (let ((content (buffer-string)))
+      (should (string-match-p "Depends on:.*add" content))
+      (should (string-match-p "Dependents:.*add" content))
+      (should (string-match-p "  (none)\nDependents:" content))
+      (should-not (string-match-p "remove" content)))))
+
 (ert-deftest beads-detail-test-vui-metadata-renders-labels ()
   "The vui detail metadata row should display issue labels."
   (require 'beads-vui)
@@ -694,6 +729,63 @@ unknown-vnode error."
         (funcall handler)
         (should (equal rpc-args '("test-123" "new-label")))
         (should refreshed)))))
+
+(ert-deftest beads-detail-test-vui-dep-add-handler-uses-edge-direction ()
+  "Dependency add handlers should preserve which issue blocks which."
+  (require 'beads-vui)
+  (let (rpc-calls
+        (refresh-count 0))
+    (cl-letf (((symbol-function 'read-string)
+               (lambda (_prompt) "bd-other"))
+              ((symbol-function 'beads-client-dep-add)
+               (lambda (from-id to-id dep-type)
+                 (push (list from-id to-id dep-type) rpc-calls))))
+      (funcall (beads-vui-make-dep-add-handler
+                '((id . "bd-current")) 'depends-on
+                (lambda () (cl-incf refresh-count))))
+      (funcall (beads-vui-make-dep-add-handler
+                '((id . "bd-current")) 'blocks
+                (lambda () (cl-incf refresh-count))))
+      (should (equal (nreverse rpc-calls)
+                     '(("bd-current" "bd-other" "blocks")
+                       ("bd-other" "bd-current" "blocks"))))
+      (should (= refresh-count 2)))))
+
+(ert-deftest beads-detail-test-vui-dep-add-handler-ignores-empty-input ()
+  "Dependency add handlers should ignore empty issue IDs."
+  (require 'beads-vui)
+  (let (rpc-called refreshed)
+    (cl-letf (((symbol-function 'read-string) (lambda (_prompt) ""))
+              ((symbol-function 'beads-client-dep-add)
+               (lambda (&rest _args) (setq rpc-called t))))
+      (funcall (beads-vui-make-dep-add-handler
+                '((id . "bd-current")) 'depends-on
+                (lambda () (setq refreshed t))))
+      (should-not rpc-called)
+      (should-not refreshed))))
+
+(ert-deftest beads-detail-test-vui-dep-remove-handler-uses-edge-direction ()
+  "Dependency remove handlers should preserve which issue blocks which."
+  (require 'beads-vui)
+  (let (rpc-calls
+        (refresh-count 0))
+    (cl-letf (((symbol-function 'completing-read)
+               (lambda (_prompt choices &rest _args)
+                 (should (equal choices '("bd-other")))
+                 "bd-other"))
+              ((symbol-function 'beads-client-dep-remove)
+               (lambda (from-id to-id)
+                 (push (list from-id to-id) rpc-calls))))
+      (funcall (beads-vui-make-dep-remove-handler
+                '((id . "bd-current")) '(((id . "bd-other")))
+                'depends-on (lambda () (cl-incf refresh-count))))
+      (funcall (beads-vui-make-dep-remove-handler
+                '((id . "bd-current")) '(((id . "bd-other")))
+                'blocks (lambda () (cl-incf refresh-count))))
+      (should (equal (nreverse rpc-calls)
+                     '(("bd-current" "bd-other")
+                       ("bd-other" "bd-current"))))
+      (should (= refresh-count 2)))))
 
 (ert-deftest beads-detail-test-vui-description-edit-starts-with-newline ()
   "VUI detail edit handler starts markdown fields with a newline."

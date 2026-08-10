@@ -151,6 +151,43 @@ Calls ON-REFRESH after a label is removed."
             (beads-client-label-remove id label)
             (when on-refresh (funcall on-refresh))))))))
 
+(defun beads-vui-make-dep-add-handler (issue direction on-refresh)
+  "Create a blocking dependency add handler for ISSUE.
+When DIRECTION is `depends-on', ISSUE depends on the entered issue.
+When DIRECTION is `blocks', the entered issue depends on ISSUE.
+Calls ON-REFRESH after a dependency is added."
+  (lambda ()
+    (let* ((id (alist-get 'id issue))
+           (other-id (read-string
+                      (if (eq direction 'depends-on)
+                          "Add dependency (issue ID): "
+                        "Add dependent (issue ID): "))))
+      (when (and other-id (not (string-empty-p other-id)))
+        (if (eq direction 'depends-on)
+            (beads-client-dep-add id other-id "blocks")
+          (beads-client-dep-add other-id id "blocks"))
+        (when on-refresh (funcall on-refresh))))))
+
+(defun beads-vui-make-dep-remove-handler (issue deps direction on-refresh)
+  "Create a blocking dependency remove handler for ISSUE.
+DEPS are the relationships available for selection.  When DIRECTION is
+`depends-on', remove ISSUE's dependency on the selected issue.  When it
+is `blocks', remove the selected issue's dependency on ISSUE.  Calls
+ON-REFRESH after a dependency is removed."
+  (lambda ()
+    (let* ((id (alist-get 'id issue))
+           (dep-ids (mapcar (lambda (dep) (alist-get 'id dep)) deps))
+           (other-id (completing-read
+                      (if (eq direction 'depends-on)
+                          "Remove dependency: "
+                        "Remove dependent: ")
+                      dep-ids nil t)))
+      (when (and other-id (not (string-empty-p other-id)))
+        (if (eq direction 'depends-on)
+            (beads-client-dep-remove id other-id)
+          (beads-client-dep-remove other-id id))
+        (when on-refresh (funcall on-refresh))))))
+
 (defun beads-vui--field-to-keyword (field-key)
   "Convert FIELD-KEY symbol to RPC keyword."
   (pcase field-key
@@ -478,33 +515,49 @@ Returns alist of (TYPE . LIST-OF-DEPS) in insertion order."
           (push (cons type (list dep)) buckets))))
     (nreverse buckets)))
 
-(vui-defcomponent beads-vui-rel-group (label deps &key on-edit)
+(vui-defcomponent beads-vui-rel-group (label deps &key on-edit on-add on-remove)
   "Render a relationship group with LABEL header and DEPS list.
-When ON-EDIT is non-nil, show an edit button beside the header."
+When supplied, ON-EDIT, ON-ADD, and ON-REMOVE display corresponding
+buttons beside the header.  An ON-ADD handler keeps an empty group
+visible so its first relationship can be added."
   :render
-  (when (and deps (> (length deps) 0))
+  (when (or (and deps (> (length deps) 0)) on-add)
     (vui-vstack
      (vui-hstack
       (vui-text (concat label ":") :face 'bold)
       (when on-edit
         (vui-fragment
          (vui-text " ")
-         (vui-button "edit" :on-click on-edit :face 'link))))
-     (vui-list deps
-               (lambda (d) (vui-component 'beads-vui-dep-link :dep d))
-               (lambda (d) (alist-get 'id d))))))
+         (vui-button "edit" :on-click on-edit :face 'link)))
+       (when on-add
+         (vui-fragment
+          (vui-text " ")
+          (vui-button "add" :on-click on-add :face 'link)))
+       (when on-remove
+         (vui-fragment
+          (vui-text " ")
+          (vui-button "remove" :on-click on-remove :face 'link))))
+     (if (and deps (> (length deps) 0))
+         (vui-list deps
+                   (lambda (d) (vui-component 'beads-vui-dep-link :dep d))
+                   (lambda (d) (alist-get 'id d)))
+       (vui-text "  (none)" :face 'shadow))
+     (vui-newline))))
 
 (vui-defcomponent beads-vui-relationships (issue &key editable on-refresh)
   "Display categorized relationships for ISSUE.
 Groups dependencies and dependents by `dependency_type' into Parent,
 Children, Discovered From, Discovered, Related, Depends on, and
 Dependents sections, matching `bd show' output.  When EDITABLE is
-non-nil, the parent relationship can be edited; ON-REFRESH is called
-after a successful edit."
+non-nil, parent and blocking relationships can be edited; ON-REFRESH
+is called after a successful edit."
   :render
   (let* ((dep-buckets (beads-vui--bucket-deps (alist-get 'dependencies issue)))
          (dependent-buckets (beads-vui--bucket-deps (alist-get 'dependents issue)))
          (parent-deps (alist-get "parent-child" dep-buckets nil nil #'string=))
+         (blocking-deps (alist-get "blocks" dep-buckets nil nil #'string=))
+         (blocking-dependents
+          (alist-get "blocks" dependent-buckets nil nil #'string=))
          (epic-total (alist-get 'epic_total_children issue))
          (epic-closed (alist-get 'epic_closed_children issue))
          (related-in (alist-get "related" dep-buckets nil nil #'string=))
@@ -541,17 +594,34 @@ after a successful edit."
      (vui-component 'beads-vui-rel-group
                     :label "Related"
                     :deps (nreverse related-unique))
-     ;; Generic depends-on / dependents (anything else)
+     (vui-component 'beads-vui-rel-group
+                    :label "Depends on"
+                    :deps blocking-deps
+                    :on-add (when editable
+                              (beads-vui-make-dep-add-handler
+                               issue 'depends-on on-refresh))
+                    :on-remove (when (and editable blocking-deps)
+                                 (beads-vui-make-dep-remove-handler
+                                  issue blocking-deps 'depends-on on-refresh)))
+     (vui-component 'beads-vui-rel-group
+                    :label "Dependents"
+                    :deps blocking-dependents
+                    :on-add (when editable
+                              (beads-vui-make-dep-add-handler
+                               issue 'blocks on-refresh))
+                    :on-remove (when (and editable blocking-dependents)
+                                 (beads-vui-make-dep-remove-handler
+                                  issue blocking-dependents 'blocks on-refresh)))
+     ;; Generic dependency types other than the explicitly rendered groups.
      (apply #'vui-fragment
             (delq nil
                   (mapcar
                    (lambda (cell)
                      (let ((type (car cell)))
-                       (unless (member type '("parent-child" "discovered-from" "related"))
+                       (unless (member type '("parent-child" "discovered-from"
+                                              "related" "blocks"))
                          (vui-component 'beads-vui-rel-group
-                                        :label (if (string= type "blocks")
-                                                   "Depends on"
-                                                 (capitalize type))
+                                        :label (capitalize type)
                                         :deps (cdr cell)))))
                    dep-buckets)))
      (apply #'vui-fragment
@@ -559,11 +629,10 @@ after a successful edit."
                   (mapcar
                    (lambda (cell)
                      (let ((type (car cell)))
-                       (unless (member type '("parent-child" "discovered-from" "related"))
+                       (unless (member type '("parent-child" "discovered-from"
+                                              "related" "blocks"))
                          (vui-component 'beads-vui-rel-group
-                                        :label (if (string= type "blocks")
-                                                   "Dependents"
-                                                 (capitalize type))
+                                        :label (capitalize type)
                                         :deps (cdr cell)))))
                    dependent-buckets))))))
 

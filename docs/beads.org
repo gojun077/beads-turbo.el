@@ -416,6 +416,20 @@ Press =RET= on an issue to open its detail view.
 | =e a= | ~beads-detail-edit-acceptance~   | Edit acceptance criteria |
 | =e n= | ~beads-detail-edit-notes~        | Edit notes           |
 
+** Managing Blocking Dependencies
+
+When inline editing is enabled, the relationship groups provide =add=
+and =remove= buttons:
+
+- =Depends on= lists issues that block the current issue.  Adding here
+  makes the current issue depend on the entered issue ID.
+- =Dependents= lists issues blocked by the current issue.  Adding here
+  makes the entered issue ID depend on the current issue.
+
+The explicit =blocked= status is separate from these relationships.
+These controls edit =blocks= dependency edges without changing either
+issue's status directly.
+
 ** Managing Labels
 
 #+kindex: l a
