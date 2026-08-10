@@ -332,9 +332,14 @@ return the cached path from the other project."
                                  :status "in_progress"
                                  :priority 1
                                  :notes "Working on it"))
+                 (_notes-replaced (beads-client-update
+                                   issue-id
+                                   :notes "Working on it\nAdded detail"))
                  (show-issue (beads-client-show issue-id)))
             (should (equal (alist-get 'status updated-issue) "in_progress"))
-            (should (equal (alist-get 'priority show-issue) 1)))
+            (should (equal (alist-get 'priority show-issue) 1))
+            (should (equal (alist-get 'notes show-issue)
+                           "Working on it\nAdded detail")))
         (beads-client-delete (list issue-id) :force t)))))
 
 (ert-deftest beads-client-test-count ()

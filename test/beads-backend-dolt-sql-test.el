@@ -771,9 +771,7 @@ the parent; reversing that shows a child as an epic's parent."
                  (when (equal (file-name-nondirectory program) "bd")
                    (setq called-bd-args args)
                    (when dest
-                     (let ((buf (if (eq dest t)
-                                    (current-buffer)
-                                  (car-safe dest))))
+                     (let ((buf (beads-dolt-sql-test--dest-buffer dest)))
                        (when buf
                          (with-current-buffer buf
                            (insert "[]"))))))
@@ -782,6 +780,28 @@ the parent; reversing that shows a child as an epic's parent."
         (should (listp result))
         (should called-bd-args)
         (should (member "--json" called-bd-args))))))
+
+(ert-deftest beads-dolt-sql-test-fallback-separates-success-warning ()
+  "Test a successful bd warning does not corrupt JSON stdout."
+  (let ((beads-backend-dolt-sql--cli-fallback-program nil))
+    (cl-letf (((symbol-function 'beads-backend--lookup)
+               #'beads-dolt-sql-test--mock-backend-lookup)
+              ((symbol-function 'executable-find)
+               #'beads-dolt-sql-test--mock-exec-find-bd)
+              ((symbol-function 'call-process)
+               (lambda (_program &optional _infile dest _display &rest _args)
+                 (let ((stdout (beads-dolt-sql-test--dest-buffer dest))
+                       (warning "warning: bd-1: --notes replaced existing notes\n")
+                       (json "[{\"id\":\"bd-1\",\"notes\":\"new notes\"}]"))
+                   (if (consp dest)
+                       (progn
+                         (with-current-buffer stdout (insert json))
+                         (with-temp-file (cadr dest) (insert warning)))
+                     (with-current-buffer stdout (insert warning json))))
+                 0)))
+      (let ((result (beads-backend-dolt-sql--execute-fallback
+                     "update" '((id . "bd-1") (notes . "new notes")) nil)))
+        (should (equal (alist-get 'notes (car result)) "new notes"))))))
 
 (ert-deftest beads-dolt-sql-test-fallback-signals-no-bd ()
   "Test fallback signals when bd not found."
@@ -800,9 +820,9 @@ the parent; reversing that shows a child as an epic's parent."
                #'beads-dolt-sql-test--mock-backend-lookup)
               ((symbol-function 'executable-find)
                #'beads-dolt-sql-test--mock-exec-find-bd)
-               ((symbol-function 'call-process)
-                (lambda (&rest _)
-                  1)))
+              ((symbol-function 'call-process)
+               (lambda (&rest _)
+                 1)))
       (should-error (beads-backend-dolt-sql--execute-fallback "list" nil nil)
                     :type 'beads-backend-error))))
 

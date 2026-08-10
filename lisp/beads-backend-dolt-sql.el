@@ -824,22 +824,8 @@ PREVIOUS-ERROR is the error from the failed SQL attempt, for context."
                    (funcall fn operation)))
           (cmd-args nil))
       (setq cmd-args (append extra op-args '("--json")))
-      (with-temp-buffer
-        (let* ((default-directory (or project-root default-directory))
-               (exit-code (apply #'call-process program nil t nil cmd-args)))
-          (unless (zerop exit-code)
-            (signal 'beads-backend-error
-                    (list (format "bd CLI failed with exit code %d: %s"
-                                  exit-code
-                                  (string-trim (buffer-string))))))
-          (goto-char (point-min))
-          (condition-case nil
-              (let ((output (json-read)))
-                (if (vectorp output) (append output nil) output))
-            (json-error
-             (signal 'beads-backend-error
-                     (list (format "bd CLI returned invalid JSON: %s"
-                                   (buffer-string)))))))))))
+      (beads-backend--call-process-json
+       program cmd-args project-root "bd CLI"))))
 
 (defconst beads-backend-dolt-sql
   (make-beads-backend
