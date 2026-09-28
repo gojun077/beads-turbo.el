@@ -35,13 +35,13 @@ events endpoint correctly returned HTTP 409 `events_journal_disabled`.
 
 Direct HTTP equivalents exist for the hot read path:
 
-| Current operation | HTTP API |
-| --- | --- |
-| list | `GET /v0/beads/issues` |
-| show | `GET /v0/beads/issues/{id}` |
-| ready | `GET /v0/beads/ready` |
-| stats | `GET /v0/beads/stats` |
-| count | `GET /v0/beads/issues:count` |
+| Current operation      | HTTP API                                 |
+|------------------------|------------------------------------------|
+| list                   | `GET /v0/beads/issues`                   |
+| show                   | `GET /v0/beads/issues/{id}`              |
+| ready                  | `GET /v0/beads/ready`                    |
+| stats                  | `GET /v0/beads/stats`                    |
+| count                  | `GET /v0/beads/issues:count`             |
 | freshness/invalidation | `GET /v0/beads/events` or `events:watch` |
 
 The API also covers create, update, close, delete, comments, config, dependency
@@ -101,12 +101,12 @@ ambiguity, or server restart.
 
 On this 218-issue workspace, 20 loopback requests made with `curl` averaged:
 
-| Request | Mean wall time |
-| --- | ---: |
-| all issues, unlimited, brief | 10.8 ms |
-| issue detail | 8.0 ms |
-| ready, unlimited, brief | 10.3 ms |
-| stats | 2.1 ms |
+| Request                      | Mean wall time |
+|------------------------------|---------------:|
+| all issues, unlimited, brief |        10.8 ms |
+| issue detail                 |         8.0 ms |
+| ready, unlimited, brief      |        10.3 ms |
+| stats                        |         2.1 ms |
 
 Twenty synchronous Emacs `url-retrieve-synchronously` list requests averaged
 31.4 ms including JSON parsing and buffer setup. This is much faster than
