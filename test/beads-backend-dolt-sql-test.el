@@ -522,12 +522,15 @@ includes closed issues like `bd list --all'."
 
 (ert-deftest beads-dolt-sql-test-parent-subquery-uses-dependency-source ()
   "The SQL `parent' field must return the issue this issue depends on.
-For parent-child edges, `issue_id' is the child and `depends_on_id' is
-the parent; reversing that shows a child as an epic's parent."
+For parent-child edges, `issue_id' is the child and the resolved typed
+target is the parent; reversing that shows a child as an epic's parent."
   (let ((correct-parent-subquery
-         "SELECT d3\\.depends_on_id FROM dependencies d3[[:space:]]+WHERE d3\\.issue_id = i\\.id AND d3\\.type = 'parent-child'")
+         (concat
+          "SELECT COALESCE(d3\\.depends_on_issue_id, d3\\.depends_on_wisp_id, "
+          "d3\\.depends_on_external)[[:space:]]+FROM dependencies d3"
+          "[[:space:]]+WHERE d3\\.issue_id = i\\.id AND d3\\.type = 'parent-child'"))
         (reversed-parent-subquery
-         "SELECT d3\\.issue_id FROM dependencies d3[[:space:]]+WHERE d3\\.depends_on_id = i\\.id AND d3\\.type = 'parent-child'"))
+         "SELECT d3\\.issue_id FROM dependencies d3"))
     (dolist (sql (list beads-dolt-sql--list-sql
                        beads-dolt-sql--list-lite-sql
                        beads-dolt-sql--show-sql
@@ -535,6 +538,34 @@ the parent; reversing that shows a child as an epic's parent."
                        beads-dolt-sql--stale-sql))
       (should (string-match-p correct-parent-subquery sql))
       (should-not (string-match-p reversed-parent-subquery sql)))))
+
+(ert-deftest beads-dolt-sql-test-dependency-queries-use-typed-target-schema ()
+  "Dependency SQL resolves the beads 1.3 typed target columns.
+The public JSON key remains `depends_on_id', but no query may reference
+the removed physical column of that name."
+  (dolist (sql (list beads-dolt-sql--list-sql
+                     beads-dolt-sql--list-lite-sql
+                     beads-dolt-sql--show-sql
+                     beads-dolt-sql--ready-sql
+                     beads-dolt-sql--epic-status-sql
+                     beads-dolt-sql--stale-sql))
+    (should (string-match-p "depends_on_issue_id" sql))
+    (should (string-match-p "depends_on_wisp_id" sql))
+    (should (string-match-p "depends_on_external" sql))
+    (should-not (string-match-p
+                 "d[0-9]*\\.depends_on_id\\_>" sql))))
+
+(ert-deftest beads-dolt-sql-test-counts-only-blocking-dependencies ()
+  "Summary counts match bd's public contract for blocking edges."
+  (dolist (sql (list beads-dolt-sql--list-sql
+                     beads-dolt-sql--list-lite-sql
+                     beads-dolt-sql--show-sql
+                     beads-dolt-sql--ready-sql
+                     beads-dolt-sql--stale-sql))
+    (should (string-match-p
+             "d1\\.issue_id = i\\.id AND d1\\.type = 'blocks'" sql))
+    (should (string-match-p "d2\\.type = 'blocks'" sql))
+    (should-not (string-match-p "type != 'parent-child'" sql))))
 
 (ert-deftest beads-dolt-sql-test-execute-list-selects-lite-by-default ()
   "`beads-backend-dolt-sql--execute-list' uses the lite SQL when
@@ -1021,6 +1052,26 @@ the same one-shot mariadb fallback used on systems without mysql.el."
   (should (integerp (alist-get 'priority issue)))
   (should (equal (alist-get 'issue_type issue) "epic")))
 
+(ert-deftest beads-dolt-sql-test-integration-dependency-schema ()
+  "Integration: all beads 1.3 typed dependency targets resolve.
+This deliberately references every physical target column so live schema
+drift fails here even if the current project has no edge of one target type."
+  :tags '(:integration)
+  (skip-unless (beads-test-integration-enabled-p))
+  (skip-unless (beads-dolt-sql-test--live-dolt-sql-available-p))
+  (beads-dolt-sql-test--with-live-mariadb-sql
+    (let ((result
+           (beads-backend-dolt-sql--execute-sql
+            (concat
+             "SELECT JSON_OBJECT("
+             "'row_count', COUNT(*), "
+             "'resolved_target_count', "
+             "COUNT(COALESCE(depends_on_issue_id, depends_on_wisp_id, depends_on_external))"
+             ") AS dependency_schema FROM dependencies"))))
+      (should (integerp (alist-get 'row_count result)))
+      (should (= (alist-get 'row_count result)
+                 (alist-get 'resolved_target_count result))))))
+
 (ert-deftest beads-dolt-sql-test-integration-list ()
   "Integration: SQL list matches bd CLI ids and exposes view fields."
   :tags '(:integration)
@@ -1034,6 +1085,16 @@ the same one-shot mariadb fallback used on systems without mysql.el."
       (should (> (length sql-result) 0))
       (should (equal (beads-dolt-sql-test--ids sql-result)
                      (beads-dolt-sql-test--ids cli-result)))
+      (dolist (sql-issue sql-result)
+        (let ((cli-issue
+               (seq-find (lambda (issue)
+                           (equal (alist-get 'id issue)
+                                  (alist-get 'id sql-issue)))
+                         cli-result)))
+          (should cli-issue)
+          (dolist (field '(dependency_count dependent_count parent))
+            (should (equal (alist-get field sql-issue)
+                           (alist-get field cli-issue))))))
       (beads-dolt-sql-test--assert-issue-summary-shape (car sql-result)))))
 
 (ert-deftest beads-dolt-sql-test-integration-show ()
@@ -1132,7 +1193,8 @@ the same one-shot mariadb fallback used on systems without mysql.el."
           (beads-dolt-sql-test--assert-epic-shape (alist-get 'epic entry))
           (should (integerp (alist-get 'total_children entry)))
           (should (integerp (alist-get 'closed_children entry)))
-          (should (memq (alist-get 'eligible_for_close entry) '(t nil))))))))
+          (should (memq (alist-get 'eligible_for_close entry)
+                        '(t nil :json-false))))))))
 
 (ert-deftest beads-dolt-sql-test-integration-freshness ()
   "Integration: SQL freshness returns read-cache tokens for all tables."
