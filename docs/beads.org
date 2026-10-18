@@ -408,12 +408,27 @@ Press =RET= on an issue to open its detail view.
 | =e t= | ~beads-detail-edit-title~        | Edit title           |
 | =e s= | ~beads-detail-edit-status~       | Change status        |
 | =e p= | ~beads-detail-edit-priority~     | Change priority      |
+| =e P= | ~beads-detail-edit-parent~       | Set or remove parent |
 | =e T= | ~beads-detail-edit-type~         | Change type          |
 | =e A= | ~beads-detail-edit-assignee~     | Set assignee         |
 | =e d= | ~beads-detail-edit-description~  | Edit description     |
 | =e D= | ~beads-detail-edit-design~       | Edit design notes    |
 | =e a= | ~beads-detail-edit-acceptance~   | Edit acceptance criteria |
 | =e n= | ~beads-detail-edit-notes~        | Edit notes           |
+
+** Managing Blocking Dependencies
+
+When inline editing is enabled, the relationship groups provide =add=
+and =remove= buttons:
+
+- =Depends on= lists issues that block the current issue.  Adding here
+  makes the current issue depend on the entered issue ID.
+- =Dependents= lists issues blocked by the current issue.  Adding here
+  makes the entered issue ID depend on the current issue.
+
+The explicit =blocked= status is separate from these relationships.
+These controls edit =blocks= dependency edges without changing either
+issue's status directly.
 
 ** Managing Labels
 

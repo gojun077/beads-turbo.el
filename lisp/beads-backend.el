@@ -150,6 +150,39 @@ Keys are converted from snake_case to --kebab-case."
           (push (format "%s" value) flags)))))
     (nreverse flags)))
 
+(defun beads-backend--call-process-json (program args project-root error-label)
+  "Run PROGRAM with ARGS in PROJECT-ROOT and parse its JSON stdout.
+ERROR-LABEL identifies PROGRAM in errors.  Standard error is kept
+separate so successful CLI warnings cannot corrupt the JSON response."
+  (let ((stderr-file (make-temp-file "beads-cli-stderr-")))
+    (unwind-protect
+        (with-temp-buffer
+          (let* ((default-directory (or project-root default-directory))
+                 (exit-code (apply #'call-process program nil
+                                   (list t stderr-file) nil args))
+                 (stdout (buffer-string))
+                 (stderr (with-temp-buffer
+                           (insert-file-contents stderr-file)
+                           (buffer-string))))
+            (unless (and (integerp exit-code) (zerop exit-code))
+              (signal 'beads-backend-error
+                      (list (format "%s failed with exit code %s: stdout=%s stderr=%s"
+                                    error-label exit-code
+                                    (string-trim stdout)
+                                    (string-trim stderr)))))
+            (condition-case nil
+                (let ((output (json-read-from-string stdout)))
+                  (if (vectorp output) (append output nil) output))
+              (json-error
+               (signal 'beads-backend-error
+                       (list (format "%s returned invalid JSON: %s%s"
+                                     error-label stdout
+                                     (if (string-empty-p stderr)
+                                         ""
+                                       (format " (stderr: %s)" stderr)))))))))
+      (when (file-exists-p stderr-file)
+        (delete-file stderr-file)))))
+
 (defun beads-backend-cli-execute (operation args &optional project-root)
   "Execute CLI for OPERATION with ARGS, returning parsed JSON.
 PROJECT-ROOT overrides the working directory.
@@ -165,22 +198,8 @@ Signals `beads-backend-error' on failure."
                      (funcall fn operation)))
             (cmd-args nil))
         (setq cmd-args (append extra op-args '("--json")))
-        (with-temp-buffer
-          (let* ((default-directory (or project-root default-directory))
-                 (exit-code (apply #'call-process program nil t nil cmd-args)))
-            (unless (zerop exit-code)
-              (signal 'beads-backend-error
-                      (list (format "CLI failed with exit code %d: %s"
-                                    exit-code
-                                    (string-trim (buffer-string))))))
-            (goto-char (point-min))
-            (condition-case nil
-                (let ((output (json-read)))
-                  (if (vectorp output) (append output nil) output))
-              (json-error
-               (signal 'beads-backend-error
-                       (list (format "CLI returned invalid JSON: %s"
-                                     (buffer-string))))))))))))
+        (beads-backend--call-process-json
+         program cmd-args project-root "CLI")))))
 
 (defun beads-backend-cli-execute-async (operation args callback &optional project-root)
   "Execute CLI for OPERATION with ARGS asynchronously.

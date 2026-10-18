@@ -157,12 +157,13 @@ See `example-test.el` for basic examples.
 
 ## Supported Beads Versions
 
-This package is tested with **bd 1.0.3**. Tests may not reflect
-behavior of older or newer beads CLI versions.
+This package tracks and tests against the latest `main` branch of
+[gastownhall/beads](https://github.com/gastownhall/beads). Tests may not
+reflect behavior of older beads CLI versions.
 
 | beads.el | beads CLI | Storage Backend           |
 |----------|-----------|---------------------------|
-| current  | 1.0.x     | Dolt SQL server (metadata.json) |
+| current  | upstream `main` | Dolt SQL server (metadata.json) |
 
 ## Storage Backend Discovery Priority
 

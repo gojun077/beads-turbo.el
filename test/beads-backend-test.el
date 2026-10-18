@@ -189,6 +189,12 @@
     (should (member "epic" args))
     (should-not (member "--issue-type" args))))
 
+(ert-deftest beads-backend-test-bd-update-can-remove-parent ()
+  "Test bd backend preserves the empty parent value used to remove a parent."
+  (should (equal (beads-backend-bd--operation-to-cli-args
+                  "update" '((id . "bd-child") (parent . "")))
+                 '("update" "bd-child" "--parent" ""))))
+
 (ert-deftest beads-backend-test-bd-close-with-reason ()
   "Test bd backend close with reason."
   (should (equal (beads-backend-bd--operation-to-cli-args

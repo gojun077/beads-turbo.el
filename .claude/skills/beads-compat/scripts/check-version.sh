@@ -1,25 +1,23 @@
 #!/bin/bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VERSION_FILE="$SCRIPT_DIR/../references/version-info.md"
-
 if ! command -v bd &> /dev/null; then
     echo "ERROR: bd command not found"
     exit 1
 fi
 
-installed=$(bd --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-documented=$(grep -oE 'Tested CLI version: [0-9]+\.[0-9]+\.[0-9]+' "$VERSION_FILE" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+installed_output=$(bd version)
+installed_commit=$(printf '%s\n' "$installed_output" | grep -oE '[0-9a-f]{8,40}' | head -1 || true)
+upstream_commit=$(git ls-remote https://github.com/gastownhall/beads.git refs/heads/main | cut -f1)
 
-echo "Installed beads: $installed"
-echo "Documented:      $documented"
+echo "Installed beads: $installed_output"
+echo "Installed commit: ${installed_commit:-unknown}"
+echo "Upstream main:    $upstream_commit"
 
-if [[ "$installed" == "$documented" ]]; then
-    echo "OK: Versions match"
-elif [[ "$installed" > "$documented" ]]; then
-    echo "NOTICE: Installed version is newer. Review changelog and test before updating documentation."
-    echo "Changelog: https://github.com/gastownhall/beads/blob/main/CHANGELOG.md"
+if [[ -n "$installed_commit" && "$upstream_commit" == "$installed_commit"* ]]; then
+    echo "OK: Installed bd matches upstream main"
 else
-    echo "WARNING: Installed version is older than documented compatible version."
+    echo "WARNING: Installed bd does not match the latest upstream main commit."
+    echo "Run .agents/setup to update it, then test compatibility."
+    exit 1
 fi

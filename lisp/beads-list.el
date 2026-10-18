@@ -1048,16 +1048,12 @@ When ON-ERROR-MATCH is a regexp, per-ID errors whose message matches
 are collected into :matched-ids (used by `beads-list-bulk-close' to
 list blocked issues).
 
-Note: bd 1.0 multi-ID writes are not documented as transactional.
-In practice, when some IDs fail bd exits 0 but writes an error to
-stderr, which the backend's `call-process' call merges into stdout
-and corrupts the JSON — so the helper sees `beads-client-error' and
-falls back to the per-ID loop, yielding accurate per-issue counts.
-For a full-success bulk call, the fast path is taken and all IDs
-are reported as successful in a single subprocess.  close/delete
-may surface `already closed' errors in the fallback for IDs that
-succeeded before the partial bulk failure — these are counted as
-errors."
+Note: bd multi-ID writes are not transactional.  When some IDs fail,
+bd preserves successful updates but exits nonzero, so this helper
+falls back to the per-ID loop to produce accurate per-issue counts.
+close/delete may surface `already closed' errors in the fallback for
+IDs that succeeded before the partial bulk failure — these are counted
+as errors."
   (condition-case nil
       (progn
         (funcall bulk-fn ids)

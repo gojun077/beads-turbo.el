@@ -149,20 +149,22 @@ JSON_OBJECT(\
   JSON_ARRAY()), \
 'dependency_count', \
   (SELECT COUNT(*) FROM dependencies d1 \
-   WHERE d1.issue_id = i.id AND d1.type != 'parent-child'), \
+   WHERE d1.issue_id = i.id AND d1.type = 'blocks'), \
 'dependent_count', \
   (SELECT COUNT(*) FROM dependencies d2 \
-   WHERE d2.depends_on_id = i.id AND d2.type != 'parent-child'), \
+   WHERE COALESCE(d2.depends_on_issue_id, d2.depends_on_wisp_id, d2.depends_on_external) = i.id \
+     AND d2.type = 'blocks'), \
 'comment_count', \
   (SELECT COUNT(*) FROM comments c WHERE c.issue_id = i.id), \
 'parent', \
-  (SELECT d3.depends_on_id FROM dependencies d3 \
+  (SELECT COALESCE(d3.depends_on_issue_id, d3.depends_on_wisp_id, d3.depends_on_external) \
+   FROM dependencies d3 \
    WHERE d3.issue_id = i.id AND d3.type = 'parent-child' LIMIT 1), \
 'dependencies', COALESCE(\
   (SELECT JSON_ARRAYAGG(\
     JSON_OBJECT(\
       'issue_id', d.issue_id, \
-      'depends_on_id', d.depends_on_id, \
+      'depends_on_id', COALESCE(d.depends_on_issue_id, d.depends_on_wisp_id, d.depends_on_external), \
       'type', d.type, \
       'created_at', DATE_FORMAT(d.created_at, '%Y-%m-%dT%H:%i:%sZ'), \
       'created_by', d.created_by, \
@@ -208,14 +210,16 @@ JSON_OBJECT(\
   JSON_ARRAY()), \
 'dependency_count', \
   (SELECT COUNT(*) FROM dependencies d1 \
-   WHERE d1.issue_id = i.id AND d1.type != 'parent-child'), \
+   WHERE d1.issue_id = i.id AND d1.type = 'blocks'), \
 'dependent_count', \
   (SELECT COUNT(*) FROM dependencies d2 \
-   WHERE d2.depends_on_id = i.id AND d2.type != 'parent-child'), \
+   WHERE COALESCE(d2.depends_on_issue_id, d2.depends_on_wisp_id, d2.depends_on_external) = i.id \
+     AND d2.type = 'blocks'), \
 'comment_count', \
   (SELECT COUNT(*) FROM comments c WHERE c.issue_id = i.id), \
 'parent', \
-  (SELECT d3.depends_on_id FROM dependencies d3 \
+  (SELECT COALESCE(d3.depends_on_issue_id, d3.depends_on_wisp_id, d3.depends_on_external) \
+   FROM dependencies d3 \
    WHERE d3.issue_id = i.id AND d3.type = 'parent-child' LIMIT 1)\
 )\
 ) AS issues \
@@ -277,20 +281,22 @@ complete record.")
   JSON_ARRAY()), \
 'dependency_count', \
   (SELECT COUNT(*) FROM dependencies d1 \
-   WHERE d1.issue_id = i.id AND d1.type != 'parent-child'), \
+   WHERE d1.issue_id = i.id AND d1.type = 'blocks'), \
 'dependent_count', \
   (SELECT COUNT(*) FROM dependencies d2 \
-   WHERE d2.depends_on_id = i.id AND d2.type != 'parent-child'), \
+   WHERE COALESCE(d2.depends_on_issue_id, d2.depends_on_wisp_id, d2.depends_on_external) = i.id \
+     AND d2.type = 'blocks'), \
 'comment_count', \
   (SELECT COUNT(*) FROM comments c WHERE c.issue_id = i.id), \
 'parent', \
-  (SELECT d3.depends_on_id FROM dependencies d3 \
+  (SELECT COALESCE(d3.depends_on_issue_id, d3.depends_on_wisp_id, d3.depends_on_external) \
+   FROM dependencies d3 \
    WHERE d3.issue_id = i.id AND d3.type = 'parent-child' LIMIT 1), \
 'dependencies', COALESCE(\
   (SELECT JSON_ARRAYAGG(\
     JSON_OBJECT(\
       'issue_id', d.issue_id, \
-      'depends_on_id', d.depends_on_id, \
+      'depends_on_id', COALESCE(d.depends_on_issue_id, d.depends_on_wisp_id, d.depends_on_external), \
       'type', d.type, \
       'created_at', DATE_FORMAT(d.created_at, '%Y-%m-%dT%H:%i:%sZ'), \
       'created_by', d.created_by, \
@@ -348,14 +354,16 @@ JSON_OBJECT(\
   JSON_ARRAY()), \
 'dependency_count', \
   (SELECT COUNT(*) FROM dependencies d1 \
-   WHERE d1.issue_id = i.id AND d1.type != 'parent-child'), \
+   WHERE d1.issue_id = i.id AND d1.type = 'blocks'), \
 'dependent_count', \
   (SELECT COUNT(*) FROM dependencies d2 \
-   WHERE d2.depends_on_id = i.id AND d2.type != 'parent-child'), \
+   WHERE COALESCE(d2.depends_on_issue_id, d2.depends_on_wisp_id, d2.depends_on_external) = i.id \
+     AND d2.type = 'blocks'), \
 'comment_count', \
   (SELECT COUNT(*) FROM comments c WHERE c.issue_id = i.id), \
 'parent', \
-  (SELECT d3.depends_on_id FROM dependencies d3 \
+  (SELECT COALESCE(d3.depends_on_issue_id, d3.depends_on_wisp_id, d3.depends_on_external) \
+   FROM dependencies d3 \
    WHERE d3.issue_id = i.id AND d3.type = 'parent-child' LIMIT 1)\
 )\
 ) AS issues \
@@ -391,22 +399,26 @@ SELECT JSON_OBJECT(\
 'total_children', \
   (SELECT COUNT(*) FROM dependencies d \
    INNER JOIN issues c ON c.id = d.issue_id \
-   WHERE d.depends_on_id = i.id AND d.type = 'parent-child' \
+   WHERE COALESCE(d.depends_on_issue_id, d.depends_on_wisp_id, d.depends_on_external) = i.id \
+     AND d.type = 'parent-child' \
      AND c.ephemeral = 0), \
 'closed_children', \
   (SELECT COUNT(*) FROM dependencies d \
    INNER JOIN issues c ON c.id = d.issue_id \
-   WHERE d.depends_on_id = i.id AND d.type = 'parent-child' \
+   WHERE COALESCE(d.depends_on_issue_id, d.depends_on_wisp_id, d.depends_on_external) = i.id \
+     AND d.type = 'parent-child' \
      AND c.ephemeral = 0 AND c.status = 'closed'), \
 'eligible_for_close', \
   JSON_EXTRACT(\
     IF((SELECT COUNT(*) FROM dependencies d \
         INNER JOIN issues c ON c.id = d.issue_id \
-        WHERE d.depends_on_id = i.id AND d.type = 'parent-child' \
+        WHERE COALESCE(d.depends_on_issue_id, d.depends_on_wisp_id, d.depends_on_external) = i.id \
+          AND d.type = 'parent-child' \
           AND c.ephemeral = 0) > 0 AND \
        (SELECT COUNT(*) FROM dependencies d \
         INNER JOIN issues c ON c.id = d.issue_id \
-        WHERE d.depends_on_id = i.id AND d.type = 'parent-child' \
+        WHERE COALESCE(d.depends_on_issue_id, d.depends_on_wisp_id, d.depends_on_external) = i.id \
+          AND d.type = 'parent-child' \
           AND c.ephemeral = 0 AND c.status != 'closed') = 0, \
        'true', 'false'), '$')\
 ) AS payload, \
@@ -414,7 +426,8 @@ i.priority AS priority, \
 i.created_at AS created_at, \
 (SELECT COUNT(*) FROM dependencies d \
  INNER JOIN issues c ON c.id = d.issue_id \
- WHERE d.depends_on_id = i.id AND d.type = 'parent-child' \
+ WHERE COALESCE(d.depends_on_issue_id, d.depends_on_wisp_id, d.depends_on_external) = i.id \
+   AND d.type = 'parent-child' \
    AND c.ephemeral = 0) AS child_count \
 FROM issues i \
 WHERE i.issue_type = 'epic' \
@@ -478,14 +491,16 @@ JSON_OBJECT(\
   JSON_ARRAY()), \
 'dependency_count', \
   (SELECT COUNT(*) FROM dependencies d1 \
-   WHERE d1.issue_id = i.id AND d1.type != 'parent-child'), \
+   WHERE d1.issue_id = i.id AND d1.type = 'blocks'), \
 'dependent_count', \
   (SELECT COUNT(*) FROM dependencies d2 \
-   WHERE d2.depends_on_id = i.id AND d2.type != 'parent-child'), \
+   WHERE COALESCE(d2.depends_on_issue_id, d2.depends_on_wisp_id, d2.depends_on_external) = i.id \
+     AND d2.type = 'blocks'), \
 'comment_count', \
   (SELECT COUNT(*) FROM comments c WHERE c.issue_id = i.id), \
 'parent', \
-  (SELECT d3.depends_on_id FROM dependencies d3 \
+  (SELECT COALESCE(d3.depends_on_issue_id, d3.depends_on_wisp_id, d3.depends_on_external) \
+   FROM dependencies d3 \
    WHERE d3.issue_id = i.id AND d3.type = 'parent-child' LIMIT 1)\
 )\
 ) AS issues \
@@ -824,22 +839,8 @@ PREVIOUS-ERROR is the error from the failed SQL attempt, for context."
                    (funcall fn operation)))
           (cmd-args nil))
       (setq cmd-args (append extra op-args '("--json")))
-      (with-temp-buffer
-        (let* ((default-directory (or project-root default-directory))
-               (exit-code (apply #'call-process program nil t nil cmd-args)))
-          (unless (zerop exit-code)
-            (signal 'beads-backend-error
-                    (list (format "bd CLI failed with exit code %d: %s"
-                                  exit-code
-                                  (string-trim (buffer-string))))))
-          (goto-char (point-min))
-          (condition-case nil
-              (let ((output (json-read)))
-                (if (vectorp output) (append output nil) output))
-            (json-error
-             (signal 'beads-backend-error
-                     (list (format "bd CLI returned invalid JSON: %s"
-                                   (buffer-string)))))))))))
+      (beads-backend--call-process-json
+       program cmd-args project-root "bd CLI"))))
 
 (defconst beads-backend-dolt-sql
   (make-beads-backend

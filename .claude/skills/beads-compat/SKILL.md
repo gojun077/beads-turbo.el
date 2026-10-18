@@ -1,6 +1,6 @@
 ---
 name: beads-compat
-description: Check and update beads version compatibility for beads.el. Use when upgrading beads, checking if installed beads version is compatible, or updating version documentation after testing with a new beads release.
+description: Check and update beads main-branch compatibility for beads.el. Use when upgrading beads, checking if the installed bd matches upstream main, or updating compatibility documentation after testing a new upstream commit.
 ---
 
 # Beads Compatibility
@@ -9,18 +9,18 @@ This skill helps track beads CLI version compatibility for beads.el.
 
 ## Version Checking
 
-Run `.claude/skills/beads-compat/scripts/check-version.sh` to compare installed beads version against documented compatible version.
+Run `.claude/skills/beads-compat/scripts/check-version.sh` to compare the
+installed beads commit against the latest upstream `main` commit.
 
 ## Upgrade Workflow
 
-When upgrading beads:
+When upstream `main` changes:
 
-1. Run `bd --version` to get new version
-2. Review changelog for breaking changes: https://github.com/gastownhall/beads/blob/main/CHANGELOG.md
-3. Test beads.el functionality against new version
-4. Update version in `references/version-info.md`
-5. Update version in `README.md` and `AGENTS.md`
-6. Create git tag matching beads version (e.g., `1.0.3`) - no `v` prefix
+1. Run `.agents/setup` to build the latest upstream `main`
+2. Run `bd version` and record the commit
+3. Review changelog for breaking changes: https://github.com/gastownhall/beads/blob/main/CHANGELOG.md
+4. Test beads.el functionality against the new commit
+5. Update compatibility notes in `references/version-info.md` when behavior changes
 
 ## Breaking Change Patterns
 

@@ -744,6 +744,7 @@ See `beads-backend-dolt-sql-activate' and
     ("e n" "Notes" beads-detail-edit-notes)
     ("e s" "Status" beads-detail-edit-status)
     ("e p" "Priority" beads-detail-edit-priority)
+    ("e P" "Parent" beads-detail-edit-parent)
     ("e t" "Title" beads-detail-edit-title)
     ("e T" "Type" beads-detail-edit-type)
     ("e A" "Assignee" beads-detail-edit-assignee)

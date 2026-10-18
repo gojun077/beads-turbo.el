@@ -2,7 +2,9 @@
 
 ## Beads Version Compatibility
 
-This package is tested with **bd 1.0.3**. Run `/beads-compat` to check.
+This package tracks the latest `main` branch of
+[gastownhall/beads](https://github.com/gastownhall/beads). Run
+`/beads-compat` to check that the installed CLI matches upstream `main`.
 
 ## Issue Tracking with bd (beads)
 
@@ -23,8 +25,11 @@ This project uses **bd (beads)** for ALL issue tracking. Do NOT use markdown TOD
 **Key rules:**
 - Always use `--json` for programmatic use
 - Link discovered work with `discovered-from` dependencies
+- Create children only under epics, using `--deps parent-child:<epic-id>` for collision-resistant IDs; never use `--parent` in independently synced workspaces
 - Store AI planning docs in `history/` directory, not repo root
 - `bd <cmd> --help` to discover available flags
+
+For issue creation, hierarchy, and closeout details, use the `managing-beads` skill.
 
 ### Shell-Safe bd Description Input
 When `bd create`/`update` descriptions or notes contain backticks, `!`, `$(...)`, quotes or multiline text, use `--stdin` heredoc (or `--body-file -`) to prevent shell interpolation:

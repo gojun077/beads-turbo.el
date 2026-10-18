@@ -1,0 +1,198 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+EMACS_VERSION=30.2
+DOLT_VERSION=2.2.3
+BEADS_REPOSITORY=https://github.com/gastownhall/beads.git
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+as_root() {
+  if [[ $(id -u) -eq 0 ]]; then
+    "$@"
+  else
+    sudo -n "$@"
+  fi
+}
+
+install_apt_dependencies() {
+  local packages=(
+    build-essential
+    ca-certificates
+    curl
+    git
+    libgnutls28-dev
+    libjansson-dev
+    libncurses-dev
+    libzstd-dev
+    pkg-config
+    texinfo
+    xz-utils
+    zlib1g-dev
+  )
+  local package
+  local missing=()
+
+  for package in "${packages[@]}"; do
+    if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -Fq 'install ok installed'; then
+      missing+=("$package")
+    fi
+  done
+
+  if ((${#missing[@]})); then
+    echo "==> Installing system packages: ${missing[*]}"
+    as_root apt-get update
+    as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${missing[@]}"
+  else
+    echo "==> System packages are already installed"
+  fi
+}
+
+install_emacs() (
+  if command -v emacs >/dev/null 2>&1 &&
+     [[ $(emacs --batch -Q --eval '(princ emacs-version)' 2>/dev/null) == "$EMACS_VERSION" ]]; then
+    echo "==> Emacs $EMACS_VERSION is already installed"
+    return
+  fi
+
+  echo "==> Building Emacs $EMACS_VERSION"
+  local workdir
+  workdir="$(mktemp -d)"
+  trap 'rm -rf "$workdir"' EXIT
+  curl --fail --location --retry 3 \
+    "https://mirrors.kernel.org/gnu/emacs/emacs-${EMACS_VERSION}.tar.xz" \
+    --output "$workdir/emacs.tar.xz"
+  tar -xJf "$workdir/emacs.tar.xz" -C "$workdir"
+  (
+    cd "$workdir/emacs-${EMACS_VERSION}"
+    ./configure \
+      --prefix=/usr/local \
+      --without-dbus \
+      --without-gconf \
+      --without-gsettings \
+      --without-native-compilation \
+      --without-sound \
+      --without-tree-sitter \
+      --without-x
+    make -j"$(nproc)"
+    as_root make install
+  )
+)
+
+install_go() (
+  local version="$1"
+  if command -v go >/dev/null 2>&1 && go version 2>/dev/null | grep -Fq "go${version} "; then
+    echo "==> Go $version is already installed"
+    return
+  fi
+
+  echo "==> Installing Go $version"
+  local workdir archive go_root
+  workdir="$(mktemp -d)"
+  archive="$workdir/go.tar.gz"
+  go_root="$workdir/go"
+  trap 'rm -rf "$workdir"' EXIT
+  curl --fail --location --retry 3 \
+    "https://go.dev/dl/go${version}.linux-amd64.tar.gz" \
+    --output "$archive"
+  mkdir -p "$go_root"
+  tar -xzf "$archive" -C "$go_root" --strip-components=1
+  as_root rm -rf /usr/local/go
+  as_root mv "$go_root" /usr/local/go
+  as_root ln -sfn /usr/local/go/bin/go /usr/local/bin/go
+  as_root ln -sfn /usr/local/go/bin/gofmt /usr/local/bin/gofmt
+)
+
+install_bd() (
+  local workdir source commit installed_commit go_version
+  workdir="$(mktemp -d)"
+  source="$workdir/beads"
+  installed_commit=/usr/local/share/beads-main-commit
+  trap 'rm -rf "$workdir"' EXIT
+
+  echo "==> Resolving latest gastownhall/beads main"
+  git clone --depth 1 --branch main "$BEADS_REPOSITORY" "$source"
+  commit="$(git -C "$source" rev-parse HEAD)"
+  go_version="$(awk '$1 == "go" { print $2; exit }' "$source/go.mod")"
+
+  install_go "$go_version"
+  if command -v bd >/dev/null 2>&1 &&
+     [[ -f "$installed_commit" ]] &&
+     [[ $(cat "$installed_commit") == "$commit" ]]; then
+    echo "==> bd is already built from upstream main at ${commit:0:12}"
+    return
+  fi
+
+  echo "==> Building bd from upstream main at ${commit:0:12}"
+  make -s -C "$source" build
+  as_root install -m 0755 "$source/bd" /usr/local/bin/bd
+  printf '%s\n' "$commit" | as_root tee "$installed_commit" >/dev/null
+)
+
+install_dolt() (
+  if command -v dolt >/dev/null 2>&1 && dolt version 2>/dev/null | grep -Fq "$DOLT_VERSION"; then
+    echo "==> Dolt $DOLT_VERSION is already installed"
+    return
+  fi
+
+  echo "==> Installing Dolt $DOLT_VERSION"
+  local workdir archive
+  workdir="$(mktemp -d)"
+  archive="$workdir/dolt.tar.gz"
+  trap 'rm -rf "$workdir"' EXIT
+  curl --fail --location --retry 3 \
+    "https://github.com/dolthub/dolt/releases/download/v${DOLT_VERSION}/dolt-linux-amd64.tar.gz" \
+    --output "$archive"
+  tar -xzf "$archive" -C "$workdir"
+  as_root install -m 0755 "$workdir/dolt-linux-amd64/bin/dolt" /usr/local/bin/dolt
+)
+
+initialize_beads_database() (
+  local dolt_root="$HOME/.beads/shared-server/dolt"
+  local database="$dolt_root/beads_bdel"
+
+  echo "==> Initializing the shared Beads database"
+  chmod 0700 "$repo_root/.beads"
+  mkdir -p "$dolt_root" "$database"
+  if [[ ! -d "$dolt_root/.dolt" ]]; then
+    (cd "$dolt_root" && dolt init --name "Amp Orb" --email "amp-orb@localhost")
+  fi
+  if [[ ! -d "$database/.dolt" ]]; then
+    (
+      cd "$database"
+      dolt init --name "Amp Orb" --email "amp-orb@localhost"
+      dolt remote add origin gojun077/beads_bdel
+      dolt fetch origin
+      if dolt branch -a | grep -Fq 'remotes/origin/main'; then
+        dolt reset --hard remotes/origin/main
+      fi
+    )
+  fi
+
+  if ! bd -C "$repo_root" dolt status --json 2>/dev/null | grep -Fq '"running": true'; then
+    bd -C "$repo_root" dolt start
+  fi
+  bd -C "$repo_root" ready --json >/dev/null
+)
+
+if [[ $(uname -m) != x86_64 ]]; then
+  echo "Unsupported architecture: $(uname -m) (this setup currently supports x86_64 Amp orbs)" >&2
+  exit 1
+fi
+
+install_apt_dependencies
+install_emacs
+install_bd
+install_dolt
+initialize_beads_database
+
+echo "==> Initializing vendored dependencies"
+git -C "$repo_root" submodule update --init --recursive
+
+echo "==> Verifying installed tools"
+emacs --batch -Q --eval '(princ (format "Emacs %s\n" emacs-version))'
+bd version
+printf 'bd upstream main commit %s\n' "$(cat /usr/local/share/beads-main-commit)"
+dolt version
+git -C "$repo_root" submodule status --recursive
+echo "==> Orb setup complete"

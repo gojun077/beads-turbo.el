@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+for tool in emacs bd dolt; do
+  if ! command -v "$tool" >/dev/null 2>&1; then
+    echo "Missing required tool '$tool'; rerun .agents/setup" >&2
+    exit 1
+  fi
+done
+
+if git -C "$repo_root" submodule status --recursive | grep -q '^-'; then
+  echo "Vendored dependencies are not initialized; rerun .agents/setup" >&2
+  exit 1
+fi
+
+if ! bd -C "$repo_root" dolt status --json 2>/dev/null | grep -Fq '"running": true'; then
+  echo "Restarting the Beads Dolt server"
+  bd -C "$repo_root" dolt start
+fi
+
+echo "Orb prerequisites are ready"

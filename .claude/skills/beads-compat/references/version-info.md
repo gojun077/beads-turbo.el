@@ -1,7 +1,8 @@
 # Beads Version Compatibility
 
-Tested CLI version: 1.0.3
+Tested CLI target: upstream main
 Minimum DB version: 0.35.0
+Direct Dolt SQL schema: beads 1.3.0 or newer
 
 ## Changelog
 
@@ -11,6 +12,8 @@ https://github.com/gastownhall/beads/blob/main/CHANGELOG.md
 
 | beads.el | beads CLI | Notes |
 |----------|-----------|-------|
+| current  | upstream `main` | Moving compatibility target; verify the installed commit with `/beads-compat` |
+| 1.3.0    | 1.3.0     | Preview `bd serve` v0 HTTP API, opt-in ordered events journal, and typed direct SQL dependency targets |
 | 1.0.3    | 1.0.3     | Dolt SQL backend, bd batch, multi-ID update/close/delete, removed daemon/mutations/resolve-conflicts |
 | 0.49.1   | 0.49.1    | --append-notes, export filters, activity --details |
 | 0.49.0   | 0.49.0    | bd children, bd rename, bd types, Dolt backend |
@@ -19,6 +22,16 @@ https://github.com/gastownhall/beads/blob/main/CHANGELOG.md
 | 0.44.0   | 0.44.0    | Initial version tracking |
 
 ## New Features by Version
+
+### v1.3.0
+- Preview `bd serve` versioned HTTP API for issues, ready work, stats, config,
+  dependencies, memories, and mutations
+- Opt-in ordered event journal via `bd events` and HTTP polling/SSE endpoints
+- `GET /v0/beads/context` for API version, project identity, backend mode, and
+  runtime capability discovery
+- `bd serve` requires a Dolt SQL server topology in 1.3.0; embedded and readonly
+  workspaces are refused
+- The journal is clone-local, excludes sync changes, and is disabled by default
 
 ### v1.0.3
 - Persistent Dolt SQL server backend (auto-started, no manual daemon)
@@ -72,6 +85,14 @@ https://github.com/gastownhall/beads/blob/main/CHANGELOG.md
 - `--filter-parent` alias for `--parent` in `bd list`
 
 ## Known Breaking Changes
+
+### v1.3.0
+- The `dependencies.depends_on_id` SQL column was replaced by typed targets such
+  as `depends_on_issue_id`; beads-turbo resolves all typed targets with
+  `COALESCE`, while pre-1.3 databases use the CLI fallback
+- `bd dep cycles --json` has a new response shape
+- `bd config list` no longer lists `kv.` keys
+- `bd search` now includes closed issues by default
 
 ### v1.0.0
 - **Removed `bd daemon`**: No Unix socket IPC; Dolt SQL server is the persistent backend
