@@ -94,7 +94,13 @@ call it only for long text fields that need a normal editable buffer.
                (not (string= content original)))
       (condition-case err
           (progn
-            (beads-client-update issue-id field content)
+            (if (eq field :notes)
+                ;; The editor explicitly replaces notes, rather than appending.
+                ;; Keep --force scoped to this single-field update.
+                (if (string-empty-p content)
+                    (beads-client-update issue-id :clear-notes t)
+                  (beads-client-update issue-id :notes content :force t))
+              (beads-client-update issue-id field content))
             (message "Updated %s for %s" (substring (symbol-name field) 1) issue-id)
             (when (and source-buffer (buffer-live-p source-buffer))
               (with-current-buffer source-buffer

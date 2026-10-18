@@ -4,6 +4,29 @@
 
 (require 'ert)
 (require 'beads-edit)
+(require 'beads-test-helpers)
+
+(ert-deftest beads-edit-test-integration-save-notes ()
+  "Saving the notes editor replaces or clears existing notes."
+  :tags '(:integration :destructive)
+  (skip-unless (beads-test-integration-enabled-p))
+  (skip-unless (executable-find "bd"))
+  (beads-test-with-temp-project project-root
+    (let* ((issue (beads-client-create "Notes editor regression"))
+           (id (alist-get 'id issue)))
+      (beads-client-update id :notes "Original notes")
+      (dolist (replacement '("Edited notes\nSecond line" ""))
+        (let ((buffer (beads-edit-field
+                       id :notes (alist-get 'notes (beads-client-show id)))))
+          (unwind-protect
+              (with-current-buffer buffer
+                (erase-buffer)
+                (insert replacement)
+                (beads-edit-commit))
+            (when (buffer-live-p buffer)
+              (kill-buffer buffer))))
+        (should (equal (or (alist-get 'notes (beads-client-show id)) "")
+                       replacement))))))
 
 (ert-deftest beads-edit-test-mode-defined ()
   "Test that beads-edit-mode is defined."
